@@ -1,5 +1,6 @@
 use core::ffi::{c_char, c_int, c_void};
 use core::slice;
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 
 const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 2;
 const SSH_DIGEST_SHA256: c_int = 2;
@@ -12,6 +13,10 @@ const SHA256_DIGEST_LENGTH: usize = 32;
 const SHA384_DIGEST_LENGTH: usize = 48;
 const SHA512_BLOCK_LENGTH: usize = 128;
 const SHA512_DIGEST_LENGTH: usize = 64;
+const ED25519_SEED_LENGTH: usize = 32;
+const ED25519_PUBLIC_KEY_LENGTH: usize = 32;
+const ED25519_SECRET_KEY_LENGTH: usize = 64;
+const ED25519_SIGNATURE_LENGTH: usize = 64;
 
 const K256: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
@@ -413,6 +418,24 @@ fn sha512_compress(state: &mut [u64; 8], block: &[u8; SHA512_BLOCK_LENGTH]) {
     state[7] = state[7].wrapping_add(h);
 }
 
+fn read_array<const N: usize>(ptr: *const u8, len: usize) -> Option<[u8; N]> {
+    if ptr.is_null() || len != N {
+        return None;
+    }
+    let mut out = [0u8; N];
+    out.copy_from_slice(unsafe { slice::from_raw_parts(ptr, N) });
+    Some(out)
+}
+
+fn write_prefix(out: *mut u8, out_len: usize, bytes: &[u8]) -> c_int {
+    if out.is_null() || out_len < bytes.len() {
+        return -1;
+    }
+    let out = unsafe { slice::from_raw_parts_mut(out, out_len) };
+    out[..bytes.len()].copy_from_slice(bytes);
+    0
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_crypto_abi_version() -> u32 {
     OSSH_RUST_CRYPTO_ABI_VERSION
@@ -490,16 +513,115 @@ pub extern "C" fn ossh_rust_digest_free(ctx: *mut c_void) {
     drop(boxed);
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ed25519_public_from_seed(
+    seed: *const u8,
+    seed_len: usize,
+    public_key: *mut u8,
+    public_key_len: usize,
+) -> c_int {
+    let seed = match read_array::<ED25519_SEED_LENGTH>(seed, seed_len) {
+        Some(seed) => seed,
+        None => return -1,
+    };
+    let signing_key = SigningKey::from_bytes(&seed);
+    let verifying_key = signing_key.verifying_key();
+    write_prefix(public_key, public_key_len, &verifying_key.to_bytes())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ed25519_sign(
+    sig: *mut u8,
+    sig_len: usize,
+    msg: *const u8,
+    msg_len: usize,
+    secret_key: *const u8,
+    secret_key_len: usize,
+) -> c_int {
+    let secret_key = match read_array::<ED25519_SECRET_KEY_LENGTH>(secret_key, secret_key_len) {
+        Some(secret_key) => secret_key,
+        None => return -1,
+    };
+    let msg = if msg_len == 0 {
+        &[]
+    } else if msg.is_null() {
+        return -1;
+    } else {
+        unsafe { slice::from_raw_parts(msg, msg_len) }
+    };
+    let mut seed = [0u8; ED25519_SEED_LENGTH];
+    seed.copy_from_slice(&secret_key[..ED25519_SEED_LENGTH]);
+
+    let signing_key = SigningKey::from_bytes(&seed);
+    let derived_public = signing_key.verifying_key().to_bytes();
+    if derived_public != secret_key[ED25519_SEED_LENGTH..] {
+        return -1;
+    }
+
+    let signature = signing_key.sign(msg).to_bytes();
+    write_prefix(sig, sig_len, &signature)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ed25519_verify(
+    sig: *const u8,
+    sig_len: usize,
+    msg: *const u8,
+    msg_len: usize,
+    public_key: *const u8,
+    public_key_len: usize,
+) -> c_int {
+    let sig = match read_array::<ED25519_SIGNATURE_LENGTH>(sig, sig_len) {
+        Some(sig) => sig,
+        None => return -1,
+    };
+    let public_key = match read_array::<ED25519_PUBLIC_KEY_LENGTH>(public_key, public_key_len) {
+        Some(public_key) => public_key,
+        None => return -1,
+    };
+    let msg = if msg_len == 0 {
+        &[]
+    } else if msg.is_null() {
+        return -1;
+    } else {
+        unsafe { slice::from_raw_parts(msg, msg_len) }
+    };
+    let verifying_key = match VerifyingKey::from_bytes(&public_key) {
+        Ok(verifying_key) => verifying_key,
+        Err(_) => return -1,
+    };
+    let signature = Signature::from_bytes(&sig);
+    if verifying_key.verify_strict(msg, &signature).is_err() {
+        return -1;
+    }
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        DigestState, SHA256_DIGEST_LENGTH, SHA384_DIGEST_LENGTH, SHA512_DIGEST_LENGTH,
+        DigestState, Signature, SigningKey, VerifyingKey, SHA256_DIGEST_LENGTH,
+        SHA384_DIGEST_LENGTH, SHA512_DIGEST_LENGTH,
     };
+    use ed25519_dalek::Signer;
 
     fn hex(bytes: &[u8]) -> String {
         let mut out = String::with_capacity(bytes.len() * 2);
         for byte in bytes {
             out.push_str(&format!("{byte:02x}"));
+        }
+        out
+    }
+
+    fn decode_hex(input: &str) -> Vec<u8> {
+        let input: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
+        let mut out = Vec::with_capacity(input.len() / 2);
+        let bytes = input.as_bytes();
+
+        for i in (0..bytes.len()).step_by(2) {
+            let hi = (bytes[i] as char).to_digit(16).unwrap();
+            let lo = (bytes[i + 1] as char).to_digit(16).unwrap();
+            out.push(((hi << 4) | lo) as u8);
         }
         out
     }
@@ -577,5 +699,31 @@ mod tests {
         cloned.finalize_to(&mut clone_out).unwrap();
 
         assert_eq!(original_out, clone_out);
+    }
+
+    #[test]
+    fn ed25519_rfc8032_vector() {
+        let seed = decode_hex(
+            "9d61b19deffd5a60ba844af492ec2cc4\
+             4449c5697b326919703bac031cae7f60",
+        );
+        let public = decode_hex(
+            "d75a980182b10ab7d54bfed3c964073a\
+             0ee172f3daa62325af021a68f707511a",
+        );
+        let signature = decode_hex(
+            "e5564300c360ac729086e2cc806e828a\
+             84877f1eb8e5d974d873e06522490155\
+             5fb8821590a33bacc61e39701cf9b46b\
+             d25bf5f0595bbe24655141438e7a100b",
+        );
+
+        let signing_key = SigningKey::from_bytes(seed.as_slice().try_into().unwrap());
+        let verifying_key = VerifyingKey::from_bytes(public.as_slice().try_into().unwrap()).unwrap();
+        let sig = Signature::from_bytes(signature.as_slice().try_into().unwrap());
+
+        assert_eq!(signing_key.verifying_key().to_bytes().as_slice(), public.as_slice());
+        assert_eq!(signing_key.sign(&[]).to_bytes().as_slice(), signature.as_slice());
+        assert!(verifying_key.verify_strict(&[], &sig).is_ok());
     }
 }

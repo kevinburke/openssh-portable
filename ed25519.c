@@ -24,7 +24,7 @@
 
 #include "includes.h"
 
-#ifndef OPENSSL_HAS_ED25519
+#if !defined(OPENSSL_HAS_ED25519) && !defined(WITH_RUST_CRYPTO)
 
 #include <sys/types.h>
 #include <stdint.h>
@@ -4676,4 +4676,4 @@ crypto_sign_ed25519_verify_detached(const unsigned char *sig,
 }
 
 
-#endif /* OPENSSL_HAS_ED25519 */
+#endif /* !OPENSSL_HAS_ED25519 && !WITH_RUST_CRYPTO */
