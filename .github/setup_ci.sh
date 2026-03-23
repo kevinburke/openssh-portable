@@ -89,6 +89,9 @@ for TARGET in $TARGETS; do
     default|without-openssl|without-zlib|c89)
         # nothing to do
         ;;
+    rust-crypto)
+        PACKAGES="$PACKAGES cargo rustc"
+        ;;
     clang-sanitize*)
         PACKAGES="$PACKAGES clang-12"
         ;;
