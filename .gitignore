@@ -43,3 +43,9 @@ configure
 aclocal.m4
 ChangeLog
 **/*.0
+
+# Rust backend local build outputs
+/local/
+/rust/crypto-target/
+/rust/crypto/target/
+/rust/crypto/Cargo.lock
