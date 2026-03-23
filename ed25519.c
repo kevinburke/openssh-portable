@@ -11,7 +11,7 @@
 
 #include "includes.h"
 
-#ifndef OPENSSL_HAS_ED25519
+#if !defined(OPENSSL_HAS_ED25519) && !defined(WITH_RUST_CRYPTO)
 
 #include <string.h>
 
@@ -2031,4 +2031,4 @@ badsig:
   return -1;
 }
 
-#endif /* OPENSSL_HAS_ED25519 */
+#endif /* !OPENSSL_HAS_ED25519 && !WITH_RUST_CRYPTO */
