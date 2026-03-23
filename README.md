@@ -67,6 +67,8 @@ autoreconf
 make && make tests
 ```
 
+For the experimental Rust-backed build mode, see [RUST_CRYPTO_BUILD.md](RUST_CRYPTO_BUILD.md).
+
 ### Build-time Customisation
 
 There are many build-time customisation options available. All Autoconf destination path flags (e.g. ``--prefix``) are supported (and are usually required if you want to install OpenSSH).
