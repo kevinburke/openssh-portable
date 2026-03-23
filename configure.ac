@@ -126,6 +126,9 @@ AC_CHECK_DECL([PR_SET_NO_NEW_PRIVS], [have_linux_no_new_privs=1], , [
 
 openssl=yes
 openssl_bin=openssl
+rust_crypto=no
+CARGO=
+RUSTC=
 AC_ARG_WITH([openssl],
 	[  --without-openssl       Disable use of OpenSSL; use only limited internal crypto **EXPERIMENTAL** ],
 	[  if test "x$withval" = "xno" ; then
@@ -134,6 +137,16 @@ AC_ARG_WITH([openssl],
 	   fi
 	]
 )
+AC_ARG_WITH([rust-crypto],
+	[  --with-rust-crypto      Use experimental Rust crypto backend (requires --without-openssl) ],
+	[  if test "x$withval" != "xno" ; then
+		rust_crypto=yes
+	   fi
+	]
+)
+if test "x$rust_crypto" = "xyes" -a "x$openssl" = "xyes" ; then
+	AC_MSG_ERROR([cannot enable --with-rust-crypto while OpenSSL is enabled; use --without-openssl --with-rust-crypto])
+fi
 AC_MSG_CHECKING([whether OpenSSL will be used for cryptography])
 if test "x$openssl" = "xyes" ; then
 	AC_MSG_RESULT([yes])
@@ -141,6 +154,30 @@ if test "x$openssl" = "xyes" ; then
 else
 	AC_MSG_RESULT([no])
 fi
+AC_MSG_CHECKING([whether Rust crypto backend will be used])
+if test "x$rust_crypto" = "xyes" ; then
+	AC_MSG_RESULT([yes])
+	AC_PATH_PROG([CARGO], [cargo])
+	AC_PATH_PROG([RUSTC], [rustc])
+	if test -z "$CARGO" ; then
+		AC_MSG_ERROR([cargo not found; required for --with-rust-crypto])
+	fi
+	if test -z "$RUSTC" ; then
+		AC_MSG_ERROR([rustc not found; required for --with-rust-crypto])
+	fi
+	AC_DEFINE_UNQUOTED([WITH_RUST_CRYPTO], [1], [use Rust crypto backend])
+	rust_crypto_build_deps="rust-crypto-build"
+	rust_crypto_link_lib='\$(RUST_CRYPTO_LIB)'
+else
+	AC_MSG_RESULT([no])
+	rust_crypto_build_deps=""
+	rust_crypto_link_lib=""
+fi
+AC_SUBST([CARGO])
+AC_SUBST([RUSTC])
+AC_SUBST([RUST_CRYPTO_ENABLED], [$rust_crypto])
+AC_SUBST([RUST_CRYPTO_BUILD_DEPS], [$rust_crypto_build_deps])
+AC_SUBST([RUST_CRYPTO_LINK_LIB], [$rust_crypto_link_lib])
 
 use_stack_protector=1
 use_toolchain_hardening=1
@@ -5968,6 +6005,7 @@ echo "              Random number source: $RAND_MSG"
 echo "             Privsep sandbox style: $SANDBOX_STYLE"
 echo "                   PKCS#11 support: $enable_pkcs11"
 echo "                  U2F/FIDO support: $enable_sk"
+echo "           Rust crypto backend: $rust_crypto"
 
 echo ""
 
