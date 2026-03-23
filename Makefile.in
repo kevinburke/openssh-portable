@@ -66,12 +66,19 @@ AWK=@AWK@
 RANLIB=@RANLIB@
 INSTALL=@INSTALL@
 SED=@SED@
+CARGO=@CARGO@
 XAUTH_PATH=@XAUTH_PATH@
 LDFLAGS=-L. -Lopenbsd-compat/ @LDFLAGS@
 LDFLAGS_NOPIE=-L. -Lopenbsd-compat/ @LDFLAGS_NOPIE@
 EXEEXT=@EXEEXT@
 MANFMT=@MANFMT@
 MKDIR_P=@MKDIR_P@
+RUST_CRYPTO_ENABLED=@RUST_CRYPTO_ENABLED@
+RUST_CRYPTO_BUILD_DEPS=@RUST_CRYPTO_BUILD_DEPS@
+RUST_CRYPTO_LINK_LIB=@RUST_CRYPTO_LINK_LIB@
+RUST_CRYPTO_MANIFEST=$(srcdir)/rust/crypto/Cargo.toml
+RUST_CRYPTO_TARGET_DIR=$(BUILDDIR)/rust/crypto-target
+RUST_CRYPTO_LIB=$(RUST_CRYPTO_TARGET_DIR)/release/librust_crypto.a
 
 .SUFFIXES: .lo
 
@@ -220,51 +227,56 @@ libssh.a: $(LIBSSH_OBJS)
 	$(AR) rv $@ $(LIBSSH_OBJS)
 	$(RANLIB) $@
 
-ssh$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHOBJS)
-	$(LD) -o $@ $(SSHOBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(LIBS) $(GSSLIBS) $(CHANNELLIBS)
+rust-crypto-build: $(RUST_CRYPTO_LIB)
 
-sshd$(EXEEXT): libssh.a	$(LIBCOMPAT) $(SSHDOBJS)
-	$(LD) -o $@ $(SSHDOBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(SSHDLIBS) $(LIBS) $(CHANNELLIBS)
+$(RUST_CRYPTO_LIB): $(srcdir)/rust-crypto.h $(srcdir)/rust/crypto/Cargo.toml $(srcdir)/rust/crypto/src/lib.rs
+	CARGO_TARGET_DIR="$(RUST_CRYPTO_TARGET_DIR)" $(CARGO) build --manifest-path "$(RUST_CRYPTO_MANIFEST)" --release
 
-sshd-session$(EXEEXT): libssh.a	$(LIBCOMPAT) $(SSHD_SESSION_OBJS)
-	$(LD) -o $@ $(SSHD_SESSION_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(SSHDLIBS) $(LIBS) $(GSSLIBS) $(K5LIBS) $(CHANNELLIBS) $(LIBWTMPDB)
+ssh$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHOBJS) $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ $(SSHOBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(RUST_CRYPTO_LINK_LIB) $(LIBS) $(GSSLIBS) $(CHANNELLIBS)
 
-sshd-auth$(EXEEXT): libssh.a $(LIBCOMPAT) $(SSHD_AUTH_OBJS)
-	$(LD) -o $@ $(SSHD_AUTH_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(SSHDLIBS) $(LIBS) $(GSSLIBS) $(K5LIBS) $(CHANNELLIBS) $(LIBWTMPDB)
+sshd$(EXEEXT): libssh.a	$(LIBCOMPAT) $(SSHDOBJS) $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ $(SSHDOBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(RUST_CRYPTO_LINK_LIB) $(SSHDLIBS) $(LIBS) $(CHANNELLIBS)
 
-scp$(EXEEXT): $(LIBCOMPAT) libssh.a $(SCP_OBJS)
-	$(LD) -o $@ $(SCP_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(LIBS)
+sshd-session$(EXEEXT): libssh.a	$(LIBCOMPAT) $(SSHD_SESSION_OBJS) $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ $(SSHD_SESSION_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(RUST_CRYPTO_LINK_LIB) $(SSHDLIBS) $(LIBS) $(GSSLIBS) $(K5LIBS) $(CHANNELLIBS) $(LIBWTMPDB)
 
-ssh-add$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHADD_OBJS)
-	$(LD) -o $@ $(SSHADD_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(LIBS) $(CHANNELLIBS)
+sshd-auth$(EXEEXT): libssh.a $(LIBCOMPAT) $(SSHD_AUTH_OBJS) $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ $(SSHD_AUTH_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(RUST_CRYPTO_LINK_LIB) $(SSHDLIBS) $(LIBS) $(GSSLIBS) $(K5LIBS) $(CHANNELLIBS) $(LIBWTMPDB)
 
-ssh-agent$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHAGENT_OBJS)
-	$(LD) -o $@ $(SSHAGENT_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(LIBS) $(CHANNELLIBS)
+scp$(EXEEXT): $(LIBCOMPAT) libssh.a $(SCP_OBJS) $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ $(SCP_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(RUST_CRYPTO_LINK_LIB) $(LIBS)
 
-ssh-keygen$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHKEYGEN_OBJS)
-	$(LD) -o $@ $(SSHKEYGEN_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(LIBS) $(CHANNELLIBS)
+ssh-add$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHADD_OBJS) $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ $(SSHADD_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(RUST_CRYPTO_LINK_LIB) $(LIBS) $(CHANNELLIBS)
 
-ssh-keysign$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHKEYSIGN_OBJS)
-	$(LD) -o $@ $(SSHKEYSIGN_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(LIBS) $(CHANNELLIBS)
+ssh-agent$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHAGENT_OBJS) $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ $(SSHAGENT_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(RUST_CRYPTO_LINK_LIB) $(LIBS) $(CHANNELLIBS)
 
-ssh-pkcs11-helper$(EXEEXT): $(LIBCOMPAT) libssh.a $(P11HELPER_OBJS)
-	$(LD) -o $@ $(P11HELPER_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat $(LIBS) $(CHANNELLIBS)
+ssh-keygen$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHKEYGEN_OBJS) $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ $(SSHKEYGEN_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(RUST_CRYPTO_LINK_LIB) $(LIBS) $(CHANNELLIBS)
 
-ssh-sk-helper$(EXEEXT): $(LIBCOMPAT) libssh.a $(SKHELPER_OBJS)
-	$(LD) -o $@ $(SKHELPER_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat $(LIBS) $(LIBFIDO2) $(CHANNELLIBS)
+ssh-keysign$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHKEYSIGN_OBJS) $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ $(SSHKEYSIGN_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(RUST_CRYPTO_LINK_LIB) $(LIBS) $(CHANNELLIBS)
 
-ssh-keyscan$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHKEYSCAN_OBJS)
-	$(LD) -o $@ $(SSHKEYSCAN_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat -lssh $(LIBS) $(CHANNELLIBS)
+ssh-pkcs11-helper$(EXEEXT): $(LIBCOMPAT) libssh.a $(P11HELPER_OBJS) $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ $(P11HELPER_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat $(RUST_CRYPTO_LINK_LIB) $(LIBS) $(CHANNELLIBS)
 
-sftp-server$(EXEEXT): $(LIBCOMPAT) libssh.a $(SFTPSERVER_OBJS)
-	$(LD) -o $@ $(SFTPSERVER_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat -lssh $(LIBS)
+ssh-sk-helper$(EXEEXT): $(LIBCOMPAT) libssh.a $(SKHELPER_OBJS) $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ $(SKHELPER_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat $(RUST_CRYPTO_LINK_LIB) $(LIBS) $(LIBFIDO2) $(CHANNELLIBS)
 
-sftp$(EXEEXT): $(LIBCOMPAT) libssh.a $(SFTP_OBJS)
-	$(LD) -o $@ $(SFTP_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(LIBS) $(LIBEDIT)
+ssh-keyscan$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHKEYSCAN_OBJS) $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ $(SSHKEYSCAN_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat -lssh $(RUST_CRYPTO_LINK_LIB) $(LIBS) $(CHANNELLIBS)
+
+sftp-server$(EXEEXT): $(LIBCOMPAT) libssh.a $(SFTPSERVER_OBJS) $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ $(SFTPSERVER_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat -lssh $(RUST_CRYPTO_LINK_LIB) $(LIBS)
+
+sftp$(EXEEXT): $(LIBCOMPAT) libssh.a $(SFTP_OBJS) $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ $(SFTP_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(RUST_CRYPTO_LINK_LIB) $(LIBS) $(LIBEDIT)
 
 # test driver for the loginrec code - not built by default
-logintest: logintest.o $(LIBCOMPAT) libssh.a loginrec.o
-	$(LD) -o $@ logintest.o $(LDFLAGS) loginrec.o -lopenbsd-compat -lssh $(LIBS)
+logintest: logintest.o $(LIBCOMPAT) libssh.a loginrec.o $(RUST_CRYPTO_BUILD_DEPS)
+	$(LD) -o $@ logintest.o $(LDFLAGS) loginrec.o -lopenbsd-compat -lssh $(RUST_CRYPTO_LINK_LIB) $(LIBS)
 
 # compile libssh objects with -fPIC for use in the sk_libfido2 shared library
 LIBSSH_PIC_OBJS=$(LIBSSH_OBJS:.o=.lo)
@@ -272,9 +284,9 @@ libssh-pic.a: $(LIBSSH_PIC_OBJS)
 	$(AR) rv $@ $(LIBSSH_PIC_OBJS)
 	$(RANLIB) $@
 
-$(SK_STANDALONE): $(srcdir)/sk-usbhid.c $(LIBCOMPAT) libssh-pic.a
+$(SK_STANDALONE): $(srcdir)/sk-usbhid.c $(LIBCOMPAT) libssh-pic.a $(RUST_CRYPTO_BUILD_DEPS)
 	$(CC) -o $@ -shared $(CFLAGS_NOPIE) $(CPPFLAGS) -DSK_STANDALONE $(PICFLAG) $(srcdir)/sk-usbhid.c \
-	libssh-pic.a $(LDFLAGS_NOPIE) -lopenbsd-compat $(LIBS) $(LIBFIDO2) $(CHANNELLIBS)
+	libssh-pic.a $(LDFLAGS_NOPIE) -lopenbsd-compat $(RUST_CRYPTO_LINK_LIB) $(LIBS) $(LIBFIDO2) $(CHANNELLIBS)
 
 $(MANPAGES): $(MANPAGES_IN)
 	if test "$(MANTYPE)" = "cat"; then \
@@ -300,6 +312,7 @@ moduli:
 clean:	regressclean
 	rm -f *.o *.lo *.a $(TARGETS) logintest config.cache config.log
 	rm -f *.out core survey
+	rm -rf $(RUST_CRYPTO_TARGET_DIR)
 	rm -f regress/check-perm$(EXEEXT)
 	rm -f regress/mkdtemp$(EXEEXT)
 	rm -f regress/unittests/test_helper/*.a
@@ -339,6 +352,7 @@ clean:	regressclean
 distclean:	regressclean
 	rm -f *.o *.a $(TARGETS) logintest config.cache config.log
 	rm -f *.out core opensshd.init openssh.xml
+	rm -rf $(RUST_CRYPTO_TARGET_DIR)
 	rm -f Makefile buildpkg.sh config.h config.status
 	rm -f survey.sh openbsd-compat/regress/Makefile *~ 
 	rm -rf openbsd-compat/include

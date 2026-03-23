@@ -41,13 +41,20 @@
 # endif /* OPENSSL_HAS_ECC */
 #define SSH_OPENSSL_VERSION OpenSSL_version(OPENSSL_VERSION)
 #else /* WITH_OPENSSL */
+# ifdef WITH_RUST_CRYPTO
+#  include "rust-crypto.h"
+# endif
 # define BIGNUM		void
 # define RSA		void
 # define EC_KEY		void
 # define EC_GROUP	void
 # define EC_POINT	void
 # define EVP_PKEY	void
-#define SSH_OPENSSL_VERSION "without OpenSSL"
+# ifdef WITH_RUST_CRYPTO
+#  define SSH_OPENSSL_VERSION ossh_rust_crypto_backend_label()
+# else
+#  define SSH_OPENSSL_VERSION "without OpenSSL"
+# endif
 #endif /* WITH_OPENSSL */
 
 #define SSH_RSA_MINIMUM_MODULUS_SIZE	1024
