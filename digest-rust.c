@@ -1,7 +1,6 @@
-/* $OpenBSD: digest-libc.c,v 1.10 2026/03/03 09:57:25 dtucker Exp $ */
+/* $OpenBSD$ */
 /*
- * Copyright (c) 2013 Damien Miller <djm@mindrot.org>
- * Copyright (c) 2014 Markus Friedl.  All rights reserved.
+ * Copyright (c) 2026 Kevin Burke
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -11,51 +10,42 @@
  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
  * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA, OR PROFITS, WHETHER IN AN
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include "includes.h"
 
-#if !defined(WITH_OPENSSL) && !defined(WITH_RUST_CRYPTO)
+#ifdef WITH_RUST_CRYPTO
 
 #include <sys/types.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
-#if 0
-#include <md5.h>
-#endif
-#ifdef HAVE_SHA1_H
-#include <sha1.h>
-#endif
-#ifdef HAVE_SHA2_H
-#include <sha2.h>
-#endif
-
-#if !defined(SHA256_BLOCK_LENGTH) && defined(SHA256_HMAC_BLOCK_SIZE)
-#define SHA256_BLOCK_LENGTH SHA256_HMAC_BLOCK_SIZE
-#endif
-#if !defined(SHA384_BLOCK_LENGTH) && defined(SHA512_HMAC_BLOCK_SIZE)
-#define SHA384_BLOCK_LENGTH SHA512_HMAC_BLOCK_SIZE
-#endif
-#if !defined(SHA512_BLOCK_LENGTH) && defined(SHA512_HMAC_BLOCK_SIZE)
-#define SHA512_BLOCK_LENGTH SHA512_HMAC_BLOCK_SIZE
-#endif
-
 #include "ssherr.h"
 #include "sshbuf.h"
 #include "digest.h"
+#include "rust-crypto.h"
 
 typedef void md_init_fn(void *mdctx);
 typedef void md_update_fn(void *mdctx, const uint8_t *m, size_t mlen);
 typedef void md_final_fn(uint8_t[], void *mdctx);
 
+enum ssh_digest_backend {
+	SSH_DIGEST_BACKEND_LIBC = 0,
+	SSH_DIGEST_BACKEND_RUST
+};
+
 struct ssh_digest_ctx {
 	int alg;
-	void *mdctx;
+	enum ssh_digest_backend backend;
+	union {
+		MD5_CTX md5;
+		SHA1_CTX sha1;
+		void *rust;
+	} state;
 };
 
 struct ssh_digest {
@@ -63,6 +53,7 @@ struct ssh_digest {
 	const char *name;
 	size_t block_len;
 	size_t digest_len;
+	enum ssh_digest_backend backend;
 	size_t ctx_len;
 	md_init_fn *md_init;
 	md_update_fn *md_update;
@@ -70,56 +61,61 @@ struct ssh_digest {
 };
 
 /* NB. Indexed directly by algorithm number */
-const struct ssh_digest digests[SSH_DIGEST_MAX] = {
+static const struct ssh_digest digests[SSH_DIGEST_MAX] = {
 	{
 		SSH_DIGEST_MD5,
 		"MD5",
 		MD5_BLOCK_LENGTH,
 		MD5_DIGEST_LENGTH,
+		SSH_DIGEST_BACKEND_LIBC,
 		sizeof(MD5_CTX),
-		(md_init_fn *) MD5Init,
-		(md_update_fn *) MD5Update,
-		(md_final_fn *) MD5Final
+		(md_init_fn *)MD5Init,
+		(md_update_fn *)MD5Update,
+		(md_final_fn *)MD5Final
 	},
 	{
 		SSH_DIGEST_SHA1,
 		"SHA1",
 		SHA1_BLOCK_LENGTH,
 		SHA1_DIGEST_LENGTH,
+		SSH_DIGEST_BACKEND_LIBC,
 		sizeof(SHA1_CTX),
-		(md_init_fn *) SHA1Init,
-		(md_update_fn *) SHA1Update,
-		(md_final_fn *) SHA1Final
+		(md_init_fn *)SHA1Init,
+		(md_update_fn *)SHA1Update,
+		(md_final_fn *)SHA1Final
 	},
 	{
 		SSH_DIGEST_SHA256,
 		"SHA256",
 		SHA256_BLOCK_LENGTH,
 		SHA256_DIGEST_LENGTH,
-		sizeof(SHA2_CTX),
-		(md_init_fn *) SHA256Init,
-		(md_update_fn *) SHA256Update,
-		(md_final_fn *) SHA256Final
+		SSH_DIGEST_BACKEND_RUST,
+		0,
+		NULL,
+		NULL,
+		NULL
 	},
 	{
 		SSH_DIGEST_SHA384,
 		"SHA384",
 		SHA384_BLOCK_LENGTH,
 		SHA384_DIGEST_LENGTH,
-		sizeof(SHA2_CTX),
-		(md_init_fn *) SHA384Init,
-		(md_update_fn *) SHA384Update,
-		(md_final_fn *) SHA384Final
+		SSH_DIGEST_BACKEND_RUST,
+		0,
+		NULL,
+		NULL,
+		NULL
 	},
 	{
 		SSH_DIGEST_SHA512,
 		"SHA512",
 		SHA512_BLOCK_LENGTH,
 		SHA512_DIGEST_LENGTH,
-		sizeof(SHA2_CTX),
-		(md_init_fn *) SHA512Init,
-		(md_update_fn *) SHA512Update,
-		(md_final_fn *) SHA512Final
+		SSH_DIGEST_BACKEND_RUST,
+		0,
+		NULL,
+		NULL,
+		NULL
 	}
 };
 
@@ -128,9 +124,9 @@ ssh_digest_by_alg(int alg)
 {
 	if (alg < 0 || alg >= SSH_DIGEST_MAX)
 		return NULL;
-	if (digests[alg].id != alg) /* sanity */
+	if (digests[alg].id != alg)
 		return NULL;
-	return &(digests[alg]);
+	return &digests[alg];
 }
 
 int
@@ -177,24 +173,44 @@ ssh_digest_start(int alg)
 
 	if (digest == NULL || (ret = calloc(1, sizeof(*ret))) == NULL)
 		return NULL;
-	if ((ret->mdctx = calloc(1, digest->ctx_len)) == NULL) {
-		free(ret);
-		return NULL;
-	}
 	ret->alg = alg;
-	digest->md_init(ret->mdctx);
-	return ret;
+	ret->backend = digest->backend;
+	switch (digest->backend) {
+	case SSH_DIGEST_BACKEND_LIBC:
+		digest->md_init(&ret->state);
+		return ret;
+	case SSH_DIGEST_BACKEND_RUST:
+		if ((ret->state.rust = ossh_rust_digest_start(alg)) == NULL) {
+			free(ret);
+			return NULL;
+		}
+		return ret;
+	}
+	free(ret);
+	return NULL;
 }
 
 int
 ssh_digest_copy_state(struct ssh_digest_ctx *from, struct ssh_digest_ctx *to)
 {
 	const struct ssh_digest *digest = ssh_digest_by_alg(from->alg);
+	void *copy;
 
-	if (digest == NULL || from->alg != to->alg)
+	if (digest == NULL || from->alg != to->alg ||
+	    from->backend != to->backend)
 		return SSH_ERR_INVALID_ARGUMENT;
-	memcpy(to->mdctx, from->mdctx, digest->ctx_len);
-	return 0;
+	switch (digest->backend) {
+	case SSH_DIGEST_BACKEND_LIBC:
+		memcpy(&to->state, &from->state, digest->ctx_len);
+		return 0;
+	case SSH_DIGEST_BACKEND_RUST:
+		if ((copy = ossh_rust_digest_copy(from->state.rust)) == NULL)
+			return SSH_ERR_ALLOC_FAIL;
+		ossh_rust_digest_free(to->state.rust);
+		to->state.rust = copy;
+		return 0;
+	}
+	return SSH_ERR_INTERNAL_ERROR;
 }
 
 int
@@ -204,8 +220,15 @@ ssh_digest_update(struct ssh_digest_ctx *ctx, const void *m, size_t mlen)
 
 	if (digest == NULL)
 		return SSH_ERR_INVALID_ARGUMENT;
-	digest->md_update(ctx->mdctx, m, mlen);
-	return 0;
+	switch (digest->backend) {
+	case SSH_DIGEST_BACKEND_LIBC:
+		digest->md_update(&ctx->state, m, mlen);
+		return 0;
+	case SSH_DIGEST_BACKEND_RUST:
+		return ossh_rust_digest_update(ctx->state.rust, m, mlen) == 0 ?
+		    0 : SSH_ERR_INTERNAL_ERROR;
+	}
+	return SSH_ERR_INTERNAL_ERROR;
 }
 
 int
@@ -223,25 +246,27 @@ ssh_digest_final(struct ssh_digest_ctx *ctx, u_char *d, size_t dlen)
 		return SSH_ERR_INVALID_ARGUMENT;
 	if (dlen > UINT_MAX)
 		return SSH_ERR_INVALID_ARGUMENT;
-	if (dlen < digest->digest_len) /* No truncation allowed */
+	if (dlen < digest->digest_len)
 		return SSH_ERR_INVALID_ARGUMENT;
-	digest->md_final(d, ctx->mdctx);
-	return 0;
+	switch (digest->backend) {
+	case SSH_DIGEST_BACKEND_LIBC:
+		digest->md_final(d, &ctx->state);
+		return 0;
+	case SSH_DIGEST_BACKEND_RUST:
+		return ossh_rust_digest_final(ctx->state.rust, d, dlen) == 0 ?
+		    0 : SSH_ERR_INTERNAL_ERROR;
+	}
+	return SSH_ERR_INTERNAL_ERROR;
 }
 
 void
 ssh_digest_free(struct ssh_digest_ctx *ctx)
 {
-	const struct ssh_digest *digest;
-
-	if (ctx != NULL) {
-		digest = ssh_digest_by_alg(ctx->alg);
-		if (digest) {
-			explicit_bzero(ctx->mdctx, digest->ctx_len);
-			free(ctx->mdctx);
-			freezero(ctx, sizeof(*ctx));
-		}
-	}
+	if (ctx == NULL)
+		return;
+	if (ctx->backend == SSH_DIGEST_BACKEND_RUST)
+		ossh_rust_digest_free(ctx->state.rust);
+	freezero(ctx, sizeof(*ctx));
 }
 
 int
@@ -264,4 +289,5 @@ ssh_digest_buffer(int alg, const struct sshbuf *b, u_char *d, size_t dlen)
 {
 	return ssh_digest_memory(alg, sshbuf_ptr(b), sshbuf_len(b), d, dlen);
 }
-#endif /* !WITH_OPENSSL && !WITH_RUST_CRYPTO */
+
+#endif /* WITH_RUST_CRYPTO */
