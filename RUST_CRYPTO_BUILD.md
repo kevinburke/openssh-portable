@@ -54,6 +54,29 @@ make
 
 That is the minimum Rust-mode build.
 
+Note that the `./configure` summary shows the configured install prefix. It
+does not install anything onto the host unless you run `make install`.
+
+For local testing, prefer a repo-local prefix:
+
+```sh
+./configure \
+  --prefix="$PWD/local" \
+  --sysconfdir="$PWD/local/etc" \
+  --bindir="$PWD/local/bin" \
+  --sbindir="$PWD/local/sbin" \
+  --libexecdir="$PWD/local/libexec" \
+  --without-openssl \
+  --with-rust-crypto
+make
+```
+
+If you do want an install tree for testing, install into that local prefix:
+
+```sh
+make install
+```
+
 ## Recommended no-libcrypto variant
 
 If the goal is to keep helper binaries from pulling `libcrypto` back in
@@ -133,6 +156,8 @@ The crate lives at:
 The generated static library is placed under:
 
 - `rust/crypto-target/release/librust_crypto.a`
+- installed test binaries can be kept under `local/` if you use the local
+  prefix above
 
 ## Current scope
 
