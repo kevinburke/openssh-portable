@@ -15,7 +15,8 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 8U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 9U
+#define OSSH_RUST_DH_GROUP14 14
 #define OSSH_RUST_ECDH_NISTP256 1
 #define OSSH_RUST_ECDH_NISTP384 2
 #define OSSH_RUST_ECDH_NISTP521 3
@@ -37,6 +38,13 @@ extern "C" {
 
 uint32_t ossh_rust_crypto_abi_version(void);
 const char *ossh_rust_crypto_backend_label(void);
+void *ossh_rust_dh_group_new(int group_id);
+int ossh_rust_dh_generate_key(void *group, size_t need_bits);
+size_t ossh_rust_dh_public_len(const void *group);
+int ossh_rust_dh_export_public(const void *group, uint8_t *out, size_t out_len);
+int ossh_rust_dh_shared_secret(const void *group, const uint8_t *peer_public,
+    size_t peer_public_len, uint8_t *out, size_t out_len);
+void ossh_rust_dh_free(void *group);
 void *ossh_rust_digest_start(int alg);
 void *ossh_rust_digest_copy(const void *ctx);
 int ossh_rust_digest_update(void *ctx, const uint8_t *data, size_t len);
