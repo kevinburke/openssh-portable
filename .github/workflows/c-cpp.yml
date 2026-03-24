@@ -144,6 +144,14 @@ jobs:
         sh -c "timeout 1200 .github/setup_ci.sh ${{ matrix.config }} ${{ matrix.target }} || .github/setup_ci.sh ${{ matrix.config }} ${{ matrix.target }}"
       env:
         CYGWIN_SETUP: ${{ steps.cygwin_install.outputs.setup }}
+    - name: setup Rust toolchain
+      if: ${{ matrix.config == 'rust-crypto' }}
+      uses: dtolnay/rust-toolchain@stable
+    - name: show Rust version
+      if: ${{ matrix.config == 'rust-crypto' }}
+      run: |
+        rustc --version
+        cargo --version
     - name: autoreconf
       run: sh -c autoreconf
     - name: configure
