@@ -21,6 +21,10 @@ Rust-backed today:
   `sntrup761x25519-sha512` and `mlkem768x25519-sha256` KEX paths
 - AES-CTR transport cipher (`aes128-ctr`, `aes192-ctr`, `aes256-ctr`)
 - ChaCha20-Poly1305 transport cipher (`chacha20-poly1305@openssh.com`)
+- standalone Rust fuzz targets for:
+  - Ed25519 verification
+  - NIST ECDH peer/public input handling
+  - ChaCha20-Poly1305 packet decrypt/auth failure handling
 
 Still on the existing C path today:
 
@@ -69,6 +73,45 @@ Today it runs:
 - the OpenSSH `unit` and `t-exec` targets under `--with-rust-crypto`
 
 That gives both Rust-native coverage and OpenSSH integration coverage in CI.
+
+## Test commands
+
+The main local test commands for the current branch are:
+
+Rust unit and property tests:
+
+```sh
+cargo test --manifest-path rust/crypto/Cargo.toml
+```
+
+OpenSSH unit tests in Rust mode:
+
+```sh
+make unit
+```
+
+OpenSSH integration/regress tests in Rust mode:
+
+```sh
+make t-exec
+```
+
+Or run the same pair CI uses in the Rust job:
+
+```sh
+make unit t-exec
+```
+
+If you want to rebuild only the Rust static library and the common test
+binaries first:
+
+```sh
+make rust-crypto-build ssh sshd ssh-keygen
+```
+
+On this branch, the Rust unit tests include both fixed vectors and
+randomized/property-style checks for digests, Ed25519, X25519, NIST ECDH,
+AES-CTR, and ChaCha20-Poly1305.
 
 ## Prerequisites
 
@@ -320,6 +363,12 @@ Build all fuzz targets:
 cargo build --manifest-path rust/crypto/fuzz/Cargo.toml
 ```
 
+For real coverage-guided fuzzing, install `cargo-fuzz` and use nightly:
+
+```sh
+cargo install cargo-fuzz
+```
+
 Run a short smoke test:
 
 ```sh
@@ -327,11 +376,20 @@ cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
   --bin ed25519_verify -- -runs=1
 ```
 
+Run a bounded real fuzzing session:
+
+```sh
+cd rust/crypto/fuzz
+cargo +nightly fuzz run ed25519_verify -- -max_total_time=60
+cargo +nightly fuzz run ecdh_peer -- -max_total_time=60
+cargo +nightly fuzz run chachapoly_decrypt -- -max_total_time=60
+```
+
 Run a longer local fuzzing session:
 
 ```sh
-cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
-  --bin chachapoly_decrypt -- -runs=100000
+cd rust/crypto/fuzz
+cargo +nightly fuzz run chachapoly_decrypt
 ```
 
 Current targets:
@@ -339,6 +397,12 @@ Current targets:
 - `ed25519_verify`
 - `ecdh_peer`
 - `chachapoly_decrypt`
+
+Notes:
+
+- the CI job only does a smoke run of `ed25519_verify`
+- `cargo run` is fine for a quick execute/build sanity check
+- `cargo +nightly fuzz run ...` is the real coverage-guided path
 
 ## Useful targets
 
