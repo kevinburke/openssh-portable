@@ -29,8 +29,29 @@ doc = false
 bench = false
 
 [[bin]]
+name = "dh_peer"
+path = "fuzz_targets/dh_peer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ecdsa_parse"
+path = "fuzz_targets/ecdsa_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "ed25519_verify"
 path = "fuzz_targets/ed25519_verify.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rsa_parse"
+path = "fuzz_targets/rsa_parse.rs"
 test = false
 doc = false
 bench = false
