@@ -144,6 +144,12 @@ jobs:
     - name: cargo test
       if: ${{ matrix.config == 'rust-crypto' }}
       run: cargo test --manifest-path rust/crypto/Cargo.toml
+    - name: cargo fuzz build
+      if: ${{ matrix.config == 'rust-crypto' }}
+      run: cargo build --manifest-path rust/crypto/fuzz/Cargo.toml
+    - name: cargo fuzz smoke
+      if: ${{ matrix.config == 'rust-crypto' }}
+      run: cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin ed25519_verify -- -runs=1
     - name: save config
       uses: actions/upload-artifact@main
       with:
