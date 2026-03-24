@@ -26,7 +26,13 @@
 
 #include "includes.h"
 
-#if defined(WITH_OPENSSL) && defined(OPENSSL_HAS_ECC)
+#if defined(WITH_RUST_CRYPTO)
+
+/*
+ * Rust implementation lives in kexecdh-rust.c.
+ */
+
+#elif defined(WITH_OPENSSL) && defined(OPENSSL_HAS_ECC)
 
 #include <sys/types.h>
 
@@ -235,4 +241,4 @@ kex_ecdh_dec(struct kex *kex, const struct sshbuf *server_blob,
 {
 	return SSH_ERR_SIGN_ALG_UNSUPPORTED;
 }
-#endif /* defined(WITH_OPENSSL) && defined(OPENSSL_HAS_ECC) */
+#endif /* defined(WITH_RUST_CRYPTO) */
