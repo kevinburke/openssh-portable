@@ -3013,6 +3013,37 @@ sshkey_private_to_blob2(struct sshkey *prv, struct sshbuf *blob,
 static int
 private2_uudecode(struct sshbuf *blob, struct sshbuf **decodedp)
 {
+#ifdef WITH_RUST_CRYPTO
+	size_t decoded_len;
+	u_char *dp;
+	int r;
+	struct sshbuf *decoded = NULL;
+
+	if (blob == NULL || decodedp == NULL)
+		return SSH_ERR_INVALID_ARGUMENT;
+	*decodedp = NULL;
+
+	if ((decoded = sshbuf_new()) == NULL)
+		return SSH_ERR_ALLOC_FAIL;
+	if ((decoded_len = ossh_rust_private2_decode_len(sshbuf_ptr(blob),
+	    sshbuf_len(blob))) == 0) {
+		r = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+	if ((r = sshbuf_reserve(decoded, decoded_len, &dp)) != 0)
+		goto out;
+	if (ossh_rust_private2_decode_write(sshbuf_ptr(blob), sshbuf_len(blob),
+	    dp, decoded_len) != 0) {
+		r = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+	*decodedp = decoded;
+	decoded = NULL;
+	r = 0;
+ out:
+	sshbuf_free(decoded);
+	return r;
+#else
 	const u_char *cp;
 	size_t encoded_len;
 	int r;
@@ -3083,12 +3114,144 @@ private2_uudecode(struct sshbuf *blob, struct sshbuf **decodedp)
 	sshbuf_free(encoded);
 	sshbuf_free(decoded);
 	return r;
+#endif
 }
 
 static int
 private2_decrypt(struct sshbuf *decoded, const char *passphrase,
     struct sshbuf **decryptedp, struct sshkey **pubkeyp)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_private2_header_parse parsed;
+	const u_char *blob;
+	const char *ciphername;
+	const struct sshcipher *cipher = NULL;
+	int r = SSH_ERR_INTERNAL_ERROR;
+	size_t keylen = 0, ivlen = 0, authlen = 0, slen = 0;
+	struct sshbuf *decrypted = NULL;
+	struct sshcipher_ctx *ciphercontext = NULL;
+	struct sshkey *pubkey = NULL;
+	u_char *key = NULL, *salt = NULL, *dp;
+	u_int blocksize, rounds, encrypted_len, check1, check2;
+
+	if (decoded == NULL || decryptedp == NULL || pubkeyp == NULL)
+		return SSH_ERR_INVALID_ARGUMENT;
+
+	*decryptedp = NULL;
+	*pubkeyp = NULL;
+
+	if ((decrypted = sshbuf_new()) == NULL) {
+		r = SSH_ERR_ALLOC_FAIL;
+		goto out;
+	}
+	if (ossh_rust_private2_parse_header(sshbuf_ptr(decoded),
+	    sshbuf_len(decoded), &parsed) != 0) {
+		r = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+	blob = sshbuf_ptr(decoded);
+	ciphername = (const char *)(blob + parsed.ciphername_offset);
+	encrypted_len = parsed.encrypted_len;
+
+	if ((r = sshkey_from_blob(blob + parsed.public_key_offset,
+	    parsed.public_key_len, &pubkey)) != 0)
+		goto out;
+
+	if ((cipher = cipher_by_name(ciphername)) == NULL) {
+		r = SSH_ERR_KEY_UNKNOWN_CIPHER;
+		goto out;
+	}
+	if (parsed.kdf_kind != OSSH_RUST_PRIVATE2_KDF_NONE &&
+	    parsed.kdf_kind != OSSH_RUST_PRIVATE2_KDF_BCRYPT) {
+		r = SSH_ERR_KEY_UNKNOWN_CIPHER;
+		goto out;
+	}
+	if (parsed.kdf_kind == OSSH_RUST_PRIVATE2_KDF_NONE &&
+	    strcmp(ciphername, "none") != 0) {
+		r = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+	if ((passphrase == NULL || strlen(passphrase) == 0) &&
+	    parsed.kdf_kind != OSSH_RUST_PRIVATE2_KDF_NONE) {
+		r = SSH_ERR_KEY_WRONG_PASSPHRASE;
+		goto out;
+	}
+
+	blocksize = cipher_blocksize(cipher);
+	if (encrypted_len < blocksize || (encrypted_len % blocksize) != 0) {
+		r = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+
+	keylen = cipher_keylen(cipher);
+	ivlen = cipher_ivlen(cipher);
+	authlen = cipher_authlen(cipher);
+	if ((key = calloc(1, keylen + ivlen)) == NULL) {
+		r = SSH_ERR_ALLOC_FAIL;
+		goto out;
+	}
+	if (parsed.kdf_kind == OSSH_RUST_PRIVATE2_KDF_BCRYPT) {
+		slen = parsed.bcrypt_salt_len;
+		rounds = parsed.bcrypt_rounds;
+		if ((salt = malloc(slen)) == NULL) {
+			r = SSH_ERR_ALLOC_FAIL;
+			goto out;
+		}
+		memcpy(salt, blob + parsed.bcrypt_salt_offset, slen);
+		if (bcrypt_pbkdf(passphrase, strlen(passphrase), salt, slen,
+		    key, keylen + ivlen, rounds) < 0) {
+			r = SSH_ERR_INVALID_FORMAT;
+			goto out;
+		}
+	}
+
+	if (sshbuf_len(decoded) < authlen ||
+	    sshbuf_len(decoded) - authlen < parsed.encrypted_offset + encrypted_len) {
+		r = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+	if (sshbuf_len(decoded) != parsed.encrypted_offset + encrypted_len + authlen) {
+		r = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+
+	if ((r = sshbuf_reserve(decrypted, encrypted_len, &dp)) != 0 ||
+	    (r = cipher_init(&ciphercontext, cipher, key, keylen,
+	    key + keylen, ivlen, 0)) != 0)
+		goto out;
+	if ((r = cipher_crypt(ciphercontext, 0, dp,
+	    blob + parsed.encrypted_offset, encrypted_len, 0, authlen)) != 0) {
+		if (r == SSH_ERR_MAC_INVALID)
+			r = SSH_ERR_KEY_WRONG_PASSPHRASE;
+		goto out;
+	}
+	if ((r = sshbuf_get_u32(decrypted, &check1)) != 0 ||
+	    (r = sshbuf_get_u32(decrypted, &check2)) != 0)
+		goto out;
+	if (check1 != check2) {
+		r = SSH_ERR_KEY_WRONG_PASSPHRASE;
+		goto out;
+	}
+
+	*decryptedp = decrypted;
+	decrypted = NULL;
+	*pubkeyp = pubkey;
+	pubkey = NULL;
+	r = 0;
+ out:
+	cipher_free(ciphercontext);
+	sshkey_free(pubkey);
+	if (salt != NULL) {
+		explicit_bzero(salt, slen);
+		free(salt);
+	}
+	if (key != NULL) {
+		explicit_bzero(key, keylen + ivlen);
+		free(key);
+	}
+	sshbuf_free(decrypted);
+	return r;
+#else
 	char *ciphername = NULL, *kdfname = NULL;
 	const struct sshcipher *cipher = NULL;
 	int r = SSH_ERR_INTERNAL_ERROR;
@@ -3230,6 +3393,7 @@ private2_decrypt(struct sshbuf *decoded, const char *passphrase,
 	sshbuf_free(kdf);
 	sshbuf_free(decrypted);
 	return r;
+#endif
 }
 
 static int
@@ -3296,6 +3460,44 @@ static int
 sshkey_parse_private2_pubkey(struct sshbuf *blob, int type,
     struct sshkey **keyp)
 {
+#ifdef WITH_RUST_CRYPTO
+	int r = SSH_ERR_INTERNAL_ERROR;
+	struct sshbuf *decoded = NULL;
+	struct sshkey *pubkey = NULL;
+	struct ossh_rust_private2_header_parse parsed;
+	const u_char *cp;
+
+	if (keyp != NULL)
+		*keyp = NULL;
+
+	if ((r = private2_uudecode(blob, &decoded)) != 0)
+		goto out;
+	if (ossh_rust_private2_parse_header(sshbuf_ptr(decoded),
+	    sshbuf_len(decoded), &parsed) != 0) {
+		r = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+	cp = sshbuf_ptr(decoded);
+	if ((r = sshkey_from_blob(cp + parsed.public_key_offset,
+	    parsed.public_key_len, &pubkey)) != 0)
+		goto out;
+
+	if (type != KEY_UNSPEC &&
+	    sshkey_type_plain(type) != sshkey_type_plain(pubkey->type)) {
+		r = SSH_ERR_KEY_TYPE_MISMATCH;
+		goto out;
+	}
+
+	r = 0;
+	if (keyp != NULL) {
+		*keyp = pubkey;
+		pubkey = NULL;
+	}
+ out:
+	sshbuf_free(decoded);
+	sshkey_free(pubkey);
+	return r;
+#else
 	int r = SSH_ERR_INTERNAL_ERROR;
 	struct sshbuf *decoded = NULL;
 	struct sshkey *pubkey = NULL;
@@ -3340,6 +3542,7 @@ sshkey_parse_private2_pubkey(struct sshbuf *blob, int type,
 	sshbuf_free(decoded);
 	sshkey_free(pubkey);
 	return r;
+#endif
 }
 
 #if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
