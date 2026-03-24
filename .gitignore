@@ -51,3 +51,6 @@ ChangeLog
 /rust/crypto/Cargo.lock
 /rust/crypto/fuzz/target/
 /rust/crypto/fuzz/Cargo.lock
+/rust/crypto/fuzz/corpus/
+/rust/crypto/fuzz/artifacts/
+/rust/crypto/fuzz/coverage/
