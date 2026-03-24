@@ -17,7 +17,7 @@
 
 #include "includes.h"
 
-#ifndef WITH_OPENSSL
+#if !defined(WITH_OPENSSL) && !defined(WITH_RUST_CRYPTO)
 
 #include <sys/types.h>
 #include <string.h>
@@ -80,4 +80,10 @@ aesctr_encrypt_bytes(aesctr_ctx *x,const u8 *m,u8 *c,u32 bytes)
 		n = (n + 1) % AES_BLOCK_SIZE;
 	}
 }
-#endif /* !WITH_OPENSSL */
+
+void
+aesctr_free(aesctr_ctx *x)
+{
+	explicit_bzero(x, sizeof(*x));
+}
+#endif /* !WITH_OPENSSL && !WITH_RUST_CRYPTO */

@@ -2,15 +2,36 @@
 
 This tree has an experimental `--with-rust-crypto` build mode.
 
-Today this is Phase 0 plumbing plus backend selection:
+Today this is beyond Phase 0 plumbing: several real crypto seams are routed
+through Rust, but the tree is not yet at full Rust parity for the
+`--without-openssl` algorithm set.
 
-- it adds a Rust static library to the build,
-- it enables `WITH_RUST_CRYPTO`,
-- it reports `Rust crypto backend` in `ssh -V`,
-- it does not yet reroute the transport crypto implementations to Rust.
+## Current Support Matrix
 
-In other words, this is currently a build and integration mode, not full
-Rust crypto execution parity.
+Rust-backed today:
+
+- backend selection and Rust static library linkage
+- backend label in `ssh -V`
+- SHA-256, SHA-384, and SHA-512 digests
+- Ed25519 key generation, signing, and verification
+- Curve25519/X25519 key exchange helpers
+- the X25519 portion of the hybrid
+  `sntrup761x25519-sha512` and `mlkem768x25519-sha256` KEX paths
+- AES-CTR transport cipher (`aes128-ctr`, `aes192-ctr`, `aes256-ctr`)
+
+Still on the existing C path today:
+
+- MD5 and SHA1 digest support
+- SNTRUP761 KEM code
+- MLKEM768 KEM code
+- ChaCha20-Poly1305 transport cipher
+- RSA
+- ECDSA / ECDH
+- classic finite-field DH / DH-GEX
+- PKCS#11 and security-key code paths
+
+In other words, this is now a mixed Rust/C crypto build, not yet a
+full-Rust transport/backend replacement.
 
 ## Prerequisites
 
@@ -166,7 +187,7 @@ The intended next steps are described in `RUST_BACKEND_PLAN.md`.
 Until those phases land, do not assume that `--with-rust-crypto` means:
 
 - full replacement for libcrypto,
-- Rust-backed Ed25519,
-- Rust-backed Curve25519,
-- Rust-backed digest implementations,
-- RSA/ECDSA/PKCS#11 parity.
+- Rust-backed RSA or ECDSA,
+- Rust-backed PKCS#11 or security-key support,
+- full Rust transport cipher coverage,
+- feature parity with the default OpenSSL build.
