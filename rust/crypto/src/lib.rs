@@ -1,4 +1,5 @@
 mod cipher;
+mod dh;
 mod digest;
 mod ecdsa;
 mod kex;
@@ -12,6 +13,7 @@ use cipher::{
     aesctr_crypt, aesctr_free, aesctr_get_iv, aesctr_init, aesctr_set_iv,
     chachapoly_crypt, chachapoly_free, chachapoly_get_length, chachapoly_new,
 };
+use dh::{dh_export_public, dh_free, dh_generate_key, dh_group_new, dh_public_len, dh_shared_secret};
 use digest::DigestState;
 use ecdsa::{
     ecdsa_copy_public, ecdsa_equal_public, ecdsa_export_private, ecdsa_export_public,
@@ -27,7 +29,7 @@ use rsa::{
     rsa_from_private, rsa_from_public, rsa_generate, rsa_sign_prehashed, rsa_verify_prehashed,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 8;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 9;
 static BACKEND_LABEL: &[u8] = b"Rust crypto backend\0";
 
 #[unsafe(no_mangle)]
@@ -38,6 +40,46 @@ pub extern "C" fn ossh_rust_crypto_abi_version() -> u32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_crypto_backend_label() -> *const c_char {
     BACKEND_LABEL.as_ptr().cast()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_dh_group_new(group_id: c_int) -> *mut c_void {
+    dh_group_new(group_id)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_dh_generate_key(group: *mut c_void, need_bits: usize) -> c_int {
+    dh_generate_key(group, need_bits)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_dh_public_len(group: *const c_void) -> usize {
+    dh_public_len(group)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_dh_export_public(
+    group: *const c_void,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    dh_export_public(group, out, out_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_dh_shared_secret(
+    group: *const c_void,
+    peer_public: *const u8,
+    peer_public_len: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    dh_shared_secret(group, peer_public, peer_public_len, out, out_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_dh_free(group: *mut c_void) {
+    dh_free(group)
 }
 
 #[unsafe(no_mangle)]
