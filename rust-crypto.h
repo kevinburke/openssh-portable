@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 4U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 5U
 
 uint32_t ossh_rust_crypto_abi_version(void);
 const char *ossh_rust_crypto_backend_label(void);
@@ -43,6 +43,13 @@ int ossh_rust_aesctr_get_iv(const void *ctx, uint8_t *iv, size_t iv_len);
 int ossh_rust_aesctr_crypt(void *ctx, const uint8_t *src, uint8_t *dst,
     size_t len);
 void ossh_rust_aesctr_free(void *ctx);
+void *ossh_rust_chachapoly_new(const uint8_t *key, size_t key_len);
+int ossh_rust_chachapoly_crypt(void *ctx, uint32_t seqnr, uint8_t *dest,
+    size_t dest_len, const uint8_t *src, size_t src_len, uint32_t len,
+    uint32_t aadlen, uint32_t authlen, int do_encrypt);
+int ossh_rust_chachapoly_get_length(void *ctx, uint32_t *plenp,
+    uint32_t seqnr, const uint8_t *cp, size_t len);
+void ossh_rust_chachapoly_free(void *ctx);
 
 #ifdef __cplusplus
 }

@@ -3,9 +3,10 @@ use core::slice;
 use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
 use aes::{Aes128, Aes192, Aes256};
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
+use poly1305::Poly1305;
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 4;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 5;
 const SSH_DIGEST_SHA256: c_int = 2;
 const SSH_DIGEST_SHA384: c_int = 3;
 const SSH_DIGEST_SHA512: c_int = 4;
@@ -22,6 +23,12 @@ const ED25519_SECRET_KEY_LENGTH: usize = 64;
 const ED25519_SIGNATURE_LENGTH: usize = 64;
 const CURVE25519_KEY_LENGTH: usize = 32;
 const AES_BLOCK_SIZE: usize = 16;
+const CHACHA_KEY_LENGTH: usize = 32;
+const CHACHA_BLOCK_SIZE: usize = 64;
+const CHACHA_NONCE_LENGTH: usize = 8;
+const CHACHAPOLY_KEY_LENGTH: usize = 64;
+const POLY1305_KEY_LENGTH: usize = 32;
+const POLY1305_TAG_LENGTH: usize = 16;
 
 const K256: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
@@ -99,6 +106,17 @@ enum AesCipher {
 struct AesCtrState {
     cipher: AesCipher,
     ctr: [u8; AES_BLOCK_SIZE],
+}
+
+struct ChachaPolyState {
+    main_key: [u8; CHACHA_KEY_LENGTH],
+    header_key: [u8; CHACHA_KEY_LENGTH],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChachaPolyError {
+    Invalid,
+    Mac,
 }
 
 impl Sha256State {
@@ -346,6 +364,123 @@ impl AesCtrState {
     }
 }
 
+impl ChachaPolyState {
+    fn new(key: &[u8]) -> Option<Self> {
+        if key.len() != CHACHAPOLY_KEY_LENGTH {
+            return None;
+        }
+        let mut main_key = [0u8; CHACHA_KEY_LENGTH];
+        let mut header_key = [0u8; CHACHA_KEY_LENGTH];
+        main_key.copy_from_slice(&key[..CHACHA_KEY_LENGTH]);
+        header_key.copy_from_slice(&key[CHACHA_KEY_LENGTH..]);
+        Some(Self {
+            main_key,
+            header_key,
+        })
+    }
+
+    fn crypt(
+        &self,
+        seqnr: u32,
+        dest: *mut u8,
+        dest_len: usize,
+        src: *const u8,
+        src_len: usize,
+        len: u32,
+        aadlen: u32,
+        authlen: u32,
+        do_encrypt: bool,
+    ) -> Result<(), ChachaPolyError> {
+        let aadlen = aadlen as usize;
+        let len = len as usize;
+        let authlen = authlen as usize;
+        let nonce = (seqnr as u64).to_be_bytes();
+        let data_len = aadlen
+            .checked_add(len)
+            .ok_or(ChachaPolyError::Invalid)?;
+        let need_src = data_len
+            .checked_add(if do_encrypt { 0 } else { authlen })
+            .ok_or(ChachaPolyError::Invalid)?;
+        let need_dest = data_len
+            .checked_add(authlen)
+            .ok_or(ChachaPolyError::Invalid)?;
+        let mut poly_key = [0u8; POLY1305_KEY_LENGTH];
+
+        if authlen != POLY1305_TAG_LENGTH
+            || dest_len < need_dest
+            || src_len < need_src
+            || (need_dest != 0 && dest.is_null())
+            || (need_src != 0 && src.is_null())
+        {
+            return Err(ChachaPolyError::Invalid);
+        }
+
+        chacha20_xor(
+            &self.main_key,
+            &nonce,
+            0,
+            poly_key.as_ptr(),
+            poly_key.as_mut_ptr(),
+            poly_key.len(),
+        )
+        .map_err(|_| ChachaPolyError::Invalid)?;
+
+        if !do_encrypt {
+            let expected_tag = poly1305_auth(
+                unsafe { slice::from_raw_parts(src, data_len) },
+                &poly_key,
+            );
+            let tag = unsafe { slice::from_raw_parts(src.add(data_len), authlen) };
+            if !constant_time_eq(&expected_tag, tag) {
+                return Err(ChachaPolyError::Mac);
+            }
+        }
+
+        if aadlen != 0 {
+            chacha20_xor(&self.header_key, &nonce, 0, src, dest, aadlen)
+                .map_err(|_| ChachaPolyError::Invalid)?;
+        }
+        if len != 0 {
+            chacha20_xor(
+                &self.main_key,
+                &nonce,
+                1,
+                unsafe { src.add(aadlen) },
+                unsafe { dest.add(aadlen) },
+                len,
+            )
+            .map_err(|_| ChachaPolyError::Invalid)?;
+        }
+
+        if do_encrypt {
+            let tag = poly1305_auth(
+                unsafe { slice::from_raw_parts(dest, data_len) },
+                &poly_key,
+            );
+            unsafe {
+                core::ptr::copy_nonoverlapping(tag.as_ptr(), dest.add(data_len), authlen);
+            }
+        }
+        Ok(())
+    }
+
+    fn get_length(&self, seqnr: u32, cp: *const u8, len: usize) -> Result<u32, ChachaPolyError> {
+        if len < 4 || cp.is_null() {
+            return Err(ChachaPolyError::Invalid);
+        }
+        let mut buf = [0u8; 4];
+        let nonce = (seqnr as u64).to_be_bytes();
+        chacha20_xor(&self.header_key, &nonce, 0, cp, buf.as_mut_ptr(), buf.len())
+            .map_err(|_| ChachaPolyError::Invalid)?;
+        Ok(u32::from_be_bytes(buf))
+    }
+
+    fn scrub(&mut self) {
+        self.main_key = [0; CHACHA_KEY_LENGTH];
+        self.header_key = [0; CHACHA_KEY_LENGTH];
+    }
+}
+
 fn aesctr_inc(ctr: &mut [u8; AES_BLOCK_SIZE]) {
     for byte in ctr.iter_mut().rev() {
         *byte = byte.wrapping_add(1);
@@ -353,6 +488,126 @@ fn aesctr_inc(ctr: &mut [u8; AES_BLOCK_SIZE]) {
             break;
         }
     }
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (&lhs, &rhs) in a.iter().zip(b.iter()) {
+        diff |= lhs ^ rhs;
+    }
+    diff == 0
+}
+
+fn chacha20_xor(
+    key: &[u8; CHACHA_KEY_LENGTH],
+    nonce: &[u8; CHACHA_NONCE_LENGTH],
+    mut counter: u64,
+    src: *const u8,
+    dst: *mut u8,
+    len: usize,
+) -> Result<(), ()> {
+    if len == 0 {
+        return Ok(());
+    }
+    if src.is_null() || dst.is_null() {
+        return Err(());
+    }
+
+    let mut offset = 0usize;
+    while offset < len {
+        let keystream = chacha20_block(key, nonce, counter);
+        let take = core::cmp::min(CHACHA_BLOCK_SIZE, len - offset);
+        for i in 0..take {
+            unsafe {
+                *dst.add(offset + i) = *src.add(offset + i) ^ keystream[i];
+            }
+        }
+        counter = counter.wrapping_add(1);
+        offset += take;
+    }
+    Ok(())
+}
+
+fn chacha20_block(
+    key: &[u8; CHACHA_KEY_LENGTH],
+    nonce: &[u8; CHACHA_NONCE_LENGTH],
+    counter: u64,
+) -> [u8; CHACHA_BLOCK_SIZE] {
+    let constants = *b"expand 32-byte k";
+    let mut state = [0u32; 16];
+    let mut working = [0u32; 16];
+    let mut out = [0u8; CHACHA_BLOCK_SIZE];
+
+    state[0] = u32::from_le_bytes(constants[0..4].try_into().unwrap());
+    state[1] = u32::from_le_bytes(constants[4..8].try_into().unwrap());
+    state[2] = u32::from_le_bytes(constants[8..12].try_into().unwrap());
+    state[3] = u32::from_le_bytes(constants[12..16].try_into().unwrap());
+    for i in 0..8 {
+        let start = i * 4;
+        state[4 + i] = u32::from_le_bytes(key[start..start + 4].try_into().unwrap());
+    }
+    state[12] = counter as u32;
+    state[13] = (counter >> 32) as u32;
+    state[14] = u32::from_le_bytes(nonce[0..4].try_into().unwrap());
+    state[15] = u32::from_le_bytes(nonce[4..8].try_into().unwrap());
+
+    working.copy_from_slice(&state);
+    for _ in 0..10 {
+        quarterround_state(&mut working, 0, 4, 8, 12);
+        quarterround_state(&mut working, 1, 5, 9, 13);
+        quarterround_state(&mut working, 2, 6, 10, 14);
+        quarterround_state(&mut working, 3, 7, 11, 15);
+        quarterround_state(&mut working, 0, 5, 10, 15);
+        quarterround_state(&mut working, 1, 6, 11, 12);
+        quarterround_state(&mut working, 2, 7, 8, 13);
+        quarterround_state(&mut working, 3, 4, 9, 14);
+    }
+
+    for i in 0..16 {
+        working[i] = working[i].wrapping_add(state[i]);
+        out[i * 4..i * 4 + 4].copy_from_slice(&working[i].to_le_bytes());
+    }
+    out
+}
+
+fn quarterround_state(state: &mut [u32; 16], ai: usize, bi: usize, ci: usize, di: usize) {
+    let mut a = state[ai];
+    let mut b = state[bi];
+    let mut c = state[ci];
+    let mut d = state[di];
+
+    a = a.wrapping_add(b);
+    d ^= a;
+    d = d.rotate_left(16);
+
+    c = c.wrapping_add(d);
+    b ^= c;
+    b = b.rotate_left(12);
+
+    a = a.wrapping_add(b);
+    d ^= a;
+    d = d.rotate_left(8);
+
+    c = c.wrapping_add(d);
+    b ^= c;
+    b = b.rotate_left(7);
+
+    state[ai] = a;
+    state[bi] = b;
+    state[ci] = c;
+    state[di] = d;
+}
+
+fn poly1305_auth(message: &[u8], key: &[u8; POLY1305_KEY_LENGTH]) -> [u8; POLY1305_TAG_LENGTH] {
+    let tag = Poly1305::new_from_slice(key)
+        .unwrap()
+        .compute_unpadded(message);
+    let mut out = [0u8; POLY1305_TAG_LENGTH];
+    out.copy_from_slice(tag.as_slice());
+    out
 }
 
 fn ch(x: u32, y: u32, z: u32) -> u32 {
@@ -797,12 +1052,94 @@ pub extern "C" fn ossh_rust_aesctr_free(ctx: *mut c_void) {
     let _ = unsafe { Box::from_raw(ctx.cast::<AesCtrState>()) };
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_chachapoly_new(
+    key: *const u8,
+    key_len: usize,
+) -> *mut c_void {
+    if key.is_null() {
+        return core::ptr::null_mut();
+    }
+    let key = unsafe { slice::from_raw_parts(key, key_len) };
+    match ChachaPolyState::new(key) {
+        Some(state) => Box::into_raw(Box::new(state)).cast(),
+        None => core::ptr::null_mut(),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_chachapoly_crypt(
+    ctx: *mut c_void,
+    seqnr: u32,
+    dest: *mut u8,
+    dest_len: usize,
+    src: *const u8,
+    src_len: usize,
+    len: u32,
+    aadlen: u32,
+    authlen: u32,
+    do_encrypt: c_int,
+) -> c_int {
+    if ctx.is_null() {
+        return -1;
+    }
+    let ctx = unsafe { &*(ctx.cast::<ChachaPolyState>()) };
+    match ctx.crypt(
+        seqnr,
+        dest,
+        dest_len,
+        src,
+        src_len,
+        len,
+        aadlen,
+        authlen,
+        do_encrypt != 0,
+    ) {
+        Ok(()) => 0,
+        Err(ChachaPolyError::Mac) => 1,
+        Err(ChachaPolyError::Invalid) => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_chachapoly_get_length(
+    ctx: *mut c_void,
+    plenp: *mut u32,
+    seqnr: u32,
+    cp: *const u8,
+    len: usize,
+) -> c_int {
+    if ctx.is_null() || plenp.is_null() {
+        return -1;
+    }
+    let ctx = unsafe { &*(ctx.cast::<ChachaPolyState>()) };
+    match ctx.get_length(seqnr, cp, len) {
+        Ok(plen) => {
+            unsafe {
+                *plenp = plen;
+            }
+            0
+        }
+        Err(_) => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_chachapoly_free(ctx: *mut c_void) {
+    if ctx.is_null() {
+        return;
+    }
+    let mut boxed = unsafe { Box::from_raw(ctx.cast::<ChachaPolyState>()) };
+    boxed.scrub();
+    drop(boxed);
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        x25519, AesCtrState, DigestState, Signature, SigningKey, VerifyingKey,
-        X25519_BASEPOINT_BYTES, SHA256_DIGEST_LENGTH, SHA384_DIGEST_LENGTH,
-        SHA512_DIGEST_LENGTH,
+        x25519, AesCtrState, ChachaPolyError, ChachaPolyState, DigestState,
+        Signature, SigningKey, VerifyingKey, X25519_BASEPOINT_BYTES,
+        SHA256_DIGEST_LENGTH, SHA384_DIGEST_LENGTH, SHA512_DIGEST_LENGTH,
     };
     use ed25519_dalek::Signer;
 
@@ -959,6 +1296,96 @@ mod tests {
         assert_eq!(x25519(bob_secret, X25519_BASEPOINT_BYTES).as_slice(), bob_public.as_slice());
         assert_eq!(x25519(alice_secret, bob_public.as_slice().try_into().unwrap()).as_slice(), shared.as_slice());
         assert_eq!(x25519(bob_secret, alice_public.as_slice().try_into().unwrap()).as_slice(), shared.as_slice());
+    }
+
+    #[test]
+    fn chachapoly_matches_c_reference_vector() {
+        let key: Vec<u8> = (0u8..64).collect();
+        let mut src = vec![0u8; 4 + 16 + 16];
+        let mut enc = vec![0u8; src.len()];
+        let state = ChachaPolyState::new(&key).unwrap();
+
+        src[3] = 0x10;
+        for (i, byte) in src[4..20].iter_mut().enumerate() {
+            *byte = 0xa0 + i as u8;
+        }
+
+        state
+            .crypt(
+                42,
+                enc.as_mut_ptr(),
+                enc.len(),
+                src.as_ptr(),
+                20,
+                16,
+                4,
+                16,
+                true,
+            )
+            .unwrap();
+        assert_eq!(
+            hex(&enc),
+            "08ce98075ef00929de97eb5985c9d4c1a15c0660e269d46b90d8885841e874086a949866"
+        );
+        assert_eq!(state.get_length(42, enc.as_ptr(), 4).unwrap(), 16);
+    }
+
+    #[test]
+    fn chachapoly_roundtrip_and_tag_verification() {
+        let key: Vec<u8> = (0u8..64).rev().collect();
+        let mut src = vec![0u8; 4 + 23 + 16];
+        let mut enc = vec![0u8; src.len()];
+        let mut dec = vec![0u8; src.len()];
+        let state = ChachaPolyState::new(&key).unwrap();
+
+        src[0..4].copy_from_slice(&23u32.to_be_bytes());
+        for (i, byte) in src[4..27].iter_mut().enumerate() {
+            *byte = 0x30 + i as u8;
+        }
+
+        state
+            .crypt(
+                7,
+                enc.as_mut_ptr(),
+                enc.len(),
+                src.as_ptr(),
+                27,
+                23,
+                4,
+                16,
+                true,
+            )
+            .unwrap();
+        state
+            .crypt(
+                7,
+                dec.as_mut_ptr(),
+                dec.len(),
+                enc.as_ptr(),
+                enc.len(),
+                23,
+                4,
+                16,
+                false,
+            )
+            .unwrap();
+        assert_eq!(&dec[..27], &src[..27]);
+
+        enc[10] ^= 0x40;
+        assert_eq!(
+            state.crypt(
+                7,
+                dec.as_mut_ptr(),
+                dec.len(),
+                enc.as_ptr(),
+                enc.len(),
+                23,
+                4,
+                16,
+                false,
+            ),
+            Err(ChachaPolyError::Mac)
+        );
     }
 
     #[test]
