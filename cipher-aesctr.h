@@ -23,13 +23,19 @@
 #define AES_BLOCK_SIZE 16
 
 typedef struct aesctr_ctx {
+#ifdef WITH_RUST_CRYPTO
+	void	*state;
+	u8	ctr[AES_BLOCK_SIZE];
+#else
 	int	rounds;				/* keylen-dependent #rounds */
 	u32	ek[4*(AES_MAXROUNDS + 1)];	/* encrypt key schedule */
 	u8	ctr[AES_BLOCK_SIZE];		/* counter */
+#endif
 } aesctr_ctx;
 
 void aesctr_keysetup(aesctr_ctx *x,const u8 *k,u32 kbits,u32 ivbits);
 void aesctr_ivsetup(aesctr_ctx *x,const u8 *iv);
 void aesctr_encrypt_bytes(aesctr_ctx *x,const u8 *m,u8 *c,u32 bytes);
+void aesctr_free(aesctr_ctx *x);
 
 #endif
