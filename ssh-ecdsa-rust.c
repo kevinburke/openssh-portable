@@ -255,34 +255,25 @@ static int
 ssh_ecdsa_deserialize_public(const char *ktype, struct sshbuf *b,
     struct sshkey *key)
 {
-	const u_char *public_key;
-	size_t public_key_len;
-	char *curve = NULL;
+	size_t consumed = 0;
 	void *rust_key = NULL;
 	int r;
 
 	if ((key->ecdsa_nid = sshkey_ecdsa_nid_from_name(ktype)) == -1)
 		return SSH_ERR_INVALID_ARGUMENT;
-	if ((r = sshbuf_get_cstring(b, &curve, NULL)) != 0)
-		goto out;
-	if (key->ecdsa_nid != sshkey_curve_name_to_nid(curve)) {
-		r = SSH_ERR_EC_CURVE_MISMATCH;
-		goto out;
-	}
-	if ((r = sshbuf_get_string_direct(b, &public_key, &public_key_len)) != 0)
-		goto out;
-	if ((rust_key = ossh_rust_ecdsa_from_public(key->ecdsa_nid,
-	    public_key, public_key_len)) == NULL) {
+	if ((rust_key = ossh_rust_ecdsa_parse_public_blob(key->ecdsa_nid,
+	    sshbuf_ptr(b), sshbuf_len(b), &consumed)) == NULL) {
 		r = SSH_ERR_KEY_INVALID_EC_VALUE;
 		goto out;
 	}
+	if ((r = sshbuf_consume(b, consumed)) != 0)
+		goto out;
 	ossh_rust_ecdsa_free(key->pkey);
 	key->pkey = rust_key;
 	rust_key = NULL;
 	r = 0;
  out:
 	ossh_rust_ecdsa_free(rust_key);
-	free(curve);
 	return r;
 }
 
