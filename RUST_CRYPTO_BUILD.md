@@ -51,10 +51,24 @@ around OpenSSL.
 | `poly1305` | Poly1305 authenticator used by the Rust `chacha20-poly1305@openssh.com` transport path | <https://github.com/RustCrypto/universal-hashes> | <https://crates.io/crates/poly1305> |
 | `ed25519-dalek` | Ed25519 key generation, signing, and verification | <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek> | <https://crates.io/crates/ed25519-dalek> |
 | `x25519-dalek` | X25519 key exchange for `curve25519-sha256*` and the X25519 half of hybrid KEX | <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/x25519-dalek> | <https://crates.io/crates/x25519-dalek> |
-| `p256` | NIST P-256 ECDH support for the planned Rust `ecdh-sha2-nistp256` seam | <https://github.com/RustCrypto/elliptic-curves/tree/master/p256> | <https://crates.io/crates/p256> |
-| `p384` | NIST P-384 ECDH support for the planned Rust `ecdh-sha2-nistp384` seam | <https://github.com/RustCrypto/elliptic-curves/tree/master/p384> | <https://crates.io/crates/p384> |
-| `p521` | NIST P-521 ECDH support for the planned Rust `ecdh-sha2-nistp521` seam | <https://github.com/RustCrypto/elliptic-curves/tree/master/p521> | <https://crates.io/crates/p521> |
+| `p256` | NIST P-256 ECDH support for the Rust `ecdh-sha2-nistp256` KEX path | <https://github.com/RustCrypto/elliptic-curves/tree/master/p256> | <https://crates.io/crates/p256> |
+| `p384` | NIST P-384 ECDH support for the Rust `ecdh-sha2-nistp384` KEX path | <https://github.com/RustCrypto/elliptic-curves/tree/master/p384> | <https://crates.io/crates/p384> |
+| `p521` | NIST P-521 ECDH support for the Rust `ecdh-sha2-nistp521` KEX path | <https://github.com/RustCrypto/elliptic-curves/tree/master/p521> | <https://crates.io/crates/p521> |
 | `rand_core` | OS randomness for ephemeral key generation in the Rust ECDH path | <https://github.com/rust-random/rand> | <https://crates.io/crates/rand_core> |
+| `arbitrary` | Structured fuzz inputs for the Rust fuzz targets | <https://github.com/rust-fuzz/arbitrary> | <https://crates.io/crates/arbitrary> |
+| `libfuzzer-sys` | libFuzzer integration for the Rust fuzz targets | <https://github.com/rust-fuzz/libfuzzer> | <https://crates.io/crates/libfuzzer-sys> |
+
+## CI coverage
+
+The `rust-crypto` GitHub Actions job exercises the Rust backend directly.
+Today it runs:
+
+- `cargo test --manifest-path rust/crypto/Cargo.toml`
+- `cargo build --manifest-path rust/crypto/fuzz/Cargo.toml`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin ed25519_verify -- -runs=1`
+- the OpenSSH `unit` and `t-exec` targets under `--with-rust-crypto`
+
+That gives both Rust-native coverage and OpenSSH integration coverage in CI.
 
 ## Prerequisites
 
@@ -295,6 +309,36 @@ The important lines to look for are:
 - `client->server cipher: ...`
 - `Authenticated to ... using "publickey".`
 - `Exit status 0`
+
+## Rust fuzzing
+
+The Rust crate now has standalone libFuzzer targets under `rust/crypto/fuzz`.
+
+Build all fuzz targets:
+
+```sh
+cargo build --manifest-path rust/crypto/fuzz/Cargo.toml
+```
+
+Run a short smoke test:
+
+```sh
+cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
+  --bin ed25519_verify -- -runs=1
+```
+
+Run a longer local fuzzing session:
+
+```sh
+cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
+  --bin chachapoly_decrypt -- -runs=100000
+```
+
+Current targets:
+
+- `ed25519_verify`
+- `ecdh_peer`
+- `chachapoly_decrypt`
 
 ## Useful targets
 
