@@ -60,6 +60,12 @@ impl<'a> SshWireReader<'a> {
         Some(u64::from_be_bytes(bytes.try_into().ok()?))
     }
 
+    pub(crate) fn get_u8(&mut self) -> Option<u8> {
+        let byte = *self.input.get(self.offset)?;
+        self.offset += 1;
+        Some(byte)
+    }
+
     pub(crate) fn get_string(&mut self) -> Option<&'a [u8]> {
         let (_, bytes) = self.get_string_with_offset()?;
         Some(bytes)
@@ -74,11 +80,16 @@ impl<'a> SshWireReader<'a> {
     }
 
     pub(crate) fn get_cstring(&mut self) -> Option<&'a [u8]> {
-        let bytes = self.get_string()?;
+        let (_, bytes) = self.get_cstring_with_offset()?;
+        Some(bytes)
+    }
+
+    pub(crate) fn get_cstring_with_offset(&mut self) -> Option<(usize, &'a [u8])> {
+        let (offset, bytes) = self.get_string_with_offset()?;
         match bytes.iter().position(|byte| *byte == 0) {
             Some(pos) if pos + 1 != bytes.len() => None,
-            Some(pos) => Some(&bytes[..pos]),
-            None => Some(bytes),
+            Some(pos) => Some((offset, &bytes[..pos])),
+            None => Some((offset, bytes)),
         }
     }
 

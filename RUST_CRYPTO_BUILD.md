@@ -21,6 +21,10 @@ Rust-backed today:
 - SSH certificate body parsing
 - SSH public-key blob parsing for Ed25519, RSA, and ECDSA
 - OpenSSH `openssh-key-v1` armor and header parsing
+- OpenSSH `openssh-key-v1` decrypted private-section layout parsing for
+  Ed25519, RSA, and ECDSA:
+  - embedded comment extraction
+  - deterministic padding validation
 - RSA and ECDSA private-key loading for:
   - legacy PEM
   - PKCS#8
@@ -45,8 +49,8 @@ Still on the existing C path today:
 - MLKEM768 KEM code
 - classic finite-field DH / DH-GEX
 - PKCS#11 and security-key code paths
-- decrypted private-section deserialization inside OpenSSH `openssh-key-v1`
-  loads
+- final `struct sshkey` deserialization after Rust has validated the
+  decrypted `openssh-key-v1` private section
 
 In other words, this is now a mixed Rust/C crypto build, not yet a
 full-Rust transport/backend replacement.

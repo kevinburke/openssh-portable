@@ -29,6 +29,12 @@ pub(crate) struct OpenSshPrivate2Parse {
     pub(crate) kdf_kind: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct OpenSshPrivate2PlaintextParse {
+    pub(crate) comment_offset: usize,
+    pub(crate) comment_len: usize,
+}
+
 pub(crate) fn openssh_private2_decode_len(input: *const u8, input_len: usize) -> usize {
     let Some(input) = read_slice(input, input_len) else {
         return 0;
@@ -55,6 +61,14 @@ pub(crate) fn openssh_private2_decode_write(
 pub(crate) fn openssh_private2_parse(decoded: *const u8, decoded_len: usize) -> Option<OpenSshPrivate2Parse> {
     let decoded = read_slice(decoded, decoded_len)?;
     parse_private2_header(decoded)
+}
+
+pub(crate) fn openssh_private2_parse_plaintext(
+    decrypted: *const u8,
+    decrypted_len: usize,
+) -> Option<OpenSshPrivate2PlaintextParse> {
+    let decrypted = read_slice(decrypted, decrypted_len)?;
+    parse_private2_plaintext(decrypted)
 }
 
 fn decode_private2_armored(input: &[u8]) -> Option<Vec<u8>> {
@@ -141,10 +155,84 @@ fn parse_private2_header(decoded: &[u8]) -> Option<OpenSshPrivate2Parse> {
     Some(parsed)
 }
 
+fn parse_private2_plaintext(decrypted: &[u8]) -> Option<OpenSshPrivate2PlaintextParse> {
+    let mut reader = SshWireReader::new(decrypted);
+    let key_type = reader.get_cstring()?;
+    let is_cert = is_cert_key_type(key_type);
+
+    if is_cert {
+        reader.get_string()?;
+    }
+
+    match key_type {
+        b"ssh-ed25519" | b"ssh-ed25519-cert-v01@openssh.com" => {
+            reader.get_string()?;
+            let secret = reader.get_string()?;
+            if secret.len() != 64 {
+                return None;
+            }
+        }
+        b"ssh-rsa" | b"ssh-rsa-cert-v01@openssh.com" => {
+            if !is_cert {
+                reader.get_mpint()?;
+                reader.get_mpint()?;
+            }
+            reader.get_mpint()?;
+            reader.get_mpint()?;
+            reader.get_mpint()?;
+            reader.get_mpint()?;
+        }
+        b"ecdsa-sha2-nistp256"
+        | b"ecdsa-sha2-nistp384"
+        | b"ecdsa-sha2-nistp521"
+        | b"ecdsa-sha2-nistp256-cert-v01@openssh.com"
+        | b"ecdsa-sha2-nistp384-cert-v01@openssh.com"
+        | b"ecdsa-sha2-nistp521-cert-v01@openssh.com" => {
+            if !is_cert {
+                let curve = reader.get_cstring()?;
+                if curve_name_for_key_type(key_type)? != curve {
+                    return None;
+                }
+                reader.get_string()?;
+            }
+            reader.get_mpint()?;
+        }
+        _ => return None,
+    }
+
+    let (comment_data_offset, comment) = reader.get_cstring_with_offset()?;
+    let mut pad = 1u8;
+    while reader.consumed() < reader.input_len() {
+        if reader.get_u8()? != pad {
+            return None;
+        }
+        pad = pad.wrapping_add(1);
+    }
+
+    Some(OpenSshPrivate2PlaintextParse {
+        comment_offset: comment_data_offset - 4,
+        comment_len: comment.len(),
+    })
+}
+
+fn is_cert_key_type(key_type: &[u8]) -> bool {
+    key_type.ends_with(b"-cert-v01@openssh.com")
+}
+
+fn curve_name_for_key_type(key_type: &[u8]) -> Option<&'static [u8]> {
+    match key_type {
+        b"ecdsa-sha2-nistp256" | b"ecdsa-sha2-nistp256-cert-v01@openssh.com" => Some(b"nistp256"),
+        b"ecdsa-sha2-nistp384" | b"ecdsa-sha2-nistp384-cert-v01@openssh.com" => Some(b"nistp384"),
+        b"ecdsa-sha2-nistp521" | b"ecdsa-sha2-nistp521-cert-v01@openssh.com" => Some(b"nistp521"),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        openssh_private2_parse, OSSH_RUST_PRIVATE2_KDF_BCRYPT, OSSH_RUST_PRIVATE2_KDF_NONE,
+        openssh_private2_parse, openssh_private2_parse_plaintext, OSSH_RUST_PRIVATE2_KDF_BCRYPT,
+        OSSH_RUST_PRIVATE2_KDF_NONE,
     };
 
     const ED25519_1: &[u8] =
@@ -195,5 +283,74 @@ mod tests {
     #[test]
     fn rejects_missing_markers() {
         assert_eq!(super::openssh_private2_decode_len(b"not a key".as_ptr(), 9), 0);
+    }
+
+    fn decode_unencrypted_payload(key: &[u8]) -> Vec<u8> {
+        let decoded_len = super::openssh_private2_decode_len(key.as_ptr(), key.len());
+        assert!(decoded_len > 0);
+        let mut decoded = vec![0u8; decoded_len];
+        assert_eq!(
+            0,
+            super::openssh_private2_decode_write(
+                key.as_ptr(),
+                key.len(),
+                decoded.as_mut_ptr(),
+                decoded.len(),
+            )
+        );
+        let header = openssh_private2_parse(decoded.as_ptr(), decoded.len()).unwrap();
+        let decrypted = &decoded[header.encrypted_offset..header.encrypted_offset + header.encrypted_len];
+        assert!(decrypted.len() >= 8);
+        assert_eq!(&decrypted[..4], &decrypted[4..8]);
+        decrypted[8..].to_vec()
+    }
+
+    #[test]
+    fn parses_plaintext_ed25519_private_section() {
+        let decrypted = decode_unencrypted_payload(ED25519_1);
+        let parsed = openssh_private2_parse_plaintext(decrypted.as_ptr(), decrypted.len()).unwrap();
+        assert!(parsed.comment_len > 0);
+        assert_eq!(
+            &decrypted[parsed.comment_offset + 4..parsed.comment_offset + 4 + parsed.comment_len],
+            b"ED25519 test key #1"
+        );
+    }
+
+    #[test]
+    fn parses_plaintext_ecdsa_private_section() {
+        let decrypted = ssh_string(b"ecdsa-sha2-nistp256")
+            .into_iter()
+            .chain(ssh_string(b"nistp256"))
+            .chain(ssh_string(&[4, 1, 2, 3]))
+            .chain(ssh_string(&[1]))
+            .chain(ssh_string(b"ecdsa-comment"))
+            .chain([1u8, 2u8])
+            .collect::<Vec<_>>();
+        let parsed = openssh_private2_parse_plaintext(decrypted.as_ptr(), decrypted.len()).unwrap();
+        assert_eq!(parsed.comment_len, b"ecdsa-comment".len());
+    }
+
+    #[test]
+    fn parses_plaintext_rsa_private_section() {
+        let decrypted = ssh_string(b"ssh-rsa")
+            .into_iter()
+            .chain(ssh_string(&[17]))
+            .chain(ssh_string(&[3]))
+            .chain(ssh_string(&[7]))
+            .chain(ssh_string(&[5]))
+            .chain(ssh_string(&[11]))
+            .chain(ssh_string(&[13]))
+            .chain(ssh_string(b"rsa-comment"))
+            .chain([1u8, 2u8, 3u8])
+            .collect::<Vec<_>>();
+        let parsed = openssh_private2_parse_plaintext(decrypted.as_ptr(), decrypted.len()).unwrap();
+        assert_eq!(parsed.comment_len, b"rsa-comment".len());
+    }
+
+    fn ssh_string(bytes: &[u8]) -> Vec<u8> {
+        let mut out = Vec::with_capacity(4 + bytes.len());
+        out.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+        out.extend_from_slice(bytes);
+        out
     }
 }
