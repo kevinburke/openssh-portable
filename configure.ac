@@ -168,16 +168,19 @@ if test "x$rust_crypto" = "xyes" ; then
 	AC_DEFINE_UNQUOTED([WITH_RUST_CRYPTO], [1], [use Rust crypto backend])
 	rust_crypto_build_deps="rust-crypto-build"
 	rust_crypto_link_lib='\$(RUST_CRYPTO_LIB)'
+	rust_crypto_sk_dummy_objs="ed25519-rust.lo"
 else
 	AC_MSG_RESULT([no])
 	rust_crypto_build_deps=""
 	rust_crypto_link_lib=""
+	rust_crypto_sk_dummy_objs=""
 fi
 AC_SUBST([CARGO])
 AC_SUBST([RUSTC])
 AC_SUBST([RUST_CRYPTO_ENABLED], [$rust_crypto])
 AC_SUBST([RUST_CRYPTO_BUILD_DEPS], [$rust_crypto_build_deps])
 AC_SUBST([RUST_CRYPTO_LINK_LIB], [$rust_crypto_link_lib])
+AC_SUBST([RUST_CRYPTO_SK_DUMMY_OBJS], [$rust_crypto_sk_dummy_objs])
 
 use_stack_protector=1
 use_toolchain_hardening=1
