@@ -105,14 +105,14 @@ extern const struct sshkey_impl sshkey_ecdsa_sk_webauthn_impl;
 extern const struct sshkey_impl sshkey_ecdsa_sk_webauthn_cert_impl;
 # endif /* WITH_OPENSSL && ENABLE_SK */
 #endif /* WITH_OPENSSL && OPENSSL_HAS_ECC || WITH_RUST_CRYPTO */
-#ifdef WITH_OPENSSL
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 extern const struct sshkey_impl sshkey_rsa_impl;
 extern const struct sshkey_impl sshkey_rsa_cert_impl;
 extern const struct sshkey_impl sshkey_rsa_sha256_impl;
 extern const struct sshkey_impl sshkey_rsa_sha256_cert_impl;
 extern const struct sshkey_impl sshkey_rsa_sha512_impl;
 extern const struct sshkey_impl sshkey_rsa_sha512_cert_impl;
-#endif /* WITH_OPENSSL */
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 
 const struct sshkey_impl * const keyimpls[] = {
 	&sshkey_ed25519_impl,
@@ -136,14 +136,14 @@ const struct sshkey_impl * const keyimpls[] = {
 	&sshkey_ecdsa_sk_webauthn_cert_impl,
 # endif /* WITH_OPENSSL && ENABLE_SK */
 #endif
-#ifdef WITH_OPENSSL
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	&sshkey_rsa_impl,
 	&sshkey_rsa_cert_impl,
 	&sshkey_rsa_sha256_impl,
 	&sshkey_rsa_sha256_cert_impl,
 	&sshkey_rsa_sha512_impl,
 	&sshkey_rsa_sha512_cert_impl,
-#endif /* WITH_OPENSSL */
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 	NULL
 };
 
@@ -1457,17 +1457,23 @@ sshkey_cert_type(const struct sshkey *k)
 int
 sshkey_check_rsa_length(const struct sshkey *k, int min_size)
 {
-#ifdef WITH_OPENSSL
 	int nbits;
 
-	if (k == NULL || k->pkey == NULL ||
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
+	if (k == NULL ||
 	    (k->type != KEY_RSA && k->type != KEY_RSA_CERT))
 		return 0;
+# ifdef WITH_OPENSSL
+	if (k->pkey == NULL)
+		return 0;
 	nbits = EVP_PKEY_bits(k->pkey);
+# else
+	nbits = sshkey_size(k);
+# endif
 	if (nbits < SSH_RSA_MINIMUM_MODULUS_SIZE ||
 	    (min_size > 0 && nbits < min_size))
 		return SSH_ERR_KEY_LENGTH;
-#endif /* WITH_OPENSSL */
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 	return 0;
 }
 
@@ -3384,6 +3390,7 @@ sshkey_private_to_fileblob(struct sshkey *key, struct sshbuf *blob,
 		break; /* see below */
 #elif defined(WITH_RUST_CRYPTO)
 	case KEY_ECDSA:
+	case KEY_RSA:
 	case KEY_ED25519:
 #else /* WITH_OPENSSL */
 	case KEY_ED25519:
@@ -3410,6 +3417,11 @@ sshkey_private_to_fileblob(struct sshkey *key, struct sshbuf *blob,
 	default:
 		return SSH_ERR_INVALID_ARGUMENT;
 	}
+#elif defined(WITH_RUST_CRYPTO)
+	if (format != SSHKEY_PRIVATE_OPENSSH)
+		return SSH_ERR_INVALID_FORMAT;
+	return sshkey_private_to_blob2(key, blob, passphrase, comment,
+	    openssh_format_cipher, openssh_format_rounds);
 #endif /* WITH_OPENSSL */
 }
 
