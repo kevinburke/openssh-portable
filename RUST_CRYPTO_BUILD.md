@@ -33,6 +33,27 @@ Still on the existing C path today:
 In other words, this is now a mixed Rust/C crypto build, not yet a
 full-Rust transport/backend replacement.
 
+## Rust Dependency Inventory
+
+Rust's standard library does not provide the cryptographic primitives this
+backend needs. `std` gives us the usual systems pieces like memory handling,
+FFI, and OS integration, but not SSH transport or public-key crypto
+implementations. These crates were chosen because they map closely to the
+algorithms OpenSSH already uses in the `--without-openssl` configuration and
+because they are focused, pure-Rust implementations instead of wrappers
+around OpenSSL.
+
+| Crate | Why it is here | Source | Releases |
+| --- | --- | --- | --- |
+| `aes` | AES block primitive used by the Rust AES-CTR transport path | <https://github.com/RustCrypto/block-ciphers> | <https://crates.io/crates/aes> |
+| `poly1305` | Poly1305 authenticator used by the Rust `chacha20-poly1305@openssh.com` transport path | <https://github.com/RustCrypto/universal-hashes> | <https://crates.io/crates/poly1305> |
+| `ed25519-dalek` | Ed25519 key generation, signing, and verification | <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek> | <https://crates.io/crates/ed25519-dalek> |
+| `x25519-dalek` | X25519 key exchange for `curve25519-sha256*` and the X25519 half of hybrid KEX | <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/x25519-dalek> | <https://crates.io/crates/x25519-dalek> |
+| `p256` | NIST P-256 ECDH support for the planned Rust `ecdh-sha2-nistp256` seam | <https://github.com/RustCrypto/elliptic-curves/tree/master/p256> | <https://crates.io/crates/p256> |
+| `p384` | NIST P-384 ECDH support for the planned Rust `ecdh-sha2-nistp384` seam | <https://github.com/RustCrypto/elliptic-curves/tree/master/p384> | <https://crates.io/crates/p384> |
+| `p521` | NIST P-521 ECDH support for the planned Rust `ecdh-sha2-nistp521` seam | <https://github.com/RustCrypto/elliptic-curves/tree/master/p521> | <https://crates.io/crates/p521> |
+| `rand_core` | OS randomness for ephemeral key generation in the Rust ECDH path | <https://github.com/rust-random/rand> | <https://crates.io/crates/rand_core> |
+
 ## Prerequisites
 
 You need:
