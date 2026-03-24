@@ -1,0 +1,39 @@
+[package]
+name = "rust_crypto-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+# Releases: https://crates.io/crates/arbitrary
+arbitrary = { version = "1.4.2", features = ["derive"] }
+# Releases: https://crates.io/crates/libfuzzer-sys
+libfuzzer-sys = "0.4.10"
+rust_crypto = { path = ".." }
+
+[[bin]]
+name = "chachapoly_decrypt"
+path = "fuzz_targets/chachapoly_decrypt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ecdh_peer"
+path = "fuzz_targets/ecdh_peer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ed25519_verify"
+path = "fuzz_targets/ed25519_verify.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]
