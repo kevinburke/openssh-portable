@@ -31,6 +31,7 @@ use kex::{
 };
 use openssh_key::{
     openssh_private2_decode_len, openssh_private2_decode_write, openssh_private2_parse,
+    openssh_private2_parse_plaintext,
 };
 use private_pem::PrivatePemError;
 use rsa::{
@@ -110,6 +111,12 @@ pub struct RustPrivate2HeaderParse {
     bcrypt_salt_len: usize,
     bcrypt_rounds: u32,
     kdf_kind: u32,
+}
+
+#[repr(C)]
+pub struct RustPrivate2PlaintextParse {
+    comment_offset: usize,
+    comment_len: usize,
 }
 
 #[unsafe(no_mangle)]
@@ -195,6 +202,27 @@ pub extern "C" fn ossh_rust_private2_parse_header(
             bcrypt_salt_len: parsed.bcrypt_salt_len,
             bcrypt_rounds: parsed.bcrypt_rounds,
             kdf_kind: parsed.kdf_kind,
+        };
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_private2_parse_plaintext(
+    decrypted: *const u8,
+    decrypted_len: usize,
+    out: *mut RustPrivate2PlaintextParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(parsed) = openssh_private2_parse_plaintext(decrypted, decrypted_len) else {
+        return -1;
+    };
+    unsafe {
+        *out = RustPrivate2PlaintextParse {
+            comment_offset: parsed.comment_offset,
+            comment_len: parsed.comment_len,
         };
     }
     0

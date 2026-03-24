@@ -3404,6 +3404,12 @@ sshkey_parse_private2(struct sshbuf *blob, int type, const char *passphrase,
 	int r = SSH_ERR_INTERNAL_ERROR;
 	struct sshbuf *decoded = NULL, *decrypted = NULL;
 	struct sshkey *k = NULL, *pubkey = NULL;
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_private2_plaintext_parse parsed;
+	const u_char *decrypted_start = NULL;
+	size_t decrypted_len = 0;
+	int parsed_ok = 0;
+#endif
 
 	if (keyp != NULL)
 		*keyp = NULL;
@@ -3422,13 +3428,42 @@ sshkey_parse_private2(struct sshbuf *blob, int type, const char *passphrase,
 		goto out;
 	}
 
-	/* Load the private key and comment */
-	if ((r = sshkey_private_deserialize(decrypted, &k)) != 0 ||
-	    (r = sshbuf_get_cstring(decrypted, &comment, NULL)) != 0)
-		goto out;
+#ifdef WITH_RUST_CRYPTO
+	decrypted_start = sshbuf_ptr(decrypted);
+	decrypted_len = sshbuf_len(decrypted);
+	if (ossh_rust_private2_parse_plaintext(decrypted_start, decrypted_len,
+	    &parsed) == 0) {
+		parsed_ok = 1;
+		if ((comment = calloc(1, parsed.comment_len + 1)) == NULL) {
+			r = SSH_ERR_ALLOC_FAIL;
+			goto out;
+		}
+		memcpy(comment, decrypted_start + parsed.comment_offset + 4,
+		    parsed.comment_len);
+	}
+#endif
 
-	/* Check deterministic padding after private section */
-	if ((r = private2_check_padding(decrypted)) != 0)
+	/* Load the private key and comment */
+	if ((r = sshkey_private_deserialize(decrypted, &k)) != 0)
+		goto out;
+#ifdef WITH_RUST_CRYPTO
+	if (parsed_ok) {
+		if (sshbuf_len(decrypted) != decrypted_len - parsed.comment_offset) {
+			r = SSH_ERR_INVALID_FORMAT;
+			goto out;
+		}
+		if ((r = sshbuf_consume(decrypted,
+		    4 + parsed.comment_len)) != 0)
+			goto out;
+		if (sshbuf_len(decrypted) != 0) {
+			if ((r = sshbuf_consume(decrypted,
+			    sshbuf_len(decrypted))) != 0)
+				goto out;
+		}
+	} else
+#endif
+	if ((r = sshbuf_get_cstring(decrypted, &comment, NULL)) != 0 ||
+	    (r = private2_check_padding(decrypted)) != 0)
 		goto out;
 
 	/* Check that the public key in the envelope matches the private key */
