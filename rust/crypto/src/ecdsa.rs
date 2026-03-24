@@ -1,24 +1,32 @@
 use core::ffi::{c_int, c_void};
 use core::slice;
+use core::str;
 
+use p256::elliptic_curve::sec1::ToEncodedPoint;
 use p256::ecdsa::{
     signature::hazmat::{PrehashSigner as P256PrehashSigner, PrehashVerifier as P256PrehashVerifier},
     Signature as P256Signature, SigningKey as P256SigningKey, VerifyingKey as P256VerifyingKey,
 };
+use p256::SecretKey as P256SecretKey;
 use p384::ecdsa::{
     Signature as P384Signature, SigningKey as P384SigningKey, VerifyingKey as P384VerifyingKey,
 };
+use p384::SecretKey as P384SecretKey;
 use p521::ecdsa::{
     signature::hazmat::RandomizedPrehashSigner as P521RandomizedPrehashSigner,
     Signature as P521Signature, SigningKey as P521SigningKey, VerifyingKey as P521VerifyingKey,
 };
+use p521::SecretKey as P521SecretKey;
 use rand_core::OsRng;
+use pkcs8::{DecodePrivateKey, EncodePrivateKey, LineEnding};
 
 use crate::util::{read_slice, slice_ptr, write_prefix, SshWireReader};
 
 const NID_X9_62_PRIME256V1: c_int = 415;
 const NID_SECP384R1: c_int = 715;
 const NID_SECP521R1: c_int = 716;
+const SSHKEY_PRIVATE_PEM: c_int = 1;
+const SSHKEY_PRIVATE_PKCS8: c_int = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EcdsaCurve {
@@ -197,6 +205,84 @@ impl EcdsaCurve {
             }
         };
         Ok(valid)
+    }
+
+    fn parse_private_pem(self, pem: &str, format: c_int) -> Result<RustEcdsaKey, ()> {
+        match (self, format) {
+            (Self::NistP256, SSHKEY_PRIVATE_PEM) => Ok(Self::from_secret_p256(
+                P256SecretKey::from_sec1_pem(pem).map_err(|_| ())?,
+            )),
+            (Self::NistP384, SSHKEY_PRIVATE_PEM) => Ok(Self::from_secret_p384(
+                P384SecretKey::from_sec1_pem(pem).map_err(|_| ())?,
+            )),
+            (Self::NistP521, SSHKEY_PRIVATE_PEM) => Ok(Self::from_secret_p521(
+                P521SecretKey::from_sec1_pem(pem).map_err(|_| ())?,
+            )),
+            (Self::NistP256, SSHKEY_PRIVATE_PKCS8) => Ok(Self::from_secret_p256(
+                P256SecretKey::from_pkcs8_pem(pem).map_err(|_| ())?,
+            )),
+            (Self::NistP384, SSHKEY_PRIVATE_PKCS8) => Ok(Self::from_secret_p384(
+                P384SecretKey::from_pkcs8_pem(pem).map_err(|_| ())?,
+            )),
+            (Self::NistP521, SSHKEY_PRIVATE_PKCS8) => Ok(Self::from_secret_p521(
+                P521SecretKey::from_pkcs8_pem(pem).map_err(|_| ())?,
+            )),
+            _ => Err(()),
+        }
+    }
+
+    fn serialize_private_pem(self, private_key: &[u8], format: c_int) -> Result<Vec<u8>, ()> {
+        match (self, format) {
+            (Self::NistP256, SSHKEY_PRIVATE_PEM) => {
+                let secret = P256SecretKey::from_slice(private_key).map_err(|_| ())?;
+                Ok(secret.to_sec1_pem(LineEnding::LF).map_err(|_| ())?.to_string().into_bytes())
+            }
+            (Self::NistP384, SSHKEY_PRIVATE_PEM) => {
+                let secret = P384SecretKey::from_slice(private_key).map_err(|_| ())?;
+                Ok(secret.to_sec1_pem(LineEnding::LF).map_err(|_| ())?.to_string().into_bytes())
+            }
+            (Self::NistP521, SSHKEY_PRIVATE_PEM) => {
+                let secret = P521SecretKey::from_slice(private_key).map_err(|_| ())?;
+                Ok(secret.to_sec1_pem(LineEnding::LF).map_err(|_| ())?.to_string().into_bytes())
+            }
+            (Self::NistP256, SSHKEY_PRIVATE_PKCS8) => {
+                let secret = P256SecretKey::from_slice(private_key).map_err(|_| ())?;
+                Ok(secret.to_pkcs8_pem(LineEnding::LF).map_err(|_| ())?.to_string().into_bytes())
+            }
+            (Self::NistP384, SSHKEY_PRIVATE_PKCS8) => {
+                let secret = P384SecretKey::from_slice(private_key).map_err(|_| ())?;
+                Ok(secret.to_pkcs8_pem(LineEnding::LF).map_err(|_| ())?.to_string().into_bytes())
+            }
+            (Self::NistP521, SSHKEY_PRIVATE_PKCS8) => {
+                let secret = P521SecretKey::from_slice(private_key).map_err(|_| ())?;
+                Ok(secret.to_pkcs8_pem(LineEnding::LF).map_err(|_| ())?.to_string().into_bytes())
+            }
+            _ => Err(()),
+        }
+    }
+
+    fn from_secret_p256(secret: P256SecretKey) -> RustEcdsaKey {
+        RustEcdsaKey {
+            curve: Self::NistP256,
+            public_key: secret.public_key().to_encoded_point(false).as_bytes().to_vec(),
+            private_key: Some(secret.to_bytes().as_slice().to_vec()),
+        }
+    }
+
+    fn from_secret_p384(secret: P384SecretKey) -> RustEcdsaKey {
+        RustEcdsaKey {
+            curve: Self::NistP384,
+            public_key: secret.public_key().to_encoded_point(false).as_bytes().to_vec(),
+            private_key: Some(secret.to_bytes().as_slice().to_vec()),
+        }
+    }
+
+    fn from_secret_p521(secret: P521SecretKey) -> RustEcdsaKey {
+        RustEcdsaKey {
+            curve: Self::NistP521,
+            public_key: secret.public_key().to_encoded_point(false).as_bytes().to_vec(),
+            private_key: Some(secret.to_bytes().as_slice().to_vec()),
+        }
     }
 }
 
@@ -388,6 +474,68 @@ pub(crate) fn ecdsa_sign_prehashed(
         return -1;
     }
     0
+}
+
+pub(crate) fn ecdsa_curve_nid(key: *const c_void) -> c_int {
+    match key_ref(key) {
+        Some(key) => match key.curve {
+            EcdsaCurve::NistP256 => NID_X9_62_PRIME256V1,
+            EcdsaCurve::NistP384 => NID_SECP384R1,
+            EcdsaCurve::NistP521 => NID_SECP521R1,
+        },
+        None => 0,
+    }
+}
+
+pub(crate) fn ecdsa_parse_private_pem(blob: *const u8, blob_len: usize) -> *mut c_void {
+    let pem = match read_slice(blob, blob_len).and_then(|blob| str::from_utf8(blob).ok()) {
+        Some(pem) => pem,
+        None => return core::ptr::null_mut(),
+    };
+    let format = if pem.starts_with("-----BEGIN EC PRIVATE KEY-----") {
+        SSHKEY_PRIVATE_PEM
+    } else if pem.starts_with("-----BEGIN PRIVATE KEY-----") {
+        SSHKEY_PRIVATE_PKCS8
+    } else {
+        return core::ptr::null_mut();
+    };
+    for curve in [EcdsaCurve::NistP256, EcdsaCurve::NistP384, EcdsaCurve::NistP521] {
+        if let Ok(key) = curve.parse_private_pem(pem, format) {
+            return Box::into_raw(Box::new(key)).cast();
+        }
+    }
+    core::ptr::null_mut()
+}
+
+pub(crate) fn ecdsa_private_pem_len(key: *const c_void, format: c_int) -> usize {
+    let Some(key) = key_ref(key) else {
+        return 0;
+    };
+    let Some(private_key) = key.private_key.as_deref() else {
+        return 0;
+    };
+    key.curve
+        .serialize_private_pem(private_key, format)
+        .map_or(0, |pem| pem.len())
+}
+
+pub(crate) fn ecdsa_private_pem_write(
+    key: *const c_void,
+    format: c_int,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    let Some(key) = key_ref(key) else {
+        return -1;
+    };
+    let Some(private_key) = key.private_key.as_deref() else {
+        return -1;
+    };
+    let pem = match key.curve.serialize_private_pem(private_key, format) {
+        Ok(pem) => pem,
+        Err(()) => return -1,
+    };
+    write_prefix(out, out_len, &pem)
 }
 
 pub(crate) fn ecdsa_verify_prehashed(
