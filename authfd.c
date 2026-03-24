@@ -598,13 +598,17 @@ ssh_add_identity_constrained(int sock, struct sshkey *key,
 		return SSH_ERR_ALLOC_FAIL;
 
 	switch (key->type) {
-#ifdef WITH_OPENSSL
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	case KEY_RSA:
 	case KEY_RSA_CERT:
-	case KEY_ECDSA:
-	case KEY_ECDSA_CERT:
+#endif
+#ifdef WITH_OPENSSL
 	case KEY_ECDSA_SK:
 	case KEY_ECDSA_SK_CERT:
+#endif
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
+	case KEY_ECDSA:
+	case KEY_ECDSA_CERT:
 #endif
 	case KEY_ED25519:
 	case KEY_ED25519_CERT:
