@@ -102,6 +102,25 @@ static int
 ssh_ed25519_deserialize_public(const char *ktype, struct sshbuf *b,
     struct sshkey *key)
 {
+#ifdef WITH_RUST_CRYPTO
+	u_char public_key[ED25519_PK_SZ];
+	u_char *pk = NULL;
+	size_t consumed = 0;
+	int r;
+
+	if (ossh_rust_ed25519_parse_public_blob(sshbuf_ptr(b), sshbuf_len(b),
+	    public_key, sizeof(public_key), &consumed) != 0)
+		return SSH_ERR_INVALID_FORMAT;
+	if ((pk = malloc(ED25519_PK_SZ)) == NULL)
+		return SSH_ERR_ALLOC_FAIL;
+	memcpy(pk, public_key, ED25519_PK_SZ);
+	if ((r = sshbuf_consume(b, consumed)) != 0) {
+		freezero(pk, ED25519_PK_SZ);
+		return r;
+	}
+	key->ed25519_pk = pk;
+	return 0;
+#else
 	u_char *pk = NULL;
 	size_t len = 0;
 	int r;
@@ -114,6 +133,7 @@ ssh_ed25519_deserialize_public(const char *ktype, struct sshbuf *b,
 	}
 	key->ed25519_pk = pk;
 	return 0;
+#endif
 }
 
 static int

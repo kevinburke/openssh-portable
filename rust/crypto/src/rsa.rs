@@ -1,5 +1,4 @@
 use core::ffi::{c_int, c_void};
-use core::slice;
 
 use rand_core::OsRng;
 use rsa::traits::{PrivateKeyParts, PublicKeyParts};
@@ -7,7 +6,7 @@ use rsa::{BigUint, Pkcs1v15Sign, RsaPrivateKey, RsaPublicKey};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 
-use crate::util::write_prefix;
+use crate::util::{read_slice, slice_ptr, write_prefix, SshWireReader};
 
 const SSH_DIGEST_SHA1: c_int = 1;
 const SSH_DIGEST_SHA256: c_int = 2;
@@ -168,14 +167,6 @@ impl RustRsaKey {
     }
 }
 
-fn read_slice<'a>(ptr: *const u8, len: usize) -> Option<&'a [u8]> {
-    if len == 0 || ptr.is_null() {
-        None
-    } else {
-        Some(unsafe { slice::from_raw_parts(ptr, len) })
-    }
-}
-
 fn key_ref<'a>(key: *const c_void) -> Option<&'a RustRsaKey> {
     if key.is_null() {
         None
@@ -192,6 +183,36 @@ pub(crate) fn rsa_generate(bits: usize) -> *mut c_void {
         Ok(key) => Box::into_raw(Box::new(key)).cast(),
         Err(_) => core::ptr::null_mut(),
     }
+}
+
+pub(crate) fn rsa_parse_public_blob(
+    blob: *const u8,
+    blob_len: usize,
+    consumed_len: *mut usize,
+) -> *mut c_void {
+    let blob = match read_slice(blob, blob_len) {
+        Some(blob) => blob,
+        None => return core::ptr::null_mut(),
+    };
+    let mut reader = SshWireReader::new(blob);
+    let exponent = match reader.get_mpint() {
+        Some(exponent) => exponent,
+        None => return core::ptr::null_mut(),
+    };
+    let modulus = match reader.get_mpint() {
+        Some(modulus) => modulus,
+        None => return core::ptr::null_mut(),
+    };
+    let key = rsa_from_public(
+        slice_ptr(modulus),
+        modulus.len(),
+        slice_ptr(exponent),
+        exponent.len(),
+    );
+    if !key.is_null() && !consumed_len.is_null() {
+        unsafe { *consumed_len = reader.consumed() };
+    }
+    key
 }
 
 pub(crate) fn rsa_from_public(
@@ -397,9 +418,29 @@ mod tests {
         OSSH_RUST_RSA_COMPONENT_D, OSSH_RUST_RSA_COMPONENT_E, OSSH_RUST_RSA_COMPONENT_IQMP,
         OSSH_RUST_RSA_COMPONENT_N, OSSH_RUST_RSA_COMPONENT_P, OSSH_RUST_RSA_COMPONENT_Q,
         SSH_DIGEST_SHA1, SSH_DIGEST_SHA256, SSH_DIGEST_SHA512, rsa_bits, rsa_component_len,
-        rsa_export_component, rsa_free, rsa_from_private, rsa_generate, rsa_sign_prehashed,
-        rsa_verify_prehashed,
+        rsa_export_component, rsa_free, rsa_from_private, rsa_generate, rsa_parse_public_blob,
+        rsa_sign_prehashed, rsa_verify_prehashed,
     };
+
+    fn put_string(buf: &mut Vec<u8>, bytes: &[u8]) {
+        buf.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+        buf.extend_from_slice(bytes);
+    }
+
+    fn put_mpint(buf: &mut Vec<u8>, bytes: &[u8]) {
+        let mut start = 0usize;
+        while start < bytes.len() && bytes[start] == 0 {
+            start += 1;
+        }
+        let trimmed = &bytes[start..];
+        if !trimmed.is_empty() && (trimmed[0] & 0x80) != 0 {
+            buf.extend_from_slice(&((trimmed.len() + 1) as u32).to_be_bytes());
+            buf.push(0);
+            buf.extend_from_slice(trimmed);
+        } else {
+            put_string(buf, trimmed);
+        }
+    }
 
     fn export_component(key: *const c_void, component: c_int) -> Vec<u8> {
         let len = rsa_component_len(key, component);
@@ -494,5 +535,25 @@ mod tests {
     #[test]
     fn rsa_sha512_roundtrip() {
         rsa_roundtrip_for_hash(SSH_DIGEST_SHA512);
+    }
+
+    #[test]
+    fn public_blob_parse_consumes_public_section() {
+        let key = rsa_generate(1024);
+        let n = export_component(key, OSSH_RUST_RSA_COMPONENT_N);
+        let e = export_component(key, OSSH_RUST_RSA_COMPONENT_E);
+        let mut blob = Vec::new();
+        let mut consumed = 0usize;
+        let trailer = b"certificate-trailer";
+
+        put_mpint(&mut blob, &e);
+        put_mpint(&mut blob, &n);
+        put_string(&mut blob, trailer);
+
+        let parsed = rsa_parse_public_blob(blob.as_ptr(), blob.len(), &mut consumed);
+        assert!(!parsed.is_null());
+        assert_eq!(consumed, blob.len() - (4 + trailer.len()));
+        rsa_free(parsed);
+        rsa_free(key);
     }
 }
