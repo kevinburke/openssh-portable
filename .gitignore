@@ -49,3 +49,5 @@ ChangeLog
 /rust/crypto-target/
 /rust/crypto/target/
 /rust/crypto/Cargo.lock
+/rust/crypto/fuzz/target/
+/rust/crypto/fuzz/Cargo.lock
