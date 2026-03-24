@@ -1880,35 +1880,49 @@ cert_parse(struct sshbuf *b, struct sshkey *key, struct sshbuf *certbuf)
 {
 	struct sshbuf *principals = NULL, *crit = NULL;
 	struct sshbuf *exts = NULL, *ca = NULL;
-	u_char *sig = NULL;
-	size_t signed_len = 0, slen = 0, kidlen = 0;
+	struct ossh_rust_cert_body_parse parsed;
+	const u_char *blob, *sig;
+	size_t blob_len, signed_len = 0, slen = 0;
 	int ret = SSH_ERR_INTERNAL_ERROR;
 
 	/* Copy the entire key blob for verification and later serialisation */
 	if ((ret = sshbuf_putb(key->cert->certblob, certbuf)) != 0)
 		return ret;
 
-	/* Parse body of certificate up to signature */
-	if ((ret = sshbuf_get_u64(b, &key->cert->serial)) != 0 ||
-	    (ret = sshbuf_get_u32(b, &key->cert->type)) != 0 ||
-	    (ret = sshbuf_get_cstring(b, &key->cert->key_id, &kidlen)) != 0 ||
-	    (ret = sshbuf_froms(b, &principals)) != 0 ||
-	    (ret = sshbuf_get_u64(b, &key->cert->valid_after)) != 0 ||
-	    (ret = sshbuf_get_u64(b, &key->cert->valid_before)) != 0 ||
-	    (ret = sshbuf_froms(b, &crit)) != 0 ||
-	    (ret = sshbuf_froms(b, &exts)) != 0 ||
-	    (ret = sshbuf_get_string_direct(b, NULL, NULL)) != 0 ||
-	    (ret = sshbuf_froms(b, &ca)) != 0) {
-		/* XXX debug print error for ret */
+	blob = sshbuf_ptr(b);
+	blob_len = sshbuf_len(b);
+
+	if (ossh_rust_cert_parse_body(blob, blob_len, &parsed) != 0) {
 		ret = SSH_ERR_INVALID_FORMAT;
 		goto out;
 	}
+	if ((ret = sshbuf_consume(b, parsed.total_consumed)) != 0)
+		goto out;
 
-	/* Signature is left in the buffer so we can calculate this length */
-	signed_len = sshbuf_len(key->cert->certblob) - sshbuf_len(b);
+	if ((key->cert->key_id = malloc(parsed.key_id_len + 1)) == NULL) {
+		ret = SSH_ERR_ALLOC_FAIL;
+		goto out;
+	}
+	memcpy(key->cert->key_id, blob + parsed.key_id_offset, parsed.key_id_len);
+	key->cert->key_id[parsed.key_id_len] = '\0';
+	key->cert->serial = parsed.serial;
+	key->cert->type = parsed.cert_type;
+	key->cert->valid_after = parsed.valid_after;
+	key->cert->valid_before = parsed.valid_before;
+	signed_len = sshbuf_len(key->cert->certblob) - blob_len +
+	    parsed.signed_consumed;
+	sig = blob + parsed.signature_offset;
+	slen = parsed.signature_len;
 
-	if ((ret = sshbuf_get_string(b, &sig, &slen)) != 0) {
-		ret = SSH_ERR_INVALID_FORMAT;
+	if ((principals = sshbuf_from(blob + parsed.principals_offset,
+	    parsed.principals_len)) == NULL ||
+	    (crit = sshbuf_from(blob + parsed.critical_offset,
+	    parsed.critical_len)) == NULL ||
+	    (exts = sshbuf_from(blob + parsed.extensions_offset,
+	    parsed.extensions_len)) == NULL ||
+	    (ca = sshbuf_from(blob + parsed.ca_key_offset,
+	    parsed.ca_key_len)) == NULL) {
+		ret = SSH_ERR_ALLOC_FAIL;
 		goto out;
 	}
 
@@ -1997,7 +2011,6 @@ cert_parse(struct sshbuf *b, struct sshkey *key, struct sshbuf *certbuf)
 	sshbuf_free(crit);
 	sshbuf_free(exts);
 	sshbuf_free(principals);
-	free(sig);
 	return ret;
 }
 
@@ -3296,12 +3309,60 @@ sshkey_parse_private2_pubkey(struct sshbuf *blob, int type,
 	return r;
 }
 
-#ifdef WITH_OPENSSL
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 /* convert SSH v2 key to PEM or PKCS#8 format */
 static int
 sshkey_private_to_blob_pem_pkcs8(struct sshkey *key, struct sshbuf *buf,
     int format, const char *_passphrase, const char *comment)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct sshbuf *blob;
+	size_t pem_len;
+	int r;
+	(void)comment;
+
+	if (_passphrase != NULL && *_passphrase != '\0')
+		return SSH_ERR_INVALID_FORMAT;
+	if ((blob = sshbuf_new()) == NULL)
+		return SSH_ERR_ALLOC_FAIL;
+	switch (key->type) {
+	case KEY_ECDSA:
+		pem_len = ossh_rust_ecdsa_private_pem_len(key->pkey, format);
+		if (pem_len == 0) {
+			r = SSH_ERR_INVALID_FORMAT;
+			goto out;
+		}
+		if ((r = sshbuf_reserve(blob, pem_len, NULL)) != 0)
+			goto out;
+		if (ossh_rust_ecdsa_private_pem_write(key->pkey, format,
+		    sshbuf_mutable_ptr(blob), pem_len) != 0) {
+			r = SSH_ERR_INVALID_FORMAT;
+			goto out;
+		}
+		break;
+	case KEY_RSA:
+		pem_len = ossh_rust_rsa_private_pem_len(key->pkey, format);
+		if (pem_len == 0) {
+			r = SSH_ERR_INVALID_FORMAT;
+			goto out;
+		}
+		if ((r = sshbuf_reserve(blob, pem_len, NULL)) != 0)
+			goto out;
+		if (ossh_rust_rsa_private_pem_write(key->pkey, format,
+		    sshbuf_mutable_ptr(blob), pem_len) != 0) {
+			r = SSH_ERR_INVALID_FORMAT;
+			goto out;
+		}
+		break;
+	default:
+		r = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+	r = sshbuf_putb(buf, blob);
+ out:
+	sshbuf_free(blob);
+	return r;
+#else
 	int was_shielded = sshkey_is_shielded(key);
 	int success, r;
 	int blen, len = strlen(_passphrase);
@@ -3393,8 +3454,9 @@ sshkey_private_to_blob_pem_pkcs8(struct sshkey *key, struct sshbuf *buf,
 	sshbuf_free(blob);
 	BIO_free(bio);
 	return r;
+#endif /* WITH_RUST_CRYPTO */
 }
-#endif /* WITH_OPENSSL */
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 
 /* Serialise "key" to buffer "blob" */
 int
@@ -3407,11 +3469,11 @@ sshkey_private_to_fileblob(struct sshkey *key, struct sshbuf *blob,
 	case KEY_ECDSA:
 	case KEY_RSA:
 	case KEY_ED25519:
-		break; /* see below */
 #elif defined(WITH_RUST_CRYPTO)
 	case KEY_ECDSA:
 	case KEY_RSA:
 	case KEY_ED25519:
+		break; /* see below */
 #else /* WITH_OPENSSL */
 	case KEY_ED25519:
 #endif /* WITH_OPENSSL */
@@ -3439,10 +3501,17 @@ sshkey_private_to_fileblob(struct sshkey *key, struct sshbuf *blob,
 		return SSH_ERR_INVALID_ARGUMENT;
 	}
 #elif defined(WITH_RUST_CRYPTO)
-	if (format != SSHKEY_PRIVATE_OPENSSH)
-		return SSH_ERR_INVALID_FORMAT;
-	return sshkey_private_to_blob2(key, blob, passphrase, comment,
-	    openssh_format_cipher, openssh_format_rounds);
+	switch (format) {
+	case SSHKEY_PRIVATE_OPENSSH:
+		return sshkey_private_to_blob2(key, blob, passphrase, comment,
+		    openssh_format_cipher, openssh_format_rounds);
+	case SSHKEY_PRIVATE_PEM:
+	case SSHKEY_PRIVATE_PKCS8:
+		return sshkey_private_to_blob_pem_pkcs8(key, blob,
+		    format, passphrase, comment);
+	default:
+		return SSH_ERR_INVALID_ARGUMENT;
+	}
 #endif /* WITH_OPENSSL */
 }
 
@@ -3675,6 +3744,59 @@ sshkey_parse_private_pem_fileblob(struct sshbuf *blob, int type,
 }
 #endif /* WITH_OPENSSL */
 
+#ifdef WITH_RUST_CRYPTO
+static int
+sshkey_parse_private_pem_fileblob_rust(struct sshbuf *blob, int type,
+    const char *passphrase, struct sshkey **keyp)
+{
+	struct sshkey *prv = NULL;
+	int r = SSH_ERR_INVALID_FORMAT;
+
+	if (keyp != NULL)
+		*keyp = NULL;
+	if (passphrase != NULL && *passphrase != '\0')
+		return SSH_ERR_INVALID_FORMAT;
+	if (type == KEY_UNSPEC || type == KEY_ECDSA) {
+		if ((prv = sshkey_new(KEY_UNSPEC)) == NULL)
+			return SSH_ERR_ALLOC_FAIL;
+		prv->pkey = ossh_rust_ecdsa_parse_private_pem(sshbuf_ptr(blob),
+		    sshbuf_len(blob));
+		if (prv->pkey != NULL) {
+			prv->type = KEY_ECDSA;
+			prv->ecdsa_nid = ossh_rust_ecdsa_curve_nid(prv->pkey);
+			if (sshkey_curve_nid_to_name(prv->ecdsa_nid) == NULL)
+				goto out;
+			if (keyp != NULL) {
+				*keyp = prv;
+				prv = NULL;
+			}
+			return 0;
+		}
+		sshkey_free(prv);
+		prv = NULL;
+	}
+	if (type == KEY_UNSPEC || type == KEY_RSA) {
+		if ((prv = sshkey_new(KEY_UNSPEC)) == NULL)
+			return SSH_ERR_ALLOC_FAIL;
+		prv->pkey = ossh_rust_rsa_parse_private_pem(sshbuf_ptr(blob),
+		    sshbuf_len(blob));
+		if (prv->pkey != NULL) {
+			prv->type = KEY_RSA;
+			if ((r = sshkey_check_rsa_length(prv, 0)) != 0)
+				goto out;
+			if (keyp != NULL) {
+				*keyp = prv;
+				prv = NULL;
+			}
+			return 0;
+		}
+	}
+ out:
+	sshkey_free(prv);
+	return r;
+}
+#endif /* WITH_RUST_CRYPTO */
+
 int
 sshkey_parse_private_fileblob_type(struct sshbuf *blob, int type,
     const char *passphrase, struct sshkey **keyp, char **commentp)
@@ -3692,6 +3814,9 @@ sshkey_parse_private_fileblob_type(struct sshbuf *blob, int type,
 		return r;
 #ifdef WITH_OPENSSL
 	return sshkey_parse_private_pem_fileblob(blob, type,
+	    passphrase, keyp);
+#elif defined(WITH_RUST_CRYPTO)
+	return sshkey_parse_private_pem_fileblob_rust(blob, type,
 	    passphrase, keyp);
 #else
 	return SSH_ERR_INVALID_FORMAT;
