@@ -9,7 +9,7 @@ use p521::{PublicKey as P521PublicKey, SecretKey as P521SecretKey};
 use rand_core::OsRng;
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 
-use crate::util::{read_array, write_prefix};
+use crate::util::{read_array, read_slice, write_prefix, SshWireReader};
 
 pub(crate) const OSSH_RUST_ECDH_NISTP256: c_int = 1;
 pub(crate) const OSSH_RUST_ECDH_NISTP384: c_int = 2;
@@ -215,6 +215,33 @@ pub(crate) fn ed25519_verify(
     0
 }
 
+pub(crate) fn ed25519_parse_public_blob(
+    blob: *const u8,
+    blob_len: usize,
+    public_key: *mut u8,
+    public_key_len: usize,
+    consumed_len: *mut usize,
+) -> c_int {
+    let blob = match read_slice(blob, blob_len) {
+        Some(blob) => blob,
+        None => return -1,
+    };
+    let mut reader = SshWireReader::new(blob);
+    let parsed_public = match reader.get_string() {
+        Some(public_key_blob) if public_key_blob.len() == ED25519_PUBLIC_KEY_LENGTH => {
+            public_key_blob
+        }
+        _ => return -1,
+    };
+    if write_prefix(public_key, public_key_len, parsed_public) != 0 {
+        return -1;
+    }
+    if !consumed_len.is_null() {
+        unsafe { *consumed_len = reader.consumed() };
+    }
+    0
+}
+
 pub(crate) fn curve25519_public_from_secret(
     public_key: *mut u8,
     public_key_len: usize,
@@ -255,8 +282,8 @@ mod tests {
     use rand_core::RngCore;
 
     use super::{
-        ed25519_public_from_seed, ed25519_sign, ed25519_verify, curve25519_public_from_secret,
-        curve25519_shared_secret, x25519, EcdhCurve, OSSH_RUST_ECDH_NISTP256,
+        ed25519_parse_public_blob, ed25519_public_from_seed, ed25519_sign, ed25519_verify,
+        curve25519_public_from_secret, curve25519_shared_secret, x25519, EcdhCurve, OSSH_RUST_ECDH_NISTP256,
         OSSH_RUST_ECDH_NISTP384, OSSH_RUST_ECDH_NISTP521, Signature, SigningKey, VerifyingKey,
         X25519_BASEPOINT_BYTES,
     };
@@ -377,6 +404,44 @@ mod tests {
             ed25519_verify(sig.as_ptr(), sig.len(), msg.as_ptr(), msg.len(), public.as_ptr(), public.len()),
             0
         );
+    }
+
+    fn put_string(buf: &mut Vec<u8>, bytes: &[u8]) {
+        buf.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+        buf.extend_from_slice(bytes);
+    }
+
+    #[test]
+    fn ed25519_public_blob_parse_consumes_public_section() {
+        let mut seed = [0u8; 32];
+        let mut public = [0u8; 32];
+        let mut parsed = [0u8; 32];
+        let mut consumed = 0usize;
+        for (i, byte) in seed.iter_mut().enumerate() {
+            *byte = i as u8;
+        }
+
+        assert_eq!(
+            ed25519_public_from_seed(seed.as_ptr(), seed.len(), public.as_mut_ptr(), public.len()),
+            0
+        );
+
+        let mut blob = Vec::new();
+        put_string(&mut blob, &public);
+        put_string(&mut blob, b"certificate-trailer");
+
+        assert_eq!(
+            ed25519_parse_public_blob(
+                blob.as_ptr(),
+                blob.len(),
+                parsed.as_mut_ptr(),
+                parsed.len(),
+                &mut consumed,
+            ),
+            0
+        );
+        assert_eq!(parsed, public);
+        assert_eq!(consumed, 4 + public.len());
     }
 
     #[test]

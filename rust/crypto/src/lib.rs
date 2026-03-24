@@ -17,19 +17,20 @@ use dh::{dh_export_public, dh_free, dh_generate_key, dh_group_new, dh_public_len
 use digest::DigestState;
 use ecdsa::{
     ecdsa_copy_public, ecdsa_equal_public, ecdsa_export_private, ecdsa_export_public,
-    ecdsa_free, ecdsa_from_private, ecdsa_from_public, ecdsa_generate, ecdsa_sign_prehashed,
-    ecdsa_verify_prehashed,
+    ecdsa_free, ecdsa_from_private, ecdsa_from_public, ecdsa_generate,
+    ecdsa_parse_public_blob, ecdsa_sign_prehashed, ecdsa_verify_prehashed,
 };
 use kex::{
-    curve25519_public_from_secret, curve25519_shared_secret, ed25519_public_from_seed,
-    ed25519_sign, ed25519_verify, EcdhCurve,
+    curve25519_public_from_secret, curve25519_shared_secret, ed25519_parse_public_blob,
+    ed25519_public_from_seed, ed25519_sign, ed25519_verify, EcdhCurve,
 };
 use rsa::{
     rsa_bits, rsa_component_len, rsa_copy_public, rsa_equal_public, rsa_export_component, rsa_free,
-    rsa_from_private, rsa_from_public, rsa_generate, rsa_sign_prehashed, rsa_verify_prehashed,
+    rsa_from_private, rsa_from_public, rsa_generate, rsa_parse_public_blob, rsa_sign_prehashed,
+    rsa_verify_prehashed,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 9;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 10;
 static BACKEND_LABEL: &[u8] = b"Rust crypto backend\0";
 
 #[unsafe(no_mangle)]
@@ -180,6 +181,17 @@ pub extern "C" fn ossh_rust_ed25519_verify(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ed25519_parse_public_blob(
+    blob: *const u8,
+    blob_len: usize,
+    public_key: *mut u8,
+    public_key_len: usize,
+    consumed_len: *mut usize,
+) -> c_int {
+    ed25519_parse_public_blob(blob, blob_len, public_key, public_key_len, consumed_len)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_curve25519_public_from_secret(
     public_key: *mut u8,
     public_key_len: usize,
@@ -275,6 +287,16 @@ pub extern "C" fn ossh_rust_ecdsa_generate(curve_nid: c_int) -> *mut c_void {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_parse_public_blob(
+    curve_nid: c_int,
+    blob: *const u8,
+    blob_len: usize,
+    consumed_len: *mut usize,
+) -> *mut c_void {
+    ecdsa_parse_public_blob(curve_nid, blob, blob_len, consumed_len)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_ecdsa_from_public(
     curve_nid: c_int,
     public_key: *const u8,
@@ -352,6 +374,15 @@ pub extern "C" fn ossh_rust_ecdsa_free(key: *mut c_void) {
 #[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_rsa_generate(bits: usize) -> *mut c_void {
     rsa_generate(bits)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_parse_public_blob(
+    blob: *const u8,
+    blob_len: usize,
+    consumed_len: *mut usize,
+) -> *mut c_void {
+    rsa_parse_public_blob(blob, blob_len, consumed_len)
 }
 
 #[unsafe(no_mangle)]

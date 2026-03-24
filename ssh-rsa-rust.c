@@ -173,17 +173,16 @@ static int
 ssh_rsa_deserialize_public(const char *ktype, struct sshbuf *b,
     struct sshkey *key)
 {
-	const u_char *rsa_n, *rsa_e;
-	size_t rsa_n_len, rsa_e_len;
+	size_t consumed = 0;
 	void *rust_key;
-	int r;
 
-	if ((r = sshbuf_get_bignum2_bytes_direct(b, &rsa_e, &rsa_e_len)) != 0 ||
-	    (r = sshbuf_get_bignum2_bytes_direct(b, &rsa_n, &rsa_n_len)) != 0)
+	if ((rust_key = ossh_rust_rsa_parse_public_blob(sshbuf_ptr(b),
+	    sshbuf_len(b), &consumed)) == NULL)
 		return SSH_ERR_INVALID_FORMAT;
-	if ((rust_key = ossh_rust_rsa_from_public(rsa_n, rsa_n_len,
-	    rsa_e, rsa_e_len)) == NULL)
-		return SSH_ERR_INVALID_FORMAT;
+	if (sshbuf_consume(b, consumed) != 0) {
+		ossh_rust_rsa_free(rust_key);
+		return SSH_ERR_INTERNAL_ERROR;
+	}
 	ossh_rust_rsa_free(key->pkey);
 	key->pkey = rust_key;
 	return sshkey_check_rsa_length(key, 0);
