@@ -14,7 +14,7 @@ use p521::ecdsa::{
 };
 use rand_core::OsRng;
 
-use crate::util::write_prefix;
+use crate::util::{read_slice, slice_ptr, write_prefix, SshWireReader};
 
 const NID_X9_62_PRIME256V1: c_int = 415;
 const NID_SECP384R1: c_int = 715;
@@ -47,6 +47,14 @@ impl EcdsaCurve {
 
     fn public_len(self) -> usize {
         1 + 2 * self.scalar_len()
+    }
+
+    fn ssh_name(self) -> &'static [u8] {
+        match self {
+            Self::NistP256 => b"nistp256",
+            Self::NistP384 => b"nistp384",
+            Self::NistP521 => b"nistp521",
+        }
     }
 
     fn signature_len(self) -> usize {
@@ -207,16 +215,6 @@ impl RustEcdsaKey {
     }
 }
 
-fn read_slice<'a>(ptr: *const u8, len: usize) -> Option<&'a [u8]> {
-    if len == 0 {
-        Some(&[])
-    } else if ptr.is_null() {
-        None
-    } else {
-        Some(unsafe { slice::from_raw_parts(ptr, len) })
-    }
-}
-
 fn key_ref<'a>(key: *const c_void) -> Option<&'a RustEcdsaKey> {
     if key.is_null() {
         None
@@ -231,6 +229,39 @@ pub(crate) fn ecdsa_generate(curve_nid: c_int) -> *mut c_void {
         None => return core::ptr::null_mut(),
     };
     Box::into_raw(Box::new(curve.generate())).cast()
+}
+
+pub(crate) fn ecdsa_parse_public_blob(
+    curve_nid: c_int,
+    blob: *const u8,
+    blob_len: usize,
+    consumed_len: *mut usize,
+) -> *mut c_void {
+    let curve = match EcdsaCurve::from_nid(curve_nid) {
+        Some(curve) => curve,
+        None => return core::ptr::null_mut(),
+    };
+    let blob = match read_slice(blob, blob_len) {
+        Some(blob) => blob,
+        None => return core::ptr::null_mut(),
+    };
+    let mut reader = SshWireReader::new(blob);
+    let curve_name = match reader.get_cstring() {
+        Some(curve_name) => curve_name,
+        None => return core::ptr::null_mut(),
+    };
+    if curve_name != curve.ssh_name() {
+        return core::ptr::null_mut();
+    }
+    let public_key = match reader.get_string() {
+        Some(public_key) => public_key,
+        None => return core::ptr::null_mut(),
+    };
+    let key = ecdsa_from_public(curve_nid, slice_ptr(public_key), public_key.len());
+    if !key.is_null() && !consumed_len.is_null() {
+        unsafe { *consumed_len = reader.consumed() };
+    }
+    key
 }
 
 pub(crate) fn ecdsa_from_public(
@@ -401,8 +432,14 @@ mod tests {
     use super::{
         EcdsaCurve, NID_SECP384R1, NID_SECP521R1, NID_X9_62_PRIME256V1, ecdsa_copy_public,
         ecdsa_equal_public, ecdsa_export_private, ecdsa_export_public, ecdsa_free,
-        ecdsa_from_private, ecdsa_generate, ecdsa_sign_prehashed, ecdsa_verify_prehashed,
+        ecdsa_from_private, ecdsa_generate, ecdsa_parse_public_blob, ecdsa_sign_prehashed,
+        ecdsa_verify_prehashed,
     };
+
+    fn put_string(buf: &mut Vec<u8>, bytes: &[u8]) {
+        buf.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+        buf.extend_from_slice(bytes);
+    }
 
     fn roundtrip_for_curve(curve_nid: c_int, digest_len: usize) {
         let curve = EcdsaCurve::from_nid(curve_nid).unwrap();
@@ -520,6 +557,32 @@ mod tests {
             private_key.len(),
         );
         assert!(rebuilt.is_null());
+        ecdsa_free(key);
+    }
+
+    #[test]
+    fn public_blob_parse_consumes_public_section() {
+        let curve = EcdsaCurve::NistP256;
+        let key = ecdsa_generate(NID_X9_62_PRIME256V1);
+        let mut public_key = vec![0u8; curve.public_len()];
+        let mut consumed = 0usize;
+        assert!(!key.is_null());
+        assert_eq!(0, ecdsa_export_public(key, public_key.as_mut_ptr(), public_key.len()));
+
+        let mut blob = Vec::new();
+        put_string(&mut blob, curve.ssh_name());
+        put_string(&mut blob, &public_key);
+        put_string(&mut blob, b"certificate-trailer");
+
+        let parsed = ecdsa_parse_public_blob(
+            NID_X9_62_PRIME256V1,
+            blob.as_ptr(),
+            blob.len(),
+            &mut consumed,
+        );
+        assert!(!parsed.is_null());
+        assert_eq!(consumed, 4 + curve.ssh_name().len() + 4 + public_key.len());
+        ecdsa_free(parsed);
         ecdsa_free(key);
     }
 }

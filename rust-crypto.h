@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 9U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 10U
 #define OSSH_RUST_DH_GROUP14 14
 #define OSSH_RUST_ECDH_NISTP256 1
 #define OSSH_RUST_ECDH_NISTP384 2
@@ -57,6 +57,8 @@ int ossh_rust_ed25519_sign(uint8_t *sig, size_t sig_len, const uint8_t *msg,
 int ossh_rust_ed25519_verify(const uint8_t *sig, size_t sig_len,
     const uint8_t *msg, size_t msg_len, const uint8_t *public_key,
     size_t public_key_len);
+int ossh_rust_ed25519_parse_public_blob(const uint8_t *blob, size_t blob_len,
+    uint8_t *public_key, size_t public_key_len, size_t *consumed_len);
 int ossh_rust_curve25519_public_from_secret(uint8_t *public_key,
     size_t public_key_len, const uint8_t *secret_key, size_t secret_key_len);
 int ossh_rust_curve25519_shared_secret(uint8_t *shared_secret,
@@ -68,6 +70,8 @@ int ossh_rust_ecdh_shared_secret(int curve_id, const uint8_t *secret_key,
     size_t secret_key_len, const uint8_t *public_key, size_t public_key_len,
     uint8_t *shared_secret, size_t shared_secret_len);
 void *ossh_rust_ecdsa_generate(int curve_nid);
+void *ossh_rust_ecdsa_parse_public_blob(int curve_nid, const uint8_t *blob,
+    size_t blob_len, size_t *consumed_len);
 void *ossh_rust_ecdsa_from_public(int curve_nid, const uint8_t *public_key,
     size_t public_key_len);
 void *ossh_rust_ecdsa_from_private(int curve_nid, const uint8_t *public_key,
@@ -84,6 +88,8 @@ int ossh_rust_ecdsa_verify_prehashed(const void *key, const uint8_t *digest,
     size_t digest_len, const uint8_t *signature, size_t signature_len);
 void ossh_rust_ecdsa_free(void *key);
 void *ossh_rust_rsa_generate(size_t bits);
+void *ossh_rust_rsa_parse_public_blob(const uint8_t *blob, size_t blob_len,
+    size_t *consumed_len);
 void *ossh_rust_rsa_from_public(const uint8_t *modulus, size_t modulus_len,
     const uint8_t *exponent, size_t exponent_len);
 void *ossh_rust_rsa_from_private(const uint8_t *modulus, size_t modulus_len,
