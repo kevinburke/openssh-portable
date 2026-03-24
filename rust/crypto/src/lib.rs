@@ -1,5 +1,6 @@
 mod cipher;
 mod digest;
+mod ecdsa;
 mod kex;
 mod util;
 
@@ -11,12 +12,17 @@ use cipher::{
     chachapoly_crypt, chachapoly_free, chachapoly_get_length, chachapoly_new,
 };
 use digest::DigestState;
+use ecdsa::{
+    ecdsa_copy_public, ecdsa_equal_public, ecdsa_export_private, ecdsa_export_public,
+    ecdsa_free, ecdsa_from_private, ecdsa_from_public, ecdsa_generate, ecdsa_sign_prehashed,
+    ecdsa_verify_prehashed,
+};
 use kex::{
     curve25519_public_from_secret, curve25519_shared_secret, ed25519_public_from_seed,
     ed25519_sign, ed25519_verify, EcdhCurve,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 6;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 7;
 static BACKEND_LABEL: &[u8] = b"Rust crypto backend\0";
 
 #[unsafe(no_mangle)]
@@ -214,6 +220,86 @@ pub extern "C" fn ossh_rust_ecdh_shared_secret(
         return -1;
     }
     0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_generate(curve_nid: c_int) -> *mut c_void {
+    ecdsa_generate(curve_nid)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_from_public(
+    curve_nid: c_int,
+    public_key: *const u8,
+    public_key_len: usize,
+) -> *mut c_void {
+    ecdsa_from_public(curve_nid, public_key, public_key_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_from_private(
+    curve_nid: c_int,
+    public_key: *const u8,
+    public_key_len: usize,
+    private_key: *const u8,
+    private_key_len: usize,
+) -> *mut c_void {
+    ecdsa_from_private(curve_nid, public_key, public_key_len, private_key, private_key_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_copy_public(key: *const c_void) -> *mut c_void {
+    ecdsa_copy_public(key)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_equal_public(a: *const c_void, b: *const c_void) -> c_int {
+    ecdsa_equal_public(a, b)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_export_public(
+    key: *const c_void,
+    public_key: *mut u8,
+    public_key_len: usize,
+) -> c_int {
+    ecdsa_export_public(key, public_key, public_key_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_export_private(
+    key: *const c_void,
+    private_key: *mut u8,
+    private_key_len: usize,
+) -> c_int {
+    ecdsa_export_private(key, private_key, private_key_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_sign_prehashed(
+    key: *const c_void,
+    digest: *const u8,
+    digest_len: usize,
+    signature: *mut u8,
+    signature_len: usize,
+) -> c_int {
+    ecdsa_sign_prehashed(key, digest, digest_len, signature, signature_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_verify_prehashed(
+    key: *const c_void,
+    digest: *const u8,
+    digest_len: usize,
+    signature: *const u8,
+    signature_len: usize,
+) -> c_int {
+    ecdsa_verify_prehashed(key, digest, digest_len, signature, signature_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_free(key: *mut c_void) {
+    ecdsa_free(key)
 }
 
 #[unsafe(no_mangle)]

@@ -180,7 +180,7 @@ type_bits_valid(int type, const char *name, uint32_t *bitsp)
 	if (type == KEY_UNSPEC)
 		fatal("unknown key type %s", key_type_name);
 	if (*bitsp == 0) {
-#ifdef WITH_OPENSSL
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 		int nid;
 
 		switch(type) {
@@ -191,9 +191,11 @@ type_bits_valid(int type, const char *name, uint32_t *bitsp)
 			if (*bitsp == 0)
 				*bitsp = DEFAULT_BITS_ECDSA;
 			break;
+#ifdef WITH_OPENSSL
 		case KEY_RSA:
 			*bitsp = DEFAULT_BITS;
 			break;
+#endif
 		}
 #endif
 	}
@@ -207,11 +209,19 @@ type_bits_valid(int type, const char *name, uint32_t *bitsp)
 			fatal("Invalid RSA key length: maximum is %d bits",
 			    OPENSSL_RSA_MAX_MODULUS_BITS);
 		break;
-	case KEY_ECDSA:
-		if (sshkey_ecdsa_bits_to_nid(*bitsp) == -1)
-			fatal("Invalid ECDSA key length: valid lengths are "
-			    "256, 384 or 521 bits");
+	default:
+		break;
 	}
+#endif
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
+	if (type == KEY_ECDSA && sshkey_ecdsa_bits_to_nid(*bitsp) == -1)
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
+		fatal("Invalid ECDSA key length: valid lengths are "
+		    "256, 384 or 521 bits");
+#else
+		fatal("Invalid ECDSA key length: valid lengths are "
+		    "256 or 384 bits");
+#endif
 #endif
 }
 
@@ -253,6 +263,8 @@ ask_filename(struct passwd *pw, const char *prompt)
 		case KEY_ECDSA:
 			name = _PATH_SSH_CLIENT_ID_ECDSA;
 			break;
+#endif
+#ifdef WITH_OPENSSL
 		case KEY_ECDSA_SK_CERT:
 		case KEY_ECDSA_SK:
 			name = _PATH_SSH_CLIENT_ID_ECDSA_SK;

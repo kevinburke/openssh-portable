@@ -14,6 +14,8 @@ Rust-backed today:
 - backend label in `ssh -V`
 - SHA-256, SHA-384, and SHA-512 digests
 - Ed25519 key generation, signing, and verification
+- ECDSA key generation, signing, verification, and host-key parsing
+  (`ecdsa-sha2-nistp256`, `ecdsa-sha2-nistp384`, `ecdsa-sha2-nistp521`)
 - Curve25519/X25519 key exchange helpers
 - NIST ECDH key exchange helpers
   (`ecdh-sha2-nistp256`, `ecdh-sha2-nistp384`, `ecdh-sha2-nistp521`)
@@ -32,7 +34,6 @@ Still on the existing C path today:
 - SNTRUP761 KEM code
 - MLKEM768 KEM code
 - RSA
-- ECDSA
 - classic finite-field DH / DH-GEX
 - PKCS#11 and security-key code paths
 
@@ -55,10 +56,10 @@ around OpenSSL.
 | `poly1305` | Poly1305 authenticator used by the Rust `chacha20-poly1305@openssh.com` transport path | <https://github.com/RustCrypto/universal-hashes> | <https://crates.io/crates/poly1305> |
 | `ed25519-dalek` | Ed25519 key generation, signing, and verification | <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek> | <https://crates.io/crates/ed25519-dalek> |
 | `x25519-dalek` | X25519 key exchange for `curve25519-sha256*` and the X25519 half of hybrid KEX | <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/x25519-dalek> | <https://crates.io/crates/x25519-dalek> |
-| `p256` | NIST P-256 ECDH support for the Rust `ecdh-sha2-nistp256` KEX path | <https://github.com/RustCrypto/elliptic-curves/tree/master/p256> | <https://crates.io/crates/p256> |
-| `p384` | NIST P-384 ECDH support for the Rust `ecdh-sha2-nistp384` KEX path | <https://github.com/RustCrypto/elliptic-curves/tree/master/p384> | <https://crates.io/crates/p384> |
-| `p521` | NIST P-521 ECDH support for the Rust `ecdh-sha2-nistp521` KEX path | <https://github.com/RustCrypto/elliptic-curves/tree/master/p521> | <https://crates.io/crates/p521> |
-| `rand_core` | OS randomness for ephemeral key generation in the Rust ECDH path | <https://github.com/rust-random/rand> | <https://crates.io/crates/rand_core> |
+| `p256` | NIST P-256 ECDH plus ECDSA support for `ecdh-sha2-nistp256` and `ecdsa-sha2-nistp256` | <https://github.com/RustCrypto/elliptic-curves/tree/master/p256> | <https://crates.io/crates/p256> |
+| `p384` | NIST P-384 ECDH plus ECDSA support for `ecdh-sha2-nistp384` and `ecdsa-sha2-nistp384` | <https://github.com/RustCrypto/elliptic-curves/tree/master/p384> | <https://crates.io/crates/p384> |
+| `p521` | NIST P-521 ECDH plus ECDSA support for `ecdh-sha2-nistp521` and `ecdsa-sha2-nistp521` | <https://github.com/RustCrypto/elliptic-curves/tree/master/p521> | <https://crates.io/crates/p521> |
+| `rand_core` | OS randomness for ephemeral ECDH keys and randomized ECDSA signing where the curve implementation requires it | <https://github.com/rust-random/rand> | <https://crates.io/crates/rand_core> |
 | `arbitrary` | Structured fuzz inputs for the Rust fuzz targets | <https://github.com/rust-fuzz/arbitrary> | <https://crates.io/crates/arbitrary> |
 | `libfuzzer-sys` | libFuzzer integration for the Rust fuzz targets | <https://github.com/rust-fuzz/libfuzzer> | <https://crates.io/crates/libfuzzer-sys> |
 
@@ -110,8 +111,8 @@ make rust-crypto-build ssh sshd ssh-keygen
 ```
 
 On this branch, the Rust unit tests include both fixed vectors and
-randomized/property-style checks for digests, Ed25519, X25519, NIST ECDH,
-AES-CTR, and ChaCha20-Poly1305.
+randomized/property-style checks for digests, Ed25519, ECDSA, X25519, NIST
+ECDH, AES-CTR, and ChaCha20-Poly1305.
 
 ## Prerequisites
 
@@ -353,6 +354,46 @@ The important lines to look for are:
 - `Authenticated to ... using "publickey".`
 - `Exit status 0`
 
+To exercise the Rust-backed ECDSA path locally without needing a server that
+offers ECDSA host keys:
+
+```sh
+printf 'ecdsa rust path\n' > /tmp/rust_ecdsa_msg
+
+./ssh-keygen -q -t ecdsa -b 256 -N '' -f /tmp/rust_ecdsa_256
+./ssh-keygen -Y sign -f /tmp/rust_ecdsa_256 -n file /tmp/rust_ecdsa_msg
+./ssh-keygen -Y check-novalidate -n file -s /tmp/rust_ecdsa_msg.sig < /tmp/rust_ecdsa_msg
+
+./ssh-keygen -q -t ecdsa -b 384 -N '' -f /tmp/rust_ecdsa_384
+./ssh-keygen -Y sign -f /tmp/rust_ecdsa_384 -n file /tmp/rust_ecdsa_msg
+./ssh-keygen -Y check-novalidate -n file -s /tmp/rust_ecdsa_msg.sig < /tmp/rust_ecdsa_msg
+
+printf 'ecdsa rust path 521\n' > /tmp/rust_ecdsa_msg_521
+./ssh-keygen -q -t ecdsa -b 521 -N '' -f /tmp/rust_ecdsa_521
+./ssh-keygen -Y sign -f /tmp/rust_ecdsa_521 -n file /tmp/rust_ecdsa_msg_521
+./ssh-keygen -Y check-novalidate -n file -s /tmp/rust_ecdsa_msg_521.sig < /tmp/rust_ecdsa_msg_521
+```
+
+To exercise Rust-backed ECDSA host-key verification against a real server that
+offers `ecdsa-sha2-nistp256`:
+
+```sh
+./ssh -vv \
+  -oBatchMode=yes \
+  -oHostKeyAlgorithms=ecdsa-sha2-nistp256 \
+  -oPubkeyAcceptedAlgorithms=ssh-ed25519 \
+  -i ~/.ssh/id_ed25519 \
+  user@host true
+```
+
+The important lines there are:
+
+- `kex: host key algorithm: ecdsa-sha2-nistp256`
+- `Server host key: ecdsa-sha2-nistp256 ...`
+- `Host '...' is known and matches the ECDSA host key.`
+- `Authenticated to ... using "publickey".`
+- `Exit status 0`
+
 ## Rust fuzzing
 
 The Rust crate now has standalone libFuzzer targets under `rust/crypto/fuzz`.
@@ -430,7 +471,7 @@ The intended next steps are described in `RUST_BACKEND_PLAN.md`.
 Until those phases land, do not assume that `--with-rust-crypto` means:
 
 - full replacement for libcrypto,
-- Rust-backed RSA or ECDSA,
+- Rust-backed RSA,
 - Rust-backed PKCS#11 or security-key support,
 - full Rust transport cipher coverage,
 - feature parity with the default OpenSSL build.
