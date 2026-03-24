@@ -91,7 +91,8 @@ for TARGET in $TARGETS; do
         # nothing to do
         ;;
     rust-crypto)
-        PACKAGES="$PACKAGES cargo rustc"
+        # The workflow installs an explicit current Rust toolchain for this
+        # configuration, so don't pull the distro-packaged rustc/cargo here.
         ;;
     clang-sanitize*)
         PACKAGES="$PACKAGES clang-12"
