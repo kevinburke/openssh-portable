@@ -141,6 +141,9 @@ jobs:
       run: sh -c autoreconf
     - name: configure
       run: sh ./.github/configure.sh ${{ matrix.config }}
+    - name: cargo test
+      if: ${{ matrix.config == 'rust-crypto' }}
+      run: cargo test --manifest-path rust/crypto/Cargo.toml
     - name: save config
       uses: actions/upload-artifact@main
       with:
