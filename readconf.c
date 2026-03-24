@@ -2917,10 +2917,12 @@ fill_default_options(Options * options)
 	}
 	if (options->num_identity_files == 0) {
 		add_identity_file(options, "~/", _PATH_SSH_CLIENT_ID_RSA, 0);
+#if defined(OPENSSL_HAS_ECC) || defined(WITH_RUST_CRYPTO)
+			add_identity_file(options, "~/", _PATH_SSH_CLIENT_ID_ECDSA, 0);
+#endif
 #ifdef OPENSSL_HAS_ECC
-		add_identity_file(options, "~/", _PATH_SSH_CLIENT_ID_ECDSA, 0);
-		add_identity_file(options, "~/",
-		    _PATH_SSH_CLIENT_ID_ECDSA_SK, 0);
+			add_identity_file(options, "~/",
+			    _PATH_SSH_CLIENT_ID_ECDSA_SK, 0);
 #endif
 		add_identity_file(options, "~/",
 		    _PATH_SSH_CLIENT_ID_ED25519, 0);

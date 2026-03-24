@@ -15,10 +15,19 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 6U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 7U
 #define OSSH_RUST_ECDH_NISTP256 1
 #define OSSH_RUST_ECDH_NISTP384 2
 #define OSSH_RUST_ECDH_NISTP521 3
+#ifndef NID_X9_62_prime256v1
+#define NID_X9_62_prime256v1 415
+#endif
+#ifndef NID_secp384r1
+#define NID_secp384r1 715
+#endif
+#ifndef NID_secp521r1
+#define NID_secp521r1 716
+#endif
 
 uint32_t ossh_rust_crypto_abi_version(void);
 const char *ossh_rust_crypto_backend_label(void);
@@ -44,6 +53,22 @@ int ossh_rust_ecdh_keypair(int curve_id, uint8_t *secret_key,
 int ossh_rust_ecdh_shared_secret(int curve_id, const uint8_t *secret_key,
     size_t secret_key_len, const uint8_t *public_key, size_t public_key_len,
     uint8_t *shared_secret, size_t shared_secret_len);
+void *ossh_rust_ecdsa_generate(int curve_nid);
+void *ossh_rust_ecdsa_from_public(int curve_nid, const uint8_t *public_key,
+    size_t public_key_len);
+void *ossh_rust_ecdsa_from_private(int curve_nid, const uint8_t *public_key,
+    size_t public_key_len, const uint8_t *private_key, size_t private_key_len);
+void *ossh_rust_ecdsa_copy_public(const void *key);
+int ossh_rust_ecdsa_equal_public(const void *a, const void *b);
+int ossh_rust_ecdsa_export_public(const void *key, uint8_t *public_key,
+    size_t public_key_len);
+int ossh_rust_ecdsa_export_private(const void *key, uint8_t *private_key,
+    size_t private_key_len);
+int ossh_rust_ecdsa_sign_prehashed(const void *key, const uint8_t *digest,
+    size_t digest_len, uint8_t *signature, size_t signature_len);
+int ossh_rust_ecdsa_verify_prehashed(const void *key, const uint8_t *digest,
+    size_t digest_len, const uint8_t *signature, size_t signature_len);
+void ossh_rust_ecdsa_free(void *key);
 void *ossh_rust_aesctr_init(const uint8_t *key, size_t key_len,
     const uint8_t *iv, size_t iv_len);
 int ossh_rust_aesctr_set_iv(void *ctx, const uint8_t *iv, size_t iv_len);
