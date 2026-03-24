@@ -15,10 +15,16 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 7U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 8U
 #define OSSH_RUST_ECDH_NISTP256 1
 #define OSSH_RUST_ECDH_NISTP384 2
 #define OSSH_RUST_ECDH_NISTP521 3
+#define OSSH_RUST_RSA_COMPONENT_N 1
+#define OSSH_RUST_RSA_COMPONENT_E 2
+#define OSSH_RUST_RSA_COMPONENT_D 3
+#define OSSH_RUST_RSA_COMPONENT_IQMP 4
+#define OSSH_RUST_RSA_COMPONENT_P 5
+#define OSSH_RUST_RSA_COMPONENT_Q 6
 #ifndef NID_X9_62_prime256v1
 #define NID_X9_62_prime256v1 415
 #endif
@@ -69,6 +75,27 @@ int ossh_rust_ecdsa_sign_prehashed(const void *key, const uint8_t *digest,
 int ossh_rust_ecdsa_verify_prehashed(const void *key, const uint8_t *digest,
     size_t digest_len, const uint8_t *signature, size_t signature_len);
 void ossh_rust_ecdsa_free(void *key);
+void *ossh_rust_rsa_generate(size_t bits);
+void *ossh_rust_rsa_from_public(const uint8_t *modulus, size_t modulus_len,
+    const uint8_t *exponent, size_t exponent_len);
+void *ossh_rust_rsa_from_private(const uint8_t *modulus, size_t modulus_len,
+    const uint8_t *exponent, size_t exponent_len,
+    const uint8_t *private_exponent, size_t private_exponent_len,
+    const uint8_t *iqmp, size_t iqmp_len, const uint8_t *prime_p,
+    size_t prime_p_len, const uint8_t *prime_q, size_t prime_q_len);
+void *ossh_rust_rsa_copy_public(const void *key);
+int ossh_rust_rsa_equal_public(const void *a, const void *b);
+size_t ossh_rust_rsa_bits(const void *key);
+size_t ossh_rust_rsa_component_len(const void *key, int component);
+int ossh_rust_rsa_export_component(const void *key, int component,
+    uint8_t *out, size_t out_len);
+int ossh_rust_rsa_sign_prehashed(const void *key, int hash_alg,
+    const uint8_t *digest, size_t digest_len, uint8_t *signature,
+    size_t signature_len);
+int ossh_rust_rsa_verify_prehashed(const void *key, int hash_alg,
+    const uint8_t *digest, size_t digest_len, const uint8_t *signature,
+    size_t signature_len);
+void ossh_rust_rsa_free(void *key);
 void *ossh_rust_aesctr_init(const uint8_t *key, size_t key_len,
     const uint8_t *iv, size_t iv_len);
 int ossh_rust_aesctr_set_iv(void *ctx, const uint8_t *iv, size_t iv_len);

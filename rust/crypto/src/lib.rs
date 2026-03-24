@@ -2,6 +2,7 @@ mod cipher;
 mod digest;
 mod ecdsa;
 mod kex;
+mod rsa;
 mod util;
 
 use core::ffi::{c_char, c_int, c_void};
@@ -21,8 +22,12 @@ use kex::{
     curve25519_public_from_secret, curve25519_shared_secret, ed25519_public_from_seed,
     ed25519_sign, ed25519_verify, EcdhCurve,
 };
+use rsa::{
+    rsa_bits, rsa_component_len, rsa_copy_public, rsa_equal_public, rsa_export_component, rsa_free,
+    rsa_from_private, rsa_from_public, rsa_generate, rsa_sign_prehashed, rsa_verify_prehashed,
+};
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 7;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 8;
 static BACKEND_LABEL: &[u8] = b"Rust crypto backend\0";
 
 #[unsafe(no_mangle)]
@@ -300,6 +305,111 @@ pub extern "C" fn ossh_rust_ecdsa_verify_prehashed(
 #[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_ecdsa_free(key: *mut c_void) {
     ecdsa_free(key)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_generate(bits: usize) -> *mut c_void {
+    rsa_generate(bits)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_from_public(
+    modulus: *const u8,
+    modulus_len: usize,
+    exponent: *const u8,
+    exponent_len: usize,
+) -> *mut c_void {
+    rsa_from_public(modulus, modulus_len, exponent, exponent_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_from_private(
+    modulus: *const u8,
+    modulus_len: usize,
+    exponent: *const u8,
+    exponent_len: usize,
+    private_exponent: *const u8,
+    private_exponent_len: usize,
+    iqmp: *const u8,
+    iqmp_len: usize,
+    prime_p: *const u8,
+    prime_p_len: usize,
+    prime_q: *const u8,
+    prime_q_len: usize,
+) -> *mut c_void {
+    rsa_from_private(
+        modulus,
+        modulus_len,
+        exponent,
+        exponent_len,
+        private_exponent,
+        private_exponent_len,
+        iqmp,
+        iqmp_len,
+        prime_p,
+        prime_p_len,
+        prime_q,
+        prime_q_len,
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_copy_public(key: *const c_void) -> *mut c_void {
+    rsa_copy_public(key)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_equal_public(a: *const c_void, b: *const c_void) -> c_int {
+    rsa_equal_public(a, b)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_bits(key: *const c_void) -> usize {
+    rsa_bits(key)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_component_len(key: *const c_void, component: c_int) -> usize {
+    rsa_component_len(key, component)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_export_component(
+    key: *const c_void,
+    component: c_int,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    rsa_export_component(key, component, out, out_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_sign_prehashed(
+    key: *const c_void,
+    hash_alg: c_int,
+    digest: *const u8,
+    digest_len: usize,
+    signature: *mut u8,
+    signature_len: usize,
+) -> c_int {
+    rsa_sign_prehashed(key, hash_alg, digest, digest_len, signature, signature_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_verify_prehashed(
+    key: *const c_void,
+    hash_alg: c_int,
+    digest: *const u8,
+    digest_len: usize,
+    signature: *const u8,
+    signature_len: usize,
+) -> c_int {
+    rsa_verify_prehashed(key, hash_alg, digest, digest_len, signature, signature_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_free(key: *mut c_void) {
+    rsa_free(key)
 }
 
 #[unsafe(no_mangle)]
