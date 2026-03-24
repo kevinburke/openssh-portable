@@ -1,8 +1,9 @@
 use core::ffi::{c_char, c_int, c_void};
 use core::slice;
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
+use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 2;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 3;
 const SSH_DIGEST_SHA256: c_int = 2;
 const SSH_DIGEST_SHA384: c_int = 3;
 const SSH_DIGEST_SHA512: c_int = 4;
@@ -17,6 +18,7 @@ const ED25519_SEED_LENGTH: usize = 32;
 const ED25519_PUBLIC_KEY_LENGTH: usize = 32;
 const ED25519_SECRET_KEY_LENGTH: usize = 64;
 const ED25519_SIGNATURE_LENGTH: usize = 64;
+const CURVE25519_KEY_LENGTH: usize = 32;
 
 const K256: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
@@ -597,11 +599,48 @@ pub extern "C" fn ossh_rust_ed25519_verify(
     0
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_curve25519_public_from_secret(
+    public_key: *mut u8,
+    public_key_len: usize,
+    secret_key: *const u8,
+    secret_key_len: usize,
+) -> c_int {
+    let secret_key = match read_array::<CURVE25519_KEY_LENGTH>(secret_key, secret_key_len) {
+        Some(secret_key) => secret_key,
+        None => return -1,
+    };
+    let public = x25519(secret_key, X25519_BASEPOINT_BYTES);
+    write_prefix(public_key, public_key_len, &public)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_curve25519_shared_secret(
+    shared_secret: *mut u8,
+    shared_secret_len: usize,
+    secret_key: *const u8,
+    secret_key_len: usize,
+    public_key: *const u8,
+    public_key_len: usize,
+) -> c_int {
+    let secret_key = match read_array::<CURVE25519_KEY_LENGTH>(secret_key, secret_key_len) {
+        Some(secret_key) => secret_key,
+        None => return -1,
+    };
+    let public_key = match read_array::<CURVE25519_KEY_LENGTH>(public_key, public_key_len) {
+        Some(public_key) => public_key,
+        None => return -1,
+    };
+    let shared = x25519(secret_key, public_key);
+    write_prefix(shared_secret, shared_secret_len, &shared)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        DigestState, Signature, SigningKey, VerifyingKey, SHA256_DIGEST_LENGTH,
-        SHA384_DIGEST_LENGTH, SHA512_DIGEST_LENGTH,
+        x25519, DigestState, Signature, SigningKey, VerifyingKey,
+        X25519_BASEPOINT_BYTES, SHA256_DIGEST_LENGTH, SHA384_DIGEST_LENGTH,
+        SHA512_DIGEST_LENGTH,
     };
     use ed25519_dalek::Signer;
 
@@ -725,5 +764,38 @@ mod tests {
         assert_eq!(signing_key.verifying_key().to_bytes().as_slice(), public.as_slice());
         assert_eq!(signing_key.sign(&[]).to_bytes().as_slice(), signature.as_slice());
         assert!(verifying_key.verify_strict(&[], &sig).is_ok());
+    }
+
+    #[test]
+    fn x25519_rfc7748_vector() {
+        let alice_secret: [u8; 32] = decode_hex(
+            "77076d0a7318a57d3c16c17251b26645\
+             df4c2f87ebc0992ab177fba51db92c2a",
+        )
+        .try_into()
+        .unwrap();
+        let bob_secret: [u8; 32] = decode_hex(
+            "5dab087e624a8a4b79e17f8b83800ee6\
+             6f3bb1292618b6fd1c2f8b27ff88e0eb",
+        )
+        .try_into()
+        .unwrap();
+        let alice_public = decode_hex(
+            "8520f0098930a754748b7ddcb43ef75a\
+             0dbf3a0d26381af4eba4a98eaa9b4e6a",
+        );
+        let bob_public = decode_hex(
+            "de9edb7d7b7dc1b4d35b61c2ece43537\
+             3f8343c85b78674dadfc7e146f882b4f",
+        );
+        let shared = decode_hex(
+            "4a5d9d5ba4ce2de1728e3bf480350f25\
+             e07e21c947d19e3376f09b3c1e161742",
+        );
+
+        assert_eq!(x25519(alice_secret, X25519_BASEPOINT_BYTES).as_slice(), alice_public.as_slice());
+        assert_eq!(x25519(bob_secret, X25519_BASEPOINT_BYTES).as_slice(), bob_public.as_slice());
+        assert_eq!(x25519(alice_secret, bob_public.as_slice().try_into().unwrap()).as_slice(), shared.as_slice());
+        assert_eq!(x25519(bob_secret, alice_public.as_slice().try_into().unwrap()).as_slice(), shared.as_slice());
     }
 }
