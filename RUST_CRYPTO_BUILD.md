@@ -161,6 +161,87 @@ or on Linux:
 ldd ./ssh ./sshd ./ssh-pkcs11-helper ./ssh-sk-helper
 ```
 
+## Validation commands
+
+The quickest real smoke tests for the current branch are forced handshakes
+against a server that already accepts Ed25519 user auth and offers an
+Ed25519 host key.
+
+Plain Curve25519 plus Rust-backed transport ciphers:
+
+```sh
+./ssh -v \
+  -oBatchMode=yes \
+  -oConnectTimeout=10 \
+  -oKexAlgorithms=curve25519-sha256 \
+  -oHostKeyAlgorithms=ssh-ed25519 \
+  -oPubkeyAcceptedAlgorithms=ssh-ed25519 \
+  -c aes128-ctr \
+  -i ~/.ssh/id_ed25519 \
+  user@host true
+
+./ssh -v \
+  -oBatchMode=yes \
+  -oConnectTimeout=10 \
+  -oKexAlgorithms=curve25519-sha256 \
+  -oHostKeyAlgorithms=ssh-ed25519 \
+  -oPubkeyAcceptedAlgorithms=ssh-ed25519 \
+  -c aes192-ctr \
+  -i ~/.ssh/id_ed25519 \
+  user@host true
+
+./ssh -v \
+  -oBatchMode=yes \
+  -oConnectTimeout=10 \
+  -oKexAlgorithms=curve25519-sha256 \
+  -oHostKeyAlgorithms=ssh-ed25519 \
+  -oPubkeyAcceptedAlgorithms=ssh-ed25519 \
+  -c aes256-ctr \
+  -i ~/.ssh/id_ed25519 \
+  user@host true
+
+./ssh -v \
+  -oBatchMode=yes \
+  -oConnectTimeout=10 \
+  -oKexAlgorithms=curve25519-sha256 \
+  -oHostKeyAlgorithms=ssh-ed25519 \
+  -oPubkeyAcceptedAlgorithms=ssh-ed25519 \
+  -c chacha20-poly1305@openssh.com \
+  -i ~/.ssh/id_ed25519 \
+  user@host true
+```
+
+To exercise the Rust-backed X25519 helper through the hybrid KEX paths:
+
+```sh
+./ssh -v \
+  -oBatchMode=yes \
+  -oConnectTimeout=10 \
+  -oKexAlgorithms=sntrup761x25519-sha512 \
+  -oHostKeyAlgorithms=ssh-ed25519 \
+  -oPubkeyAcceptedAlgorithms=ssh-ed25519 \
+  -i ~/.ssh/id_ed25519 \
+  user@host true
+
+./ssh -v \
+  -oBatchMode=yes \
+  -oConnectTimeout=10 \
+  -oKexAlgorithms=mlkem768x25519-sha256 \
+  -oHostKeyAlgorithms=ssh-ed25519 \
+  -oPubkeyAcceptedAlgorithms=ssh-ed25519 \
+  -i ~/.ssh/id_ed25519 \
+  user@host true
+```
+
+The important lines to look for are:
+
+- `OpenSSH_10.2p1, Rust crypto backend`
+- `kex: algorithm: ...`
+- `server->client cipher: ...`
+- `client->server cipher: ...`
+- `Authenticated to ... using "publickey".`
+- `Exit status 0`
+
 ## Useful targets
 
 Build just the Rust static library:
