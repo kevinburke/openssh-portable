@@ -893,13 +893,34 @@ fingerprint_one_key(const struct sshkey *public, const char *comment)
 	free(fp);
 }
 
+static int
+private_comment_supported(const char *path)
+{
+	FILE *f = NULL;
+	char line[128];
+	int ret = 1;
+
+	if ((f = fopen(path, "r")) == NULL)
+		return 1;
+	if (fgets(line, sizeof(line), f) == NULL)
+		goto out;
+	if (strcmp(line, "-----BEGIN OPENSSH PRIVATE KEY-----\n") == 0)
+		goto out;
+	if (strncmp(line, "-----BEGIN ", 11) == 0 &&
+	    strstr(line, "PRIVATE KEY-----") != NULL)
+		ret = 0;
+ out:
+	fclose(f);
+	return ret;
+}
+
 static void
 fingerprint_private(const char *path)
 {
 	struct stat st;
 	char *comment = NULL;
 	struct sshkey *privkey = NULL, *pubkey = NULL;
-	int r;
+	int r, comment_from_private = 0;
 
 	if (stat(identity_file, &st) == -1)
 		fatal("%s: %s", path, strerror(errno));
@@ -910,6 +931,13 @@ fingerprint_private(const char *path)
 		if ((r = sshkey_load_private(path, NULL,
 		    &privkey, &comment)) != 0)
 			debug_r(r, "load private \"%s\"", path);
+		else
+			comment_from_private = 1;
+	}
+	if (comment_from_private && comment != NULL &&
+	    !private_comment_supported(path)) {
+		free(comment);
+		comment = NULL;
 	}
 	if (pubkey == NULL && privkey == NULL)
 		fatal("%s is not a key file.", path);
