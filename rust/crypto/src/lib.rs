@@ -4,6 +4,7 @@ mod dh;
 mod digest;
 mod ecdsa;
 mod kex;
+mod openssh_key;
 mod private_pem;
 mod rsa;
 mod util;
@@ -27,6 +28,9 @@ use ecdsa::{
 use kex::{
     curve25519_public_from_secret, curve25519_shared_secret, ed25519_parse_public_blob,
     ed25519_public_from_seed, ed25519_sign, ed25519_verify, EcdhCurve,
+};
+use openssh_key::{
+    openssh_private2_decode_len, openssh_private2_decode_write, openssh_private2_parse,
 };
 use private_pem::PrivatePemError;
 use rsa::{
@@ -90,6 +94,24 @@ pub struct RustCertBodyParse {
     signature_len: usize,
 }
 
+#[repr(C)]
+pub struct RustPrivate2HeaderParse {
+    ciphername_offset: usize,
+    ciphername_len: usize,
+    kdfname_offset: usize,
+    kdfname_len: usize,
+    kdf_offset: usize,
+    kdf_len: usize,
+    public_key_offset: usize,
+    public_key_len: usize,
+    encrypted_offset: usize,
+    encrypted_len: usize,
+    bcrypt_salt_offset: usize,
+    bcrypt_salt_len: usize,
+    bcrypt_rounds: u32,
+    kdf_kind: u32,
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_cert_parse_body(
     input: *const u8,
@@ -125,6 +147,54 @@ pub extern "C" fn ossh_rust_cert_parse_body(
             ca_key_len: parsed.ca_key_len,
             signature_offset: parsed.signature_offset,
             signature_len: parsed.signature_len,
+        };
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_private2_decode_len(input: *const u8, input_len: usize) -> usize {
+    openssh_private2_decode_len(input, input_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_private2_decode_write(
+    input: *const u8,
+    input_len: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    openssh_private2_decode_write(input, input_len, out, out_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_private2_parse_header(
+    decoded: *const u8,
+    decoded_len: usize,
+    out: *mut RustPrivate2HeaderParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(parsed) = openssh_private2_parse(decoded, decoded_len) else {
+        return -1;
+    };
+    unsafe {
+        *out = RustPrivate2HeaderParse {
+            ciphername_offset: parsed.ciphername_offset,
+            ciphername_len: parsed.ciphername_len,
+            kdfname_offset: parsed.kdfname_offset,
+            kdfname_len: parsed.kdfname_len,
+            kdf_offset: parsed.kdf_offset,
+            kdf_len: parsed.kdf_len,
+            public_key_offset: parsed.public_key_offset,
+            public_key_len: parsed.public_key_len,
+            encrypted_offset: parsed.encrypted_offset,
+            encrypted_len: parsed.encrypted_len,
+            bcrypt_salt_offset: parsed.bcrypt_salt_offset,
+            bcrypt_salt_len: parsed.bcrypt_salt_len,
+            bcrypt_rounds: parsed.bcrypt_rounds,
+            kdf_kind: parsed.kdf_kind,
         };
     }
     0

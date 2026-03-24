@@ -19,6 +19,8 @@ extern "C" {
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
+#define OSSH_RUST_PRIVATE2_KDF_NONE 0
+#define OSSH_RUST_PRIVATE2_KDF_BCRYPT 1
 #define OSSH_RUST_DH_GROUP14 14
 #define OSSH_RUST_ECDH_NISTP256 1
 #define OSSH_RUST_ECDH_NISTP384 2
@@ -61,8 +63,29 @@ struct ossh_rust_cert_body_parse {
 	size_t signature_offset;
 	size_t signature_len;
 };
+struct ossh_rust_private2_header_parse {
+	size_t ciphername_offset;
+	size_t ciphername_len;
+	size_t kdfname_offset;
+	size_t kdfname_len;
+	size_t kdf_offset;
+	size_t kdf_len;
+	size_t public_key_offset;
+	size_t public_key_len;
+	size_t encrypted_offset;
+	size_t encrypted_len;
+	size_t bcrypt_salt_offset;
+	size_t bcrypt_salt_len;
+	uint32_t bcrypt_rounds;
+	uint32_t kdf_kind;
+};
 int ossh_rust_cert_parse_body(const uint8_t *input, size_t input_len,
     struct ossh_rust_cert_body_parse *out);
+size_t ossh_rust_private2_decode_len(const uint8_t *input, size_t input_len);
+int ossh_rust_private2_decode_write(const uint8_t *input, size_t input_len,
+    uint8_t *out, size_t out_len);
+int ossh_rust_private2_parse_header(const uint8_t *decoded, size_t decoded_len,
+    struct ossh_rust_private2_header_parse *out);
 void *ossh_rust_dh_group_new(int group_id);
 int ossh_rust_dh_generate_key(void *group, size_t need_bits);
 size_t ossh_rust_dh_public_len(const void *group);
