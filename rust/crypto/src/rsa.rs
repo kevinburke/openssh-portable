@@ -1,5 +1,8 @@
 use core::ffi::{c_int, c_void};
+use core::str;
 
+use pkcs1::{DecodeRsaPrivateKey, EncodeRsaPrivateKey};
+use pkcs8::{DecodePrivateKey, EncodePrivateKey, LineEnding};
 use rand_core::OsRng;
 use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 use rsa::{BigUint, Pkcs1v15Sign, RsaPrivateKey, RsaPublicKey};
@@ -18,6 +21,8 @@ const OSSH_RUST_RSA_COMPONENT_D: c_int = 3;
 const OSSH_RUST_RSA_COMPONENT_IQMP: c_int = 4;
 const OSSH_RUST_RSA_COMPONENT_P: c_int = 5;
 const OSSH_RUST_RSA_COMPONENT_Q: c_int = 6;
+const SSHKEY_PRIVATE_PEM: c_int = 1;
+const SSHKEY_PRIVATE_PKCS8: c_int = 2;
 
 // Mirrors SSHBUF_MAX_BIGNUM * 8 on the C side.
 const OSSH_RUST_RSA_MAX_BITS: usize = 16_384;
@@ -346,6 +351,64 @@ pub(crate) fn rsa_export_component(
         None => return -1,
     };
     write_prefix(out, out_len, component)
+}
+
+pub(crate) fn rsa_parse_private_pem(blob: *const u8, blob_len: usize) -> *mut c_void {
+    let pem = match read_slice(blob, blob_len).and_then(|blob| str::from_utf8(blob).ok()) {
+        Some(pem) => pem,
+        None => return core::ptr::null_mut(),
+    };
+    let key = if pem.starts_with("-----BEGIN RSA PRIVATE KEY-----") {
+        RsaPrivateKey::from_pkcs1_pem(pem).map_err(|_| ())
+    } else if pem.starts_with("-----BEGIN PRIVATE KEY-----") {
+        RsaPrivateKey::from_pkcs8_pem(pem).map_err(|_| ())
+    } else {
+        return core::ptr::null_mut();
+    };
+    match key.and_then(RustRsaKey::from_private_key) {
+        Ok(key) => Box::into_raw(Box::new(key)).cast(),
+        Err(()) => core::ptr::null_mut(),
+    }
+}
+
+fn rsa_serialize_private_pem(key: &RustRsaKey, format: c_int) -> Result<Vec<u8>, ()> {
+    let private_key = key.private_key()?;
+    match format {
+        SSHKEY_PRIVATE_PEM => Ok(private_key
+            .to_pkcs1_pem(LineEnding::LF)
+            .map_err(|_| ())?
+            .to_string()
+            .into_bytes()),
+        SSHKEY_PRIVATE_PKCS8 => Ok(private_key
+            .to_pkcs8_pem(LineEnding::LF)
+            .map_err(|_| ())?
+            .to_string()
+            .into_bytes()),
+        _ => Err(()),
+    }
+}
+
+pub(crate) fn rsa_private_pem_len(key: *const c_void, format: c_int) -> usize {
+    let Some(key) = key_ref(key) else {
+        return 0;
+    };
+    rsa_serialize_private_pem(key, format).map_or(0, |pem| pem.len())
+}
+
+pub(crate) fn rsa_private_pem_write(
+    key: *const c_void,
+    format: c_int,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    let Some(key) = key_ref(key) else {
+        return -1;
+    };
+    let pem = match rsa_serialize_private_pem(key, format) {
+        Ok(pem) => pem,
+        Err(()) => return -1,
+    };
+    write_prefix(out, out_len, &pem)
 }
 
 pub(crate) fn rsa_sign_prehashed(
