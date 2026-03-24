@@ -1319,10 +1319,11 @@ mod tests {
         AesCtrState, ChachaPolyError, ChachaPolyState, DigestState,
         Signature, SigningKey, VerifyingKey, X25519_BASEPOINT_BYTES,
         OSSH_RUST_ECDH_NISTP256, OSSH_RUST_ECDH_NISTP384,
-        OSSH_RUST_ECDH_NISTP521, SHA256_DIGEST_LENGTH,
+        OSSH_RUST_ECDH_NISTP521, AES_BLOCK_SIZE, SHA256_DIGEST_LENGTH,
         SHA384_DIGEST_LENGTH, SHA512_DIGEST_LENGTH,
     };
     use ed25519_dalek::Signer;
+    use rand_core::RngCore;
 
     fn hex(bytes: &[u8]) -> String {
         let mut out = String::with_capacity(bytes.len() * 2);
@@ -1404,6 +1405,41 @@ mod tests {
         );
         assert_eq!(alice_shared, bob_shared);
         assert!(alice_shared.iter().any(|byte| *byte != 0));
+    }
+
+    fn assert_nist_ecdh_invalid_public_rejected(
+        curve_id: i32,
+        secret_len: usize,
+        public_len: usize,
+        shared_len: usize,
+    ) {
+        let mut secret = vec![0u8; secret_len];
+        let mut public = vec![0u8; public_len];
+        let mut shared = vec![0u8; shared_len];
+
+        assert_eq!(
+            ossh_rust_ecdh_keypair(
+                curve_id,
+                secret.as_mut_ptr(),
+                secret.len(),
+                public.as_mut_ptr(),
+                public.len(),
+            ),
+            0
+        );
+        public[0] ^= 0x01;
+        assert_eq!(
+            ossh_rust_ecdh_shared_secret(
+                curve_id,
+                secret.as_ptr(),
+                secret.len(),
+                public.as_ptr(),
+                public.len(),
+                shared.as_mut_ptr(),
+                shared.len(),
+            ),
+            -1
+        );
     }
 
     #[test]
@@ -1556,6 +1592,42 @@ mod tests {
     }
 
     #[test]
+    fn x25519_randomized_roundtrips() {
+        let mut rng = rand_core::OsRng;
+
+        for _ in 0..32 {
+            let mut alice_secret = [0u8; 32];
+            let mut bob_secret = [0u8; 32];
+            rng.fill_bytes(&mut alice_secret);
+            rng.fill_bytes(&mut bob_secret);
+
+            let alice_public = x25519(alice_secret, X25519_BASEPOINT_BYTES);
+            let bob_public = x25519(bob_secret, X25519_BASEPOINT_BYTES);
+            let alice_shared = x25519(alice_secret, bob_public);
+            let bob_shared = x25519(bob_secret, alice_public);
+
+            assert_eq!(alice_shared, bob_shared);
+            assert!(alice_shared.iter().any(|byte| *byte != 0));
+        }
+    }
+
+    #[test]
+    fn nist_ecdh_randomized_roundtrips() {
+        for _ in 0..16 {
+            assert_nist_ecdh_roundtrip(OSSH_RUST_ECDH_NISTP256, 32, 65, 32);
+            assert_nist_ecdh_roundtrip(OSSH_RUST_ECDH_NISTP384, 48, 97, 48);
+            assert_nist_ecdh_roundtrip(OSSH_RUST_ECDH_NISTP521, 66, 133, 66);
+        }
+    }
+
+    #[test]
+    fn nist_ecdh_rejects_invalid_public_points() {
+        assert_nist_ecdh_invalid_public_rejected(OSSH_RUST_ECDH_NISTP256, 32, 65, 32);
+        assert_nist_ecdh_invalid_public_rejected(OSSH_RUST_ECDH_NISTP384, 48, 97, 48);
+        assert_nist_ecdh_invalid_public_rejected(OSSH_RUST_ECDH_NISTP521, 66, 133, 66);
+    }
+
+    #[test]
     fn chachapoly_matches_c_reference_vector() {
         let key: Vec<u8> = (0u8..64).collect();
         let mut src = vec![0u8; 4 + 16 + 16];
@@ -1646,6 +1718,68 @@ mod tests {
     }
 
     #[test]
+    fn chachapoly_randomized_roundtrips() {
+        let mut rng = rand_core::OsRng;
+
+        for seqnr in 0..24u32 {
+            let payload_len = ((seqnr as usize) * 7) % 128;
+            let mut key = [0u8; 64];
+            let mut packet = vec![0u8; 4 + payload_len + 16];
+            let mut enc = vec![0u8; packet.len()];
+            let mut dec = vec![0u8; packet.len()];
+            rng.fill_bytes(&mut key);
+            rng.fill_bytes(&mut packet[4..4 + payload_len]);
+            packet[0..4].copy_from_slice(&(payload_len as u32).to_be_bytes());
+
+            let state = ChachaPolyState::new(&key).unwrap();
+            state
+                .crypt(
+                    seqnr,
+                    enc.as_mut_ptr(),
+                    enc.len(),
+                    packet.as_ptr(),
+                    4 + payload_len,
+                    payload_len as u32,
+                    4,
+                    16,
+                    true,
+                )
+                .unwrap();
+            state
+                .crypt(
+                    seqnr,
+                    dec.as_mut_ptr(),
+                    dec.len(),
+                    enc.as_ptr(),
+                    enc.len(),
+                    payload_len as u32,
+                    4,
+                    16,
+                    false,
+                )
+                .unwrap();
+            assert_eq!(&dec[..4 + payload_len], &packet[..4 + payload_len]);
+
+            let last = enc.len() - 1;
+            enc[last] ^= 0x01;
+            assert_eq!(
+                state.crypt(
+                    seqnr,
+                    dec.as_mut_ptr(),
+                    dec.len(),
+                    enc.as_ptr(),
+                    enc.len(),
+                    payload_len as u32,
+                    4,
+                    16,
+                    false,
+                ),
+                Err(ChachaPolyError::Mac)
+            );
+        }
+    }
+
+    #[test]
     fn aes128_ctr_nist_vector() {
         let key = decode_hex(
             "2b7e151628aed2a6abf7158809cf4f3c",
@@ -1732,5 +1866,57 @@ mod tests {
 
         state.crypt(plaintext.as_ptr(), out.as_mut_ptr(), plaintext.len()).unwrap();
         assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn aesctr_randomized_chunking_roundtrips() {
+        let mut rng = rand_core::OsRng;
+
+        for &key_len in &[16usize, 24, 32] {
+            for iter in 0..16usize {
+                let msg_len = (iter * 19) % 257;
+                let mut key = vec![0u8; key_len];
+                let mut iv = [0u8; 16];
+                let mut plaintext = vec![0u8; msg_len];
+                let mut one_shot = vec![0u8; msg_len];
+                let mut chunked = vec![0u8; msg_len];
+                let mut roundtrip = vec![0u8; msg_len];
+                rng.fill_bytes(&mut key);
+                rng.fill_bytes(&mut iv);
+                rng.fill_bytes(&mut plaintext);
+
+                let mut state_one = AesCtrState::new(&key, iv).unwrap();
+                state_one
+                    .crypt(plaintext.as_ptr(), one_shot.as_mut_ptr(), plaintext.len())
+                    .unwrap();
+
+                let mut state_chunked = AesCtrState::new(&key, iv).unwrap();
+                let mut offset = 0usize;
+                while offset < plaintext.len() {
+                    let remaining = plaintext.len() - offset;
+                    let take = if remaining <= AES_BLOCK_SIZE {
+                        remaining
+                    } else {
+                        let blocks = ((offset + iter) % 4) + 1;
+                        core::cmp::min(blocks * AES_BLOCK_SIZE, remaining)
+                    };
+                    state_chunked
+                        .crypt(
+                            plaintext[offset..].as_ptr(),
+                            chunked[offset..].as_mut_ptr(),
+                            take,
+                        )
+                        .unwrap();
+                    offset += take;
+                }
+                assert_eq!(one_shot, chunked);
+
+                let mut state_dec = AesCtrState::new(&key, iv).unwrap();
+                state_dec
+                    .crypt(one_shot.as_ptr(), roundtrip.as_mut_ptr(), one_shot.len())
+                    .unwrap();
+                assert_eq!(roundtrip, plaintext);
+            }
+        }
     }
 }
