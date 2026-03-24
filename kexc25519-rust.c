@@ -1,33 +1,23 @@
-/* $OpenBSD: kexc25519.c,v 1.18 2024/09/02 12:13:56 djm Exp $ */
+/* $OpenBSD$ */
 /*
- * Copyright (c) 2019 Markus Friedl.  All rights reserved.
- * Copyright (c) 2010 Damien Miller.  All rights reserved.
- * Copyright (c) 2013 Aris Adamantiadis.  All rights reserved.
+ * Copyright (c) 2026 Kevin Burke
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include "includes.h"
 
-#ifndef WITH_RUST_CRYPTO
+#ifdef WITH_RUST_CRYPTO
 
 #include <sys/types.h>
 
@@ -38,39 +28,39 @@
 #include "sshkey.h"
 #include "kex.h"
 #include "sshbuf.h"
-#include "digest.h"
 #include "ssherr.h"
 #include "ssh2.h"
-
-extern int crypto_scalarmult_curve25519(u_char a[CURVE25519_SIZE],
-    const u_char b[CURVE25519_SIZE], const u_char c[CURVE25519_SIZE])
-	__attribute__((__bounded__(__minbytes__, 1, CURVE25519_SIZE)))
-	__attribute__((__bounded__(__minbytes__, 2, CURVE25519_SIZE)))
-	__attribute__((__bounded__(__minbytes__, 3, CURVE25519_SIZE)));
+#include "log.h"
+#include "rust-crypto.h"
 
 void
 kexc25519_keygen(u_char key[CURVE25519_SIZE], u_char pub[CURVE25519_SIZE])
 {
-	static const u_char basepoint[CURVE25519_SIZE] = {9};
-
 	arc4random_buf(key, CURVE25519_SIZE);
-	crypto_scalarmult_curve25519(pub, key, basepoint);
+	if (ossh_rust_curve25519_public_from_secret(pub, CURVE25519_SIZE,
+	    key, CURVE25519_SIZE) != 0)
+		fatal_f("Rust curve25519 public key derivation failed");
 }
 
 int
 kexc25519_shared_key_ext(const u_char key[CURVE25519_SIZE],
     const u_char pub[CURVE25519_SIZE], struct sshbuf *out, int raw)
 {
+	static const u_char zero[CURVE25519_SIZE];
 	u_char shared_key[CURVE25519_SIZE];
-	u_char zero[CURVE25519_SIZE];
 	int r;
 
-	crypto_scalarmult_curve25519(shared_key, key, pub);
+	if (ossh_rust_curve25519_shared_secret(shared_key, CURVE25519_SIZE,
+	    key, CURVE25519_SIZE, pub, CURVE25519_SIZE) != 0) {
+		explicit_bzero(shared_key, sizeof(shared_key));
+		return SSH_ERR_LIBCRYPTO_ERROR;
+	}
 
 	/* Check for all-zero shared secret */
-	explicit_bzero(zero, CURVE25519_SIZE);
-	if (timingsafe_bcmp(zero, shared_key, CURVE25519_SIZE) == 0)
+	if (timingsafe_bcmp(zero, shared_key, CURVE25519_SIZE) == 0) {
+		explicit_bzero(shared_key, sizeof(shared_key));
 		return SSH_ERR_KEY_INVALID_EC_VALUE;
+	}
 
 #ifdef DEBUG_KEXECDH
 	dump_digest("shared secret 25519", shared_key, CURVE25519_SIZE);
@@ -79,7 +69,7 @@ kexc25519_shared_key_ext(const u_char key[CURVE25519_SIZE],
 		r = sshbuf_put(out, shared_key, CURVE25519_SIZE);
 	else
 		r = sshbuf_put_bignum2_bytes(out, shared_key, CURVE25519_SIZE);
-	explicit_bzero(shared_key, CURVE25519_SIZE);
+	explicit_bzero(shared_key, sizeof(shared_key));
 	return r;
 }
 
@@ -134,7 +124,6 @@ kex_c25519_enc(struct kex *kex, const struct sshbuf *client_blob,
 #ifdef DEBUG_KEXECDH
 	dump_digest("client public key 25519:", client_pub, CURVE25519_SIZE);
 #endif
-	/* allocate space for encrypted KEM key and ECDH pub key */
 	if ((server_blob = sshbuf_new()) == NULL) {
 		r = SSH_ERR_ALLOC_FAIL;
 		goto out;
@@ -142,7 +131,6 @@ kex_c25519_enc(struct kex *kex, const struct sshbuf *client_blob,
 	if ((r = sshbuf_reserve(server_blob, CURVE25519_SIZE, &server_pub)) != 0)
 		goto out;
 	kexc25519_keygen(server_key, server_pub);
-	/* allocate shared secret */
 	if ((buf = sshbuf_new()) == NULL) {
 		r = SSH_ERR_ALLOC_FAIL;
 		goto out;
@@ -182,7 +170,6 @@ kex_c25519_dec(struct kex *kex, const struct sshbuf *server_blob,
 #ifdef DEBUG_KEXECDH
 	dump_digest("server public key c25519:", server_pub, CURVE25519_SIZE);
 #endif
-	/* shared secret */
 	if ((buf = sshbuf_new()) == NULL) {
 		r = SSH_ERR_ALLOC_FAIL;
 		goto out;
