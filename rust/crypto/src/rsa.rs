@@ -9,6 +9,7 @@ use rsa::{BigUint, Pkcs1v15Sign, RsaPrivateKey, RsaPublicKey};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 
+use crate::private_pem::{decrypt_encrypted_pkcs8_pem, decrypt_legacy_private_pem, LegacyPemLabel, PrivatePemError};
 use crate::util::{read_slice, slice_ptr, write_prefix, SshWireReader};
 
 const SSH_DIGEST_SHA1: c_int = 1;
@@ -354,20 +355,50 @@ pub(crate) fn rsa_export_component(
 }
 
 pub(crate) fn rsa_parse_private_pem(blob: *const u8, blob_len: usize) -> *mut c_void {
+    match rsa_parse_private_pem_with_passphrase(blob, blob_len, core::ptr::null(), 0) {
+        Ok(key) => key,
+        Err(_) => core::ptr::null_mut(),
+    }
+}
+
+pub(crate) fn rsa_parse_private_pem_with_passphrase(
+    blob: *const u8,
+    blob_len: usize,
+    passphrase: *const u8,
+    passphrase_len: usize,
+) -> Result<*mut c_void, PrivatePemError> {
     let pem = match read_slice(blob, blob_len).and_then(|blob| str::from_utf8(blob).ok()) {
         Some(pem) => pem,
-        None => return core::ptr::null_mut(),
+        None => return Err(PrivatePemError::InvalidFormat),
     };
-    let key = if pem.starts_with("-----BEGIN RSA PRIVATE KEY-----") {
-        RsaPrivateKey::from_pkcs1_pem(pem).map_err(|_| ())
-    } else if pem.starts_with("-----BEGIN PRIVATE KEY-----") {
-        RsaPrivateKey::from_pkcs8_pem(pem).map_err(|_| ())
+    let passphrase = if passphrase_len == 0 {
+        &[][..]
     } else {
-        return core::ptr::null_mut();
+        read_slice(passphrase, passphrase_len).ok_or(PrivatePemError::InvalidFormat)?
     };
-    match key.and_then(RustRsaKey::from_private_key) {
-        Ok(key) => Box::into_raw(Box::new(key)).cast(),
-        Err(()) => core::ptr::null_mut(),
+
+    let key = if pem.starts_with("-----BEGIN ENCRYPTED PRIVATE KEY-----") {
+        let der = decrypt_encrypted_pkcs8_pem(pem, passphrase)?;
+        RsaPrivateKey::from_pkcs8_der(&der).map_err(|_| PrivatePemError::InvalidFormat)?
+    } else if pem.starts_with("-----BEGIN RSA PRIVATE KEY-----") {
+        match decrypt_legacy_private_pem(pem, passphrase) {
+            Ok((LegacyPemLabel::RsaPrivateKey, der)) => {
+                RsaPrivateKey::from_pkcs1_der(&der).map_err(|_| PrivatePemError::InvalidFormat)?
+            }
+            Ok((LegacyPemLabel::EcPrivateKey, _)) => return Err(PrivatePemError::InvalidFormat),
+            Err(PrivatePemError::WrongPassphrase) => return Err(PrivatePemError::WrongPassphrase),
+            Err(PrivatePemError::InvalidFormat) => {
+                RsaPrivateKey::from_pkcs1_pem(pem).map_err(|_| PrivatePemError::InvalidFormat)?
+            }
+        }
+    } else if pem.starts_with("-----BEGIN PRIVATE KEY-----") {
+        RsaPrivateKey::from_pkcs8_pem(pem).map_err(|_| PrivatePemError::InvalidFormat)?
+    } else {
+        return Err(PrivatePemError::InvalidFormat);
+    };
+    match RustRsaKey::from_private_key(key) {
+        Ok(key) => Ok(Box::into_raw(Box::new(key)).cast()),
+        Err(()) => Err(PrivatePemError::InvalidFormat),
     }
 }
 
@@ -481,9 +512,14 @@ mod tests {
         OSSH_RUST_RSA_COMPONENT_D, OSSH_RUST_RSA_COMPONENT_E, OSSH_RUST_RSA_COMPONENT_IQMP,
         OSSH_RUST_RSA_COMPONENT_N, OSSH_RUST_RSA_COMPONENT_P, OSSH_RUST_RSA_COMPONENT_Q,
         SSH_DIGEST_SHA1, SSH_DIGEST_SHA256, SSH_DIGEST_SHA512, rsa_bits, rsa_component_len,
-        rsa_export_component, rsa_free, rsa_from_private, rsa_generate, rsa_parse_public_blob,
-        rsa_sign_prehashed, rsa_verify_prehashed,
+        rsa_export_component, rsa_free, rsa_from_private, rsa_generate,
+        rsa_parse_private_pem_with_passphrase, rsa_parse_public_blob, rsa_sign_prehashed,
+        rsa_verify_prehashed,
     };
+    use crate::private_pem::PrivatePemError;
+    use pkcs8::{EncodePrivateKey, LineEnding};
+    use rand_core::OsRng;
+    use rsa::RsaPrivateKey;
 
     fn put_string(buf: &mut Vec<u8>, bytes: &[u8]) {
         buf.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
@@ -618,5 +654,38 @@ mod tests {
         assert_eq!(consumed, blob.len() - (4 + trailer.len()));
         rsa_free(parsed);
         rsa_free(key);
+    }
+
+    #[test]
+    fn parses_encrypted_pkcs8() {
+        let key = RsaPrivateKey::new(&mut OsRng, 1024).unwrap();
+        let pem = key
+            .to_pkcs8_encrypted_pem(&mut OsRng, b"password", LineEnding::LF)
+            .unwrap();
+        let parsed = rsa_parse_private_pem_with_passphrase(
+            pem.as_bytes().as_ptr(),
+            pem.len(),
+            b"password".as_ptr(),
+            b"password".len(),
+        )
+        .unwrap();
+        assert!(!parsed.is_null());
+        rsa_free(parsed);
+    }
+
+    #[test]
+    fn encrypted_pkcs8_reports_wrong_passphrase() {
+        let key = RsaPrivateKey::new(&mut OsRng, 1024).unwrap();
+        let pem = key
+            .to_pkcs8_encrypted_pem(&mut OsRng, b"password", LineEnding::LF)
+            .unwrap();
+        let err = rsa_parse_private_pem_with_passphrase(
+            pem.as_bytes().as_ptr(),
+            pem.len(),
+            b"wrong".as_ptr(),
+            b"wrong".len(),
+        )
+        .unwrap_err();
+        assert_eq!(err, PrivatePemError::WrongPassphrase);
     }
 }

@@ -3751,16 +3751,18 @@ sshkey_parse_private_pem_fileblob_rust(struct sshbuf *blob, int type,
 {
 	struct sshkey *prv = NULL;
 	int r = SSH_ERR_INVALID_FORMAT;
+	int parse_status, saw_wrong_passphrase = 0;
+	size_t passphrase_len = passphrase != NULL ? strlen(passphrase) : 0;
 
 	if (keyp != NULL)
 		*keyp = NULL;
-	if (passphrase != NULL && *passphrase != '\0')
-		return SSH_ERR_INVALID_FORMAT;
 	if (type == KEY_UNSPEC || type == KEY_ECDSA) {
 		if ((prv = sshkey_new(KEY_UNSPEC)) == NULL)
 			return SSH_ERR_ALLOC_FAIL;
-		prv->pkey = ossh_rust_ecdsa_parse_private_pem(sshbuf_ptr(blob),
-		    sshbuf_len(blob));
+		parse_status = OSSH_RUST_PARSE_STATUS_INVALID_FORMAT;
+		prv->pkey = ossh_rust_ecdsa_parse_private_pem_passphrase(
+		    sshbuf_ptr(blob), sshbuf_len(blob), (const uint8_t *)passphrase,
+		    passphrase_len, &parse_status);
 		if (prv->pkey != NULL) {
 			prv->type = KEY_ECDSA;
 			prv->ecdsa_nid = ossh_rust_ecdsa_curve_nid(prv->pkey);
@@ -3772,14 +3774,18 @@ sshkey_parse_private_pem_fileblob_rust(struct sshbuf *blob, int type,
 			}
 			return 0;
 		}
+		if (parse_status == OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE)
+			saw_wrong_passphrase = 1;
 		sshkey_free(prv);
 		prv = NULL;
 	}
 	if (type == KEY_UNSPEC || type == KEY_RSA) {
 		if ((prv = sshkey_new(KEY_UNSPEC)) == NULL)
 			return SSH_ERR_ALLOC_FAIL;
-		prv->pkey = ossh_rust_rsa_parse_private_pem(sshbuf_ptr(blob),
-		    sshbuf_len(blob));
+		parse_status = OSSH_RUST_PARSE_STATUS_INVALID_FORMAT;
+		prv->pkey = ossh_rust_rsa_parse_private_pem_passphrase(
+		    sshbuf_ptr(blob), sshbuf_len(blob), (const uint8_t *)passphrase,
+		    passphrase_len, &parse_status);
 		if (prv->pkey != NULL) {
 			prv->type = KEY_RSA;
 			if ((r = sshkey_check_rsa_length(prv, 0)) != 0)
@@ -3790,7 +3796,11 @@ sshkey_parse_private_pem_fileblob_rust(struct sshbuf *blob, int type,
 			}
 			return 0;
 		}
+		if (parse_status == OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE)
+			saw_wrong_passphrase = 1;
 	}
+	if (saw_wrong_passphrase)
+		r = SSH_ERR_KEY_WRONG_PASSPHRASE;
  out:
 	sshkey_free(prv);
 	return r;
