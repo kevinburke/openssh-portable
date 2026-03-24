@@ -78,9 +78,9 @@ extern char *__progname;
 
 /* Default files to add */
 static char *default_files[] = {
-#ifdef WITH_OPENSSL
-		_PATH_SSH_CLIENT_ID_RSA,
-#endif /* WITH_OPENSSL */
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
+			_PATH_SSH_CLIENT_ID_RSA,
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 #if defined(OPENSSL_HAS_ECC) || defined(WITH_RUST_CRYPTO)
 		_PATH_SSH_CLIENT_ID_ECDSA,
 #endif
