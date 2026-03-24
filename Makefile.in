@@ -76,6 +76,7 @@ MKDIR_P=@MKDIR_P@
 RUST_CRYPTO_ENABLED=@RUST_CRYPTO_ENABLED@
 RUST_CRYPTO_BUILD_DEPS=@RUST_CRYPTO_BUILD_DEPS@
 RUST_CRYPTO_LINK_LIB=@RUST_CRYPTO_LINK_LIB@
+RUST_CRYPTO_SK_DUMMY_OBJS=@RUST_CRYPTO_SK_DUMMY_OBJS@
 RUST_CRYPTO_MANIFEST=$(srcdir)/rust/crypto/Cargo.toml
 RUST_CRYPTO_TARGET_DIR=$(BUILDDIR)/rust/crypto-target
 RUST_CRYPTO_LIB=$(RUST_CRYPTO_TARGET_DIR)/release/librust_crypto.a
@@ -797,7 +798,7 @@ regress/unittests/utf8/test_utf8$(EXEEXT): \
 SK_DUMMY_OBJS=\
 	regress/misc/sk-dummy/sk-dummy.lo \
 	regress/misc/sk-dummy/fatal.lo \
-	ed25519.lo ed25519-openssl.lo ed25519-rust.lo
+	ed25519.lo ed25519-openssl.lo $(RUST_CRYPTO_SK_DUMMY_OBJS)
 
 SK_DUMMY_LIBRARY=@SK_DUMMY_LIBRARY@
 
