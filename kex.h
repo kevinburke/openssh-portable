@@ -145,6 +145,15 @@ struct newkeys {
 struct ssh;
 struct sshbuf;
 
+#ifdef WITH_RUST_CRYPTO
+#define RUST_ECDH_MAX_SECRET_LEN 66
+struct rust_ecdh_client_key {
+	int curve_id;
+	size_t secret_len;
+	u_char secret[RUST_ECDH_MAX_SECRET_LEN];
+};
+#endif
+
 struct kex {
 	struct newkeys	*newkeys[MODE_MAX];
 	u_int	we_need;

@@ -15,7 +15,10 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 5U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 6U
+#define OSSH_RUST_ECDH_NISTP256 1
+#define OSSH_RUST_ECDH_NISTP384 2
+#define OSSH_RUST_ECDH_NISTP521 3
 
 uint32_t ossh_rust_crypto_abi_version(void);
 const char *ossh_rust_crypto_backend_label(void);
@@ -36,6 +39,11 @@ int ossh_rust_curve25519_public_from_secret(uint8_t *public_key,
 int ossh_rust_curve25519_shared_secret(uint8_t *shared_secret,
     size_t shared_secret_len, const uint8_t *secret_key, size_t secret_key_len,
     const uint8_t *public_key, size_t public_key_len);
+int ossh_rust_ecdh_keypair(int curve_id, uint8_t *secret_key,
+    size_t secret_key_len, uint8_t *public_key, size_t public_key_len);
+int ossh_rust_ecdh_shared_secret(int curve_id, const uint8_t *secret_key,
+    size_t secret_key_len, const uint8_t *public_key, size_t public_key_len,
+    uint8_t *shared_secret, size_t shared_secret_len);
 void *ossh_rust_aesctr_init(const uint8_t *key, size_t key_len,
     const uint8_t *iv, size_t iv_len);
 int ossh_rust_aesctr_set_iv(void *ctx, const uint8_t *iv, size_t iv_len);

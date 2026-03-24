@@ -271,9 +271,9 @@ ssh_kex2(struct ssh *ssh, char *host, struct sockaddr_storage *hostaddr,
 	ssh->kex->kex[KEX_DH_GRP18_SHA512] = kex_gen_client;
 	ssh->kex->kex[KEX_DH_GEX_SHA1] = kexgex_client;
 	ssh->kex->kex[KEX_DH_GEX_SHA256] = kexgex_client;
-# ifdef OPENSSL_HAS_ECC
+#endif
+#if defined(WITH_OPENSSL) && defined(OPENSSL_HAS_ECC) || defined(WITH_RUST_CRYPTO)
 	ssh->kex->kex[KEX_ECDH_SHA2] = kex_gen_client;
-# endif
 #endif
 	ssh->kex->kex[KEX_C25519_SHA256] = kex_gen_client;
 	ssh->kex->kex[KEX_KEM_SNTRUP761X25519_SHA512] = kex_gen_client;
