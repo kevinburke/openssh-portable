@@ -44,17 +44,33 @@ impl<'a> SshWireReader<'a> {
         self.offset
     }
 
-    fn get_u32(&mut self) -> Option<u32> {
+    pub(crate) fn input_len(&self) -> usize {
+        self.input.len()
+    }
+
+    pub(crate) fn get_u32(&mut self) -> Option<u32> {
         let bytes = self.input.get(self.offset..self.offset + 4)?;
         self.offset += 4;
         Some(u32::from_be_bytes(bytes.try_into().ok()?))
     }
 
+    pub(crate) fn get_u64(&mut self) -> Option<u64> {
+        let bytes = self.input.get(self.offset..self.offset + 8)?;
+        self.offset += 8;
+        Some(u64::from_be_bytes(bytes.try_into().ok()?))
+    }
+
     pub(crate) fn get_string(&mut self) -> Option<&'a [u8]> {
-        let len = usize::try_from(self.get_u32()?).ok()?;
-        let bytes = self.input.get(self.offset..self.offset + len)?;
-        self.offset += len;
+        let (_, bytes) = self.get_string_with_offset()?;
         Some(bytes)
+    }
+
+    pub(crate) fn get_string_with_offset(&mut self) -> Option<(usize, &'a [u8])> {
+        let len = usize::try_from(self.get_u32()?).ok()?;
+        let offset = self.offset;
+        let bytes = self.input.get(offset..offset + len)?;
+        self.offset += len;
+        Some((offset, bytes))
     }
 
     pub(crate) fn get_cstring(&mut self) -> Option<&'a [u8]> {

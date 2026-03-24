@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 10U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 12U
 #define OSSH_RUST_DH_GROUP14 14
 #define OSSH_RUST_ECDH_NISTP256 1
 #define OSSH_RUST_ECDH_NISTP384 2
@@ -38,6 +38,28 @@ extern "C" {
 
 uint32_t ossh_rust_crypto_abi_version(void);
 const char *ossh_rust_crypto_backend_label(void);
+struct ossh_rust_cert_body_parse {
+	uint64_t serial;
+	uint32_t cert_type;
+	uint64_t valid_after;
+	uint64_t valid_before;
+	size_t signed_consumed;
+	size_t total_consumed;
+	size_t key_id_offset;
+	size_t key_id_len;
+	size_t principals_offset;
+	size_t principals_len;
+	size_t critical_offset;
+	size_t critical_len;
+	size_t extensions_offset;
+	size_t extensions_len;
+	size_t ca_key_offset;
+	size_t ca_key_len;
+	size_t signature_offset;
+	size_t signature_len;
+};
+int ossh_rust_cert_parse_body(const uint8_t *input, size_t input_len,
+    struct ossh_rust_cert_body_parse *out);
 void *ossh_rust_dh_group_new(int group_id);
 int ossh_rust_dh_generate_key(void *group, size_t need_bits);
 size_t ossh_rust_dh_public_len(const void *group);
@@ -82,6 +104,11 @@ int ossh_rust_ecdsa_export_public(const void *key, uint8_t *public_key,
     size_t public_key_len);
 int ossh_rust_ecdsa_export_private(const void *key, uint8_t *private_key,
     size_t private_key_len);
+int ossh_rust_ecdsa_curve_nid(const void *key);
+void *ossh_rust_ecdsa_parse_private_pem(const uint8_t *blob, size_t blob_len);
+size_t ossh_rust_ecdsa_private_pem_len(const void *key, int format);
+int ossh_rust_ecdsa_private_pem_write(const void *key, int format,
+    uint8_t *out, size_t out_len);
 int ossh_rust_ecdsa_sign_prehashed(const void *key, const uint8_t *digest,
     size_t digest_len, uint8_t *signature, size_t signature_len);
 int ossh_rust_ecdsa_verify_prehashed(const void *key, const uint8_t *digest,
@@ -103,6 +130,10 @@ size_t ossh_rust_rsa_bits(const void *key);
 size_t ossh_rust_rsa_component_len(const void *key, int component);
 int ossh_rust_rsa_export_component(const void *key, int component,
     uint8_t *out, size_t out_len);
+void *ossh_rust_rsa_parse_private_pem(const uint8_t *blob, size_t blob_len);
+size_t ossh_rust_rsa_private_pem_len(const void *key, int format);
+int ossh_rust_rsa_private_pem_write(const void *key, int format, uint8_t *out,
+    size_t out_len);
 int ossh_rust_rsa_sign_prehashed(const void *key, int hash_alg,
     const uint8_t *digest, size_t digest_len, uint8_t *signature,
     size_t signature_len);

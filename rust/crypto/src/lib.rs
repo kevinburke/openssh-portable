@@ -1,3 +1,4 @@
+mod cert;
 mod cipher;
 mod dh;
 mod digest;
@@ -9,6 +10,7 @@ mod util;
 use core::ffi::{c_char, c_int, c_void};
 use core::slice;
 
+use cert::parse_cert_body;
 use cipher::{
     aesctr_crypt, aesctr_free, aesctr_get_iv, aesctr_init, aesctr_set_iv,
     chachapoly_crypt, chachapoly_free, chachapoly_get_length, chachapoly_new,
@@ -17,8 +19,9 @@ use dh::{dh_export_public, dh_free, dh_generate_key, dh_group_new, dh_public_len
 use digest::DigestState;
 use ecdsa::{
     ecdsa_copy_public, ecdsa_equal_public, ecdsa_export_private, ecdsa_export_public,
-    ecdsa_free, ecdsa_from_private, ecdsa_from_public, ecdsa_generate,
-    ecdsa_parse_public_blob, ecdsa_sign_prehashed, ecdsa_verify_prehashed,
+    ecdsa_free, ecdsa_from_private, ecdsa_from_public, ecdsa_generate, ecdsa_curve_nid,
+    ecdsa_parse_private_pem, ecdsa_parse_public_blob, ecdsa_private_pem_len,
+    ecdsa_private_pem_write, ecdsa_sign_prehashed, ecdsa_verify_prehashed,
 };
 use kex::{
     curve25519_public_from_secret, curve25519_shared_secret, ed25519_parse_public_blob,
@@ -26,11 +29,12 @@ use kex::{
 };
 use rsa::{
     rsa_bits, rsa_component_len, rsa_copy_public, rsa_equal_public, rsa_export_component, rsa_free,
-    rsa_from_private, rsa_from_public, rsa_generate, rsa_parse_public_blob, rsa_sign_prehashed,
-    rsa_verify_prehashed,
+    rsa_from_private, rsa_from_public, rsa_generate, rsa_parse_private_pem, rsa_parse_public_blob,
+    rsa_private_pem_len, rsa_private_pem_write, rsa_sign_prehashed, rsa_verify_prehashed,
 };
+use util::{read_slice, write_prefix};
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 10;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 12;
 static BACKEND_LABEL: &[u8] = b"Rust crypto backend\0";
 
 #[unsafe(no_mangle)]
@@ -41,6 +45,68 @@ pub extern "C" fn ossh_rust_crypto_abi_version() -> u32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_crypto_backend_label() -> *const c_char {
     BACKEND_LABEL.as_ptr().cast()
+}
+
+#[repr(C)]
+pub struct RustCertBodyParse {
+    serial: u64,
+    cert_type: u32,
+    valid_after: u64,
+    valid_before: u64,
+    signed_consumed: usize,
+    total_consumed: usize,
+    key_id_offset: usize,
+    key_id_len: usize,
+    principals_offset: usize,
+    principals_len: usize,
+    critical_offset: usize,
+    critical_len: usize,
+    extensions_offset: usize,
+    extensions_len: usize,
+    ca_key_offset: usize,
+    ca_key_len: usize,
+    signature_offset: usize,
+    signature_len: usize,
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_cert_parse_body(
+    input: *const u8,
+    input_len: usize,
+    out: *mut RustCertBodyParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(input) = read_slice(input, input_len) else {
+        return -1;
+    };
+    let Some(parsed) = parse_cert_body(input) else {
+        return -1;
+    };
+    unsafe {
+        *out = RustCertBodyParse {
+            serial: parsed.serial,
+            cert_type: parsed.cert_type,
+            valid_after: parsed.valid_after,
+            valid_before: parsed.valid_before,
+            signed_consumed: parsed.signed_consumed,
+            total_consumed: parsed.total_consumed,
+            key_id_offset: parsed.key_id_offset,
+            key_id_len: parsed.key_id_len,
+            principals_offset: parsed.principals_offset,
+            principals_len: parsed.principals_len,
+            critical_offset: parsed.critical_offset,
+            critical_len: parsed.critical_len,
+            extensions_offset: parsed.extensions_offset,
+            extensions_len: parsed.extensions_len,
+            ca_key_offset: parsed.ca_key_offset,
+            ca_key_len: parsed.ca_key_len,
+            signature_offset: parsed.signature_offset,
+            signature_len: parsed.signature_len,
+        };
+    }
+    0
 }
 
 #[unsafe(no_mangle)]
@@ -345,6 +411,34 @@ pub extern "C" fn ossh_rust_ecdsa_export_private(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_curve_nid(key: *const c_void) -> c_int {
+    ecdsa_curve_nid(key)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_parse_private_pem(
+    blob: *const u8,
+    blob_len: usize,
+) -> *mut c_void {
+    ecdsa_parse_private_pem(blob, blob_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_private_pem_len(key: *const c_void, format: c_int) -> usize {
+    ecdsa_private_pem_len(key, format)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_private_pem_write(
+    key: *const c_void,
+    format: c_int,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    ecdsa_private_pem_write(key, format, out, out_len)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_ecdsa_sign_prehashed(
     key: *const c_void,
     digest: *const u8,
@@ -454,6 +548,37 @@ pub extern "C" fn ossh_rust_rsa_export_component(
     out_len: usize,
 ) -> c_int {
     rsa_export_component(key, component, out, out_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_parse_private_pem(
+    blob: *const u8,
+    blob_len: usize,
+) -> *mut c_void {
+    rsa_parse_private_pem(blob, blob_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_private_pem_len(key: *const c_void, format: c_int) -> usize {
+    rsa_private_pem_len(key, format)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_private_pem_write(
+    key: *const c_void,
+    format: c_int,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    rsa_private_pem_write(key, format, out, out_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_write_prefix(out: *mut u8, out_len: usize, src: *const u8, src_len: usize) -> c_int {
+    let Some(src) = read_slice(src, src_len) else {
+        return -1;
+    };
+    write_prefix(out, out_len, src)
 }
 
 #[unsafe(no_mangle)]
