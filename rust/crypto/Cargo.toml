@@ -22,6 +22,8 @@ p521 = { version = "0.13.3", default-features = false, features = ["ecdh", "ecds
 poly1305 = { version = "0.8.0", default-features = false }
 # Releases: https://crates.io/crates/rsa
 rsa = { version = "0.9.8", default-features = false }
+# Releases: https://crates.io/crates/num-bigint-dig
+num-bigint-dig = { version = "0.8.6", default-features = false }
 # Releases: https://crates.io/crates/rand_core
 rand_core = { version = "0.6.4", default-features = false, features = ["getrandom"] }
 # Releases: https://crates.io/crates/sha1
