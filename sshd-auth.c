@@ -833,10 +833,10 @@ do_ssh2_kex(struct ssh *ssh)
 	kex->kex[KEX_DH_GRP18_SHA512] = kex_gen_server;
 	kex->kex[KEX_DH_GEX_SHA1] = kexgex_server;
 	kex->kex[KEX_DH_GEX_SHA256] = kexgex_server;
-# ifdef OPENSSL_HAS_ECC
-	kex->kex[KEX_ECDH_SHA2] = kex_gen_server;
-# endif /* OPENSSL_HAS_ECC */
 #endif /* WITH_OPENSSL */
+#if defined(WITH_OPENSSL) && defined(OPENSSL_HAS_ECC) || defined(WITH_RUST_CRYPTO)
+	kex->kex[KEX_ECDH_SHA2] = kex_gen_server;
+#endif
 	kex->kex[KEX_C25519_SHA256] = kex_gen_server;
 	kex->kex[KEX_KEM_SNTRUP761X25519_SHA512] = kex_gen_server;
 	kex->kex[KEX_KEM_MLKEM768X25519_SHA256] = kex_gen_server;
