@@ -1,9 +1,11 @@
 use core::ffi::{c_char, c_int, c_void};
 use core::slice;
+use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
+use aes::{Aes128, Aes192, Aes256};
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 3;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 4;
 const SSH_DIGEST_SHA256: c_int = 2;
 const SSH_DIGEST_SHA384: c_int = 3;
 const SSH_DIGEST_SHA512: c_int = 4;
@@ -19,6 +21,7 @@ const ED25519_PUBLIC_KEY_LENGTH: usize = 32;
 const ED25519_SECRET_KEY_LENGTH: usize = 64;
 const ED25519_SIGNATURE_LENGTH: usize = 64;
 const CURVE25519_KEY_LENGTH: usize = 32;
+const AES_BLOCK_SIZE: usize = 16;
 
 const K256: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
@@ -85,6 +88,17 @@ enum DigestState {
     Sha256(Sha256State),
     Sha384(Sha512State),
     Sha512(Sha512State),
+}
+
+enum AesCipher {
+    Aes128(Aes128),
+    Aes192(Aes192),
+    Aes256(Aes256),
+}
+
+struct AesCtrState {
+    cipher: AesCipher,
+    ctr: [u8; AES_BLOCK_SIZE],
 }
 
 impl Sha256State {
@@ -266,6 +280,77 @@ impl DigestState {
                 state.buffer_len = 0;
                 state.bit_len = 0;
             }
+        }
+    }
+}
+
+impl AesCipher {
+    fn new(key: &[u8]) -> Option<Self> {
+        match key.len() {
+            16 => Some(Self::Aes128(Aes128::new_from_slice(key).ok()?)),
+            24 => Some(Self::Aes192(Aes192::new_from_slice(key).ok()?)),
+            32 => Some(Self::Aes256(Aes256::new_from_slice(key).ok()?)),
+            _ => None,
+        }
+    }
+
+    fn encrypt_block(&self, block: &mut [u8; AES_BLOCK_SIZE]) {
+        let block = GenericArray::from_mut_slice(block);
+        match self {
+            Self::Aes128(cipher) => cipher.encrypt_block(block),
+            Self::Aes192(cipher) => cipher.encrypt_block(block),
+            Self::Aes256(cipher) => cipher.encrypt_block(block),
+        }
+    }
+}
+
+impl AesCtrState {
+    fn new(key: &[u8], iv: [u8; AES_BLOCK_SIZE]) -> Option<Self> {
+        Some(Self {
+            cipher: AesCipher::new(key)?,
+            ctr: iv,
+        })
+    }
+
+    fn set_iv(&mut self, iv: [u8; AES_BLOCK_SIZE]) {
+        self.ctr = iv;
+    }
+
+    fn get_iv(&self) -> [u8; AES_BLOCK_SIZE] {
+        self.ctr
+    }
+
+    fn crypt(&mut self, src: *const u8, dst: *mut u8, len: usize) -> Result<(), ()> {
+        if len == 0 {
+            return Ok(());
+        }
+        if src.is_null() || dst.is_null() {
+            return Err(());
+        }
+
+        let mut offset = 0usize;
+        while offset < len {
+            let mut keystream = self.ctr;
+            self.cipher.encrypt_block(&mut keystream);
+            aesctr_inc(&mut self.ctr);
+
+            let take = core::cmp::min(AES_BLOCK_SIZE, len - offset);
+            for i in 0..take {
+                unsafe {
+                    *dst.add(offset + i) = *src.add(offset + i) ^ keystream[i];
+                }
+            }
+            offset += take;
+        }
+        Ok(())
+    }
+}
+
+fn aesctr_inc(ctr: &mut [u8; AES_BLOCK_SIZE]) {
+    for byte in ctr.iter_mut().rev() {
+        *byte = byte.wrapping_add(1);
+        if *byte != 0 {
+            break;
         }
     }
 }
@@ -635,10 +720,87 @@ pub extern "C" fn ossh_rust_curve25519_shared_secret(
     write_prefix(shared_secret, shared_secret_len, &shared)
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_aesctr_init(
+    key: *const u8,
+    key_len: usize,
+    iv: *const u8,
+    iv_len: usize,
+) -> *mut c_void {
+    if key.is_null() {
+        return core::ptr::null_mut();
+    }
+    let key = unsafe { slice::from_raw_parts(key, key_len) };
+    let iv = match read_array::<AES_BLOCK_SIZE>(iv, iv_len) {
+        Some(iv) => iv,
+        None => return core::ptr::null_mut(),
+    };
+    match AesCtrState::new(key, iv) {
+        Some(state) => Box::into_raw(Box::new(state)).cast(),
+        None => core::ptr::null_mut(),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_aesctr_set_iv(
+    ctx: *mut c_void,
+    iv: *const u8,
+    iv_len: usize,
+) -> c_int {
+    if ctx.is_null() {
+        return -1;
+    }
+    let iv = match read_array::<AES_BLOCK_SIZE>(iv, iv_len) {
+        Some(iv) => iv,
+        None => return -1,
+    };
+    let ctx = unsafe { &mut *(ctx.cast::<AesCtrState>()) };
+    ctx.set_iv(iv);
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_aesctr_get_iv(
+    ctx: *const c_void,
+    iv: *mut u8,
+    iv_len: usize,
+) -> c_int {
+    if ctx.is_null() {
+        return -1;
+    }
+    let ctx = unsafe { &*(ctx.cast::<AesCtrState>()) };
+    write_prefix(iv, iv_len, &ctx.get_iv())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_aesctr_crypt(
+    ctx: *mut c_void,
+    src: *const u8,
+    dst: *mut u8,
+    len: usize,
+) -> c_int {
+    if ctx.is_null() {
+        return -1;
+    }
+    let ctx = unsafe { &mut *(ctx.cast::<AesCtrState>()) };
+    if ctx.crypt(src, dst, len).is_err() {
+        return -1;
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_aesctr_free(ctx: *mut c_void) {
+    if ctx.is_null() {
+        return;
+    }
+    let _ = unsafe { Box::from_raw(ctx.cast::<AesCtrState>()) };
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        x25519, DigestState, Signature, SigningKey, VerifyingKey,
+        x25519, AesCtrState, DigestState, Signature, SigningKey, VerifyingKey,
         X25519_BASEPOINT_BYTES, SHA256_DIGEST_LENGTH, SHA384_DIGEST_LENGTH,
         SHA512_DIGEST_LENGTH,
     };
@@ -797,5 +959,94 @@ mod tests {
         assert_eq!(x25519(bob_secret, X25519_BASEPOINT_BYTES).as_slice(), bob_public.as_slice());
         assert_eq!(x25519(alice_secret, bob_public.as_slice().try_into().unwrap()).as_slice(), shared.as_slice());
         assert_eq!(x25519(bob_secret, alice_public.as_slice().try_into().unwrap()).as_slice(), shared.as_slice());
+    }
+
+    #[test]
+    fn aes128_ctr_nist_vector() {
+        let key = decode_hex(
+            "2b7e151628aed2a6abf7158809cf4f3c",
+        );
+        let iv: [u8; 16] = decode_hex(
+            "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+        )
+        .try_into()
+        .unwrap();
+        let plaintext = decode_hex(
+            "6bc1bee22e409f96e93d7e117393172a\
+             ae2d8a571e03ac9c9eb76fac45af8e51\
+             30c81c46a35ce411e5fbc1191a0a52ef\
+             f69f2445df4f9b17ad2b417be66c3710",
+        );
+        let expected = decode_hex(
+            "874d6191b620e3261bef6864990db6ce\
+             9806f66b7970fdff8617187bb9fffdff\
+             5ae4df3edbd5d35e5b4f09020db03eab\
+             1e031dda2fbe03d1792170a0f3009cee",
+        );
+        let mut out = vec![0u8; plaintext.len()];
+        let mut state = AesCtrState::new(&key, iv).unwrap();
+
+        state.crypt(plaintext.as_ptr(), out.as_mut_ptr(), plaintext.len()).unwrap();
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn aes192_ctr_nist_vector() {
+        let key = decode_hex(
+            "8e73b0f7da0e6452c810f32b809079e5\
+             62f8ead2522c6b7b",
+        );
+        let iv: [u8; 16] = decode_hex(
+            "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+        )
+        .try_into()
+        .unwrap();
+        let plaintext = decode_hex(
+            "6bc1bee22e409f96e93d7e117393172a\
+             ae2d8a571e03ac9c9eb76fac45af8e51\
+             30c81c46a35ce411e5fbc1191a0a52ef\
+             f69f2445df4f9b17ad2b417be66c3710",
+        );
+        let expected = decode_hex(
+            "1abc932417521ca24f2b0459fe7e6e0b\
+             090339ec0aa6faefd5ccc2c6f4ce8e94\
+             1e36b26bd1ebc670d1bd1d665620abf7\
+             4f78a7f6d29809585a97daec58c6b050",
+        );
+        let mut out = vec![0u8; plaintext.len()];
+        let mut state = AesCtrState::new(&key, iv).unwrap();
+
+        state.crypt(plaintext.as_ptr(), out.as_mut_ptr(), plaintext.len()).unwrap();
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn aes256_ctr_nist_vector() {
+        let key = decode_hex(
+            "603deb1015ca71be2b73aef0857d7781\
+             1f352c073b6108d72d9810a30914dff4",
+        );
+        let iv: [u8; 16] = decode_hex(
+            "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+        )
+        .try_into()
+        .unwrap();
+        let plaintext = decode_hex(
+            "6bc1bee22e409f96e93d7e117393172a\
+             ae2d8a571e03ac9c9eb76fac45af8e51\
+             30c81c46a35ce411e5fbc1191a0a52ef\
+             f69f2445df4f9b17ad2b417be66c3710",
+        );
+        let expected = decode_hex(
+            "601ec313775789a5b7a7f504bbf3d228\
+             f443e3ca4d62b59aca84e990cacaf5c5\
+             2b0930daa23de94ce87017ba2d84988d\
+             dfc9c58db67aada613c2dd08457941a6",
+        );
+        let mut out = vec![0u8; plaintext.len()];
+        let mut state = AesCtrState::new(&key, iv).unwrap();
+
+        state.crypt(plaintext.as_ptr(), out.as_mut_ptr(), plaintext.len()).unwrap();
+        assert_eq!(out, expected);
     }
 }

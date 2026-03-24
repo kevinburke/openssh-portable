@@ -424,7 +424,7 @@ cipher_free(struct sshcipher_ctx *cc)
 		chachapoly_free(cc->cp_ctx);
 		cc->cp_ctx = NULL;
 	} else if ((cc->cipher->flags & CFLAG_AESCTR) != 0)
-		explicit_bzero(&cc->ac_ctx, sizeof(cc->ac_ctx));
+		aesctr_free(&cc->ac_ctx);
 #ifdef WITH_OPENSSL
 	EVP_CIPHER_CTX_free(cc->evp);
 	cc->evp = NULL;
