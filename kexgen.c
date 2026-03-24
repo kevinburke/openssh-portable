@@ -102,7 +102,7 @@ kex_gen_client(struct ssh *ssh)
 	int r;
 
 	switch (kex->kex_type) {
-#ifdef WITH_OPENSSL
+	#ifdef WITH_OPENSSL
 	case KEX_DH_GRP1_SHA1:
 	case KEX_DH_GRP14_SHA1:
 	case KEX_DH_GRP14_SHA256:
@@ -110,8 +110,14 @@ kex_gen_client(struct ssh *ssh)
 	case KEX_DH_GRP18_SHA512:
 		r = kex_dh_keypair(kex);
 		break;
-#endif /* WITH_OPENSSL */
-#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
+	#endif /* WITH_OPENSSL */
+	#ifdef WITH_RUST_CRYPTO
+	case KEX_DH_GRP14_SHA1:
+	case KEX_DH_GRP14_SHA256:
+		r = kex_dh_keypair(kex);
+		break;
+	#endif /* WITH_RUST_CRYPTO */
+	#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	case KEX_ECDH_SHA2:
 		r = kex_ecdh_keypair(kex);
 		break;
@@ -178,7 +184,7 @@ input_kex_gen_reply(int type, uint32_t seq, struct ssh *ssh)
 
 	/* compute shared secret */
 	switch (kex->kex_type) {
-#ifdef WITH_OPENSSL
+	#ifdef WITH_OPENSSL
 	case KEX_DH_GRP1_SHA1:
 	case KEX_DH_GRP14_SHA1:
 	case KEX_DH_GRP14_SHA256:
@@ -186,8 +192,14 @@ input_kex_gen_reply(int type, uint32_t seq, struct ssh *ssh)
 	case KEX_DH_GRP18_SHA512:
 		r = kex_dh_dec(kex, server_blob, &shared_secret);
 		break;
-#endif /* WITH_OPENSSL */
-#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
+	#endif /* WITH_OPENSSL */
+	#ifdef WITH_RUST_CRYPTO
+	case KEX_DH_GRP14_SHA1:
+	case KEX_DH_GRP14_SHA256:
+		r = kex_dh_dec(kex, server_blob, &shared_secret);
+		break;
+	#endif /* WITH_RUST_CRYPTO */
+	#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	case KEX_ECDH_SHA2:
 		r = kex_ecdh_dec(kex, server_blob, &shared_secret);
 		break;
@@ -301,7 +313,7 @@ input_kex_gen_init(int type, uint32_t seq, struct ssh *ssh)
 
 	/* compute shared secret */
 	switch (kex->kex_type) {
-#ifdef WITH_OPENSSL
+	#ifdef WITH_OPENSSL
 	case KEX_DH_GRP1_SHA1:
 	case KEX_DH_GRP14_SHA1:
 	case KEX_DH_GRP14_SHA256:
@@ -310,8 +322,15 @@ input_kex_gen_init(int type, uint32_t seq, struct ssh *ssh)
 		r = kex_dh_enc(kex, client_pubkey, &server_pubkey,
 		    &shared_secret);
 		break;
-#endif /* WITH_OPENSSL */
-#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
+	#endif /* WITH_OPENSSL */
+	#ifdef WITH_RUST_CRYPTO
+	case KEX_DH_GRP14_SHA1:
+	case KEX_DH_GRP14_SHA256:
+		r = kex_dh_enc(kex, client_pubkey, &server_pubkey,
+		    &shared_secret);
+		break;
+	#endif /* WITH_RUST_CRYPTO */
+	#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	case KEX_ECDH_SHA2:
 		r = kex_ecdh_enc(kex, client_pubkey, &server_pubkey,
 		    &shared_secret);
