@@ -4,6 +4,7 @@ mod dh;
 mod digest;
 mod ecdsa;
 mod kex;
+mod private_pem;
 mod rsa;
 mod util;
 
@@ -20,22 +21,42 @@ use digest::DigestState;
 use ecdsa::{
     ecdsa_copy_public, ecdsa_equal_public, ecdsa_export_private, ecdsa_export_public,
     ecdsa_free, ecdsa_from_private, ecdsa_from_public, ecdsa_generate, ecdsa_curve_nid,
-    ecdsa_parse_private_pem, ecdsa_parse_public_blob, ecdsa_private_pem_len,
+    ecdsa_parse_private_pem, ecdsa_parse_private_pem_with_passphrase, ecdsa_parse_public_blob, ecdsa_private_pem_len,
     ecdsa_private_pem_write, ecdsa_sign_prehashed, ecdsa_verify_prehashed,
 };
 use kex::{
     curve25519_public_from_secret, curve25519_shared_secret, ed25519_parse_public_blob,
     ed25519_public_from_seed, ed25519_sign, ed25519_verify, EcdhCurve,
 };
+use private_pem::PrivatePemError;
 use rsa::{
     rsa_bits, rsa_component_len, rsa_copy_public, rsa_equal_public, rsa_export_component, rsa_free,
-    rsa_from_private, rsa_from_public, rsa_generate, rsa_parse_private_pem, rsa_parse_public_blob,
+    rsa_from_private, rsa_from_public, rsa_generate, rsa_parse_private_pem,
+    rsa_parse_private_pem_with_passphrase, rsa_parse_public_blob,
     rsa_private_pem_len, rsa_private_pem_write, rsa_sign_prehashed, rsa_verify_prehashed,
 };
 use util::{read_slice, write_prefix};
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 12;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 13;
+const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
+const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
+const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
 static BACKEND_LABEL: &[u8] = b"Rust crypto backend\0";
+
+fn store_parse_status(status: *mut c_int, value: c_int) {
+    if !status.is_null() {
+        unsafe {
+            *status = value;
+        }
+    }
+}
+
+fn parse_status(err: PrivatePemError) -> c_int {
+    match err {
+        PrivatePemError::InvalidFormat => OSSH_RUST_PARSE_STATUS_INVALID_FORMAT,
+        PrivatePemError::WrongPassphrase => OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE,
+    }
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_crypto_abi_version() -> u32 {
@@ -424,6 +445,27 @@ pub extern "C" fn ossh_rust_ecdsa_parse_private_pem(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdsa_parse_private_pem_passphrase(
+    blob: *const u8,
+    blob_len: usize,
+    passphrase: *const u8,
+    passphrase_len: usize,
+    status: *mut c_int,
+) -> *mut c_void {
+    store_parse_status(status, OSSH_RUST_PARSE_STATUS_INVALID_FORMAT);
+    match ecdsa_parse_private_pem_with_passphrase(blob, blob_len, passphrase, passphrase_len) {
+        Ok(key) => {
+            store_parse_status(status, OSSH_RUST_PARSE_STATUS_OK);
+            key
+        }
+        Err(err) => {
+            store_parse_status(status, parse_status(err));
+            core::ptr::null_mut()
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_ecdsa_private_pem_len(key: *const c_void, format: c_int) -> usize {
     ecdsa_private_pem_len(key, format)
 }
@@ -556,6 +598,27 @@ pub extern "C" fn ossh_rust_rsa_parse_private_pem(
     blob_len: usize,
 ) -> *mut c_void {
     rsa_parse_private_pem(blob, blob_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rsa_parse_private_pem_passphrase(
+    blob: *const u8,
+    blob_len: usize,
+    passphrase: *const u8,
+    passphrase_len: usize,
+    status: *mut c_int,
+) -> *mut c_void {
+    store_parse_status(status, OSSH_RUST_PARSE_STATUS_INVALID_FORMAT);
+    match rsa_parse_private_pem_with_passphrase(blob, blob_len, passphrase, passphrase_len) {
+        Ok(key) => {
+            store_parse_status(status, OSSH_RUST_PARSE_STATUS_OK);
+            key
+        }
+        Err(err) => {
+            store_parse_status(status, parse_status(err));
+            core::ptr::null_mut()
+        }
+    }
 }
 
 #[unsafe(no_mangle)]

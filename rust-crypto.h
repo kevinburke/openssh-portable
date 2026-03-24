@@ -15,7 +15,10 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 12U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 13U
+#define OSSH_RUST_PARSE_STATUS_OK 0
+#define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
+#define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
 #define OSSH_RUST_DH_GROUP14 14
 #define OSSH_RUST_ECDH_NISTP256 1
 #define OSSH_RUST_ECDH_NISTP384 2
@@ -106,6 +109,9 @@ int ossh_rust_ecdsa_export_private(const void *key, uint8_t *private_key,
     size_t private_key_len);
 int ossh_rust_ecdsa_curve_nid(const void *key);
 void *ossh_rust_ecdsa_parse_private_pem(const uint8_t *blob, size_t blob_len);
+void *ossh_rust_ecdsa_parse_private_pem_passphrase(const uint8_t *blob,
+    size_t blob_len, const uint8_t *passphrase, size_t passphrase_len,
+    int *status);
 size_t ossh_rust_ecdsa_private_pem_len(const void *key, int format);
 int ossh_rust_ecdsa_private_pem_write(const void *key, int format,
     uint8_t *out, size_t out_len);
@@ -131,6 +137,9 @@ size_t ossh_rust_rsa_component_len(const void *key, int component);
 int ossh_rust_rsa_export_component(const void *key, int component,
     uint8_t *out, size_t out_len);
 void *ossh_rust_rsa_parse_private_pem(const uint8_t *blob, size_t blob_len);
+void *ossh_rust_rsa_parse_private_pem_passphrase(const uint8_t *blob,
+    size_t blob_len, const uint8_t *passphrase, size_t passphrase_len,
+    int *status);
 size_t ossh_rust_rsa_private_pem_len(const void *key, int format);
 int ossh_rust_rsa_private_pem_write(const void *key, int format, uint8_t *out,
     size_t out_len);
