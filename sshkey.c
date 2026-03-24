@@ -94,23 +94,24 @@ extern const struct sshkey_impl sshkey_ed25519_sk_cert_impl;
 extern const struct sshkey_impl sshkey_mldsa44_ed25519_impl;
 extern const struct sshkey_impl sshkey_mldsa44_ed25519_cert_impl;
 #endif /* USE_MLDSA */
-#ifdef WITH_OPENSSL
-# ifdef OPENSSL_HAS_ECC
-#  ifdef ENABLE_SK
-extern const struct sshkey_impl sshkey_ecdsa_sk_impl;
-extern const struct sshkey_impl sshkey_ecdsa_sk_cert_impl;
-extern const struct sshkey_impl sshkey_ecdsa_sk_webauthn_impl;
-extern const struct sshkey_impl sshkey_ecdsa_sk_webauthn_cert_impl;
-#  endif /* ENABLE_SK */
+#if (defined(WITH_OPENSSL) && defined(OPENSSL_HAS_ECC)) || \
+    defined(WITH_RUST_CRYPTO)
 extern const struct sshkey_impl sshkey_ecdsa_nistp256_impl;
 extern const struct sshkey_impl sshkey_ecdsa_nistp256_cert_impl;
 extern const struct sshkey_impl sshkey_ecdsa_nistp384_impl;
 extern const struct sshkey_impl sshkey_ecdsa_nistp384_cert_impl;
-#  ifdef OPENSSL_HAS_NISTP521
+# if defined(WITH_RUST_CRYPTO) || defined(OPENSSL_HAS_NISTP521)
 extern const struct sshkey_impl sshkey_ecdsa_nistp521_impl;
 extern const struct sshkey_impl sshkey_ecdsa_nistp521_cert_impl;
-#  endif /* OPENSSL_HAS_NISTP521 */
-# endif /* OPENSSL_HAS_ECC */
+# endif /* WITH_RUST_CRYPTO || OPENSSL_HAS_NISTP521 */
+# if defined(WITH_OPENSSL) && defined(OPENSSL_HAS_ECC) && defined(ENABLE_SK)
+extern const struct sshkey_impl sshkey_ecdsa_sk_impl;
+extern const struct sshkey_impl sshkey_ecdsa_sk_cert_impl;
+extern const struct sshkey_impl sshkey_ecdsa_sk_webauthn_impl;
+extern const struct sshkey_impl sshkey_ecdsa_sk_webauthn_cert_impl;
+# endif /* WITH_OPENSSL && OPENSSL_HAS_ECC && ENABLE_SK */
+#endif /* WITH_OPENSSL && OPENSSL_HAS_ECC || WITH_RUST_CRYPTO */
+#ifdef WITH_OPENSSL
 extern const struct sshkey_impl sshkey_rsa_impl;
 extern const struct sshkey_impl sshkey_rsa_cert_impl;
 extern const struct sshkey_impl sshkey_rsa_sha256_impl;
@@ -130,23 +131,24 @@ const struct sshkey_impl * const keyimpls[] = {
 	&sshkey_mldsa44_ed25519_impl,
 	&sshkey_mldsa44_ed25519_cert_impl,
 #endif /* USE_MLDSA */
-#ifdef WITH_OPENSSL
-# ifdef OPENSSL_HAS_ECC
+#if (defined(WITH_OPENSSL) && defined(OPENSSL_HAS_ECC)) || \
+    defined(WITH_RUST_CRYPTO)
 	&sshkey_ecdsa_nistp256_impl,
 	&sshkey_ecdsa_nistp256_cert_impl,
 	&sshkey_ecdsa_nistp384_impl,
 	&sshkey_ecdsa_nistp384_cert_impl,
-#  ifdef OPENSSL_HAS_NISTP521
+# if defined(WITH_RUST_CRYPTO) || defined(OPENSSL_HAS_NISTP521)
 	&sshkey_ecdsa_nistp521_impl,
 	&sshkey_ecdsa_nistp521_cert_impl,
-#  endif /* OPENSSL_HAS_NISTP521 */
-#  ifdef ENABLE_SK
+# endif /* WITH_RUST_CRYPTO || OPENSSL_HAS_NISTP521 */
+# if defined(WITH_OPENSSL) && defined(OPENSSL_HAS_ECC) && defined(ENABLE_SK)
 	&sshkey_ecdsa_sk_impl,
 	&sshkey_ecdsa_sk_cert_impl,
 	&sshkey_ecdsa_sk_webauthn_impl,
 	&sshkey_ecdsa_sk_webauthn_cert_impl,
-#  endif /* ENABLE_SK */
-# endif /* OPENSSL_HAS_ECC */
+# endif /* WITH_OPENSSL && OPENSSL_HAS_ECC && ENABLE_SK */
+#endif
+#ifdef WITH_OPENSSL
 	&sshkey_rsa_impl,
 	&sshkey_rsa_cert_impl,
 	&sshkey_rsa_sha256_impl,
@@ -571,7 +573,10 @@ sshkey_pkey_digest_verify(EVP_PKEY *pkey, int hash_alg, const u_char *data,
 	return ret;
 }
 
+#endif /* WITH_OPENSSL */
+
 /* XXX: these are really begging for a table-driven approach */
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 int
 sshkey_curve_name_to_nid(const char *name)
 {
@@ -579,10 +584,10 @@ sshkey_curve_name_to_nid(const char *name)
 		return NID_X9_62_prime256v1;
 	else if (strcmp(name, "nistp384") == 0)
 		return NID_secp384r1;
-# ifdef OPENSSL_HAS_NISTP521
+# if defined(OPENSSL_HAS_NISTP521) || defined(WITH_RUST_CRYPTO)
 	else if (strcmp(name, "nistp521") == 0)
 		return NID_secp521r1;
-# endif /* OPENSSL_HAS_NISTP521 */
+# endif /* OPENSSL_HAS_NISTP521 || WITH_RUST_CRYPTO */
 	else
 		return -1;
 }
@@ -595,10 +600,10 @@ sshkey_curve_nid_to_bits(int nid)
 		return 256;
 	case NID_secp384r1:
 		return 384;
-# ifdef OPENSSL_HAS_NISTP521
+# if defined(OPENSSL_HAS_NISTP521) || defined(WITH_RUST_CRYPTO)
 	case NID_secp521r1:
 		return 521;
-# endif /* OPENSSL_HAS_NISTP521 */
+# endif /* OPENSSL_HAS_NISTP521 || WITH_RUST_CRYPTO */
 	default:
 		return 0;
 	}
@@ -612,10 +617,10 @@ sshkey_ecdsa_bits_to_nid(int bits)
 		return NID_X9_62_prime256v1;
 	case 384:
 		return NID_secp384r1;
-# ifdef OPENSSL_HAS_NISTP521
+# if defined(OPENSSL_HAS_NISTP521) || defined(WITH_RUST_CRYPTO)
 	case 521:
 		return NID_secp521r1;
-# endif /* OPENSSL_HAS_NISTP521 */
+# endif /* OPENSSL_HAS_NISTP521 || WITH_RUST_CRYPTO */
 	default:
 		return -1;
 	}
@@ -629,10 +634,10 @@ sshkey_curve_nid_to_name(int nid)
 		return "nistp256";
 	case NID_secp384r1:
 		return "nistp384";
-# ifdef OPENSSL_HAS_NISTP521
+# if defined(OPENSSL_HAS_NISTP521) || defined(WITH_RUST_CRYPTO)
 	case NID_secp521r1:
 		return "nistp521";
-# endif /* OPENSSL_HAS_NISTP521 */
+# endif /* OPENSSL_HAS_NISTP521 || WITH_RUST_CRYPTO */
 	default:
 		return NULL;
 	}
@@ -654,7 +659,7 @@ sshkey_ec_nid_to_hash_alg(int nid)
 	else
 		return SSH_DIGEST_SHA512;
 }
-#endif /* WITH_OPENSSL */
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 
 static void
 cert_free(struct sshkey_cert *cert)
@@ -3397,6 +3402,9 @@ sshkey_private_to_fileblob(struct sshkey *key, struct sshbuf *blob,
 	case KEY_RSA:
 	case KEY_ED25519:
 		break; /* see below */
+#elif defined(WITH_RUST_CRYPTO)
+	case KEY_ECDSA:
+	case KEY_ED25519:
 #else /* WITH_OPENSSL */
 	case KEY_ED25519:
 #endif /* WITH_OPENSSL */
