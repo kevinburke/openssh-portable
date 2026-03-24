@@ -8,6 +8,7 @@ publish = false
 crate-type = ["staticlib"]
 
 [dependencies]
+aes = { version = "0.8.4", default-features = false }
 ed25519-dalek = { version = "2.1.1", default-features = false }
 x25519-dalek = { version = "2.0.1", default-features = false }
 
