@@ -92,11 +92,11 @@ check(struct hostkey_foreach_line *l, void *_ctx)
 		    expected->no_parse_keytype == KEY_ECDSA)
 			skip = 1;
 #endif /* !OPENSSL_HAS_ECC && !WITH_RUST_CRYPTO */
-#ifndef WITH_OPENSSL
+#if !defined(WITH_OPENSSL) && !defined(WITH_RUST_CRYPTO)
 		if (expected->l.keytype == KEY_RSA ||
 		    expected->no_parse_keytype == KEY_RSA)
 			skip = 1;
-#endif /* WITH_OPENSSL */
+#endif /* !WITH_OPENSSL && !WITH_RUST_CRYPTO */
 	if (skip) {
 		expected_status = HKF_STATUS_INVALID;
 		expected_keytype = KEY_UNSPEC;
@@ -151,12 +151,12 @@ prepare_expected(struct expected *expected, size_t n)
 		if (expected[i].l.keytype == KEY_ECDSA)
 			continue;
 #endif /* !OPENSSL_HAS_ECC && !WITH_RUST_CRYPTO */
-#ifndef WITH_OPENSSL
+#if !defined(WITH_OPENSSL) && !defined(WITH_RUST_CRYPTO)
 		switch (expected[i].l.keytype) {
 		case KEY_RSA:
 			continue;
 		}
-#endif /* WITH_OPENSSL */
+#endif /* !WITH_OPENSSL && !WITH_RUST_CRYPTO */
 		path = test_data_file(expected[i].key_file);
 		r = sshkey_load_public(path, &expected[i].l.key, NULL);
 		ASSERT_INT_EQ(r, 0);

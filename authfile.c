@@ -316,8 +316,10 @@ sshkey_load_private_cert(int type, const char *filename, const char *passphrase,
 		*keyp = NULL;
 
 	switch (type) {
-#ifdef WITH_OPENSSL
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	case KEY_RSA:
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
+#ifdef WITH_OPENSSL
 	case KEY_ECDSA:
 #endif /* WITH_OPENSSL */
 	case KEY_ED25519:

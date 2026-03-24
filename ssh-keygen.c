@@ -188,7 +188,7 @@ type_bits_valid(int type, const char *name, uint32_t *bitsp)
 			if (*bitsp == 0)
 				*bitsp = DEFAULT_BITS_ECDSA;
 			break;
-#ifdef WITH_OPENSSL
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 		case KEY_RSA:
 			*bitsp = DEFAULT_BITS;
 			break;
@@ -196,15 +196,21 @@ type_bits_valid(int type, const char *name, uint32_t *bitsp)
 		}
 #endif
 	}
-#ifdef WITH_OPENSSL
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	switch (type) {
 	case KEY_RSA:
 		if (*bitsp < SSH_RSA_MINIMUM_MODULUS_SIZE)
 			fatal("Invalid RSA key length: minimum is %d bits",
 			    SSH_RSA_MINIMUM_MODULUS_SIZE);
+#ifdef WITH_OPENSSL
 		else if (*bitsp > OPENSSL_RSA_MAX_MODULUS_BITS)
 			fatal("Invalid RSA key length: maximum is %d bits",
 			    OPENSSL_RSA_MAX_MODULUS_BITS);
+#else
+		else if (*bitsp > SSHBUF_MAX_BIGNUM * 8)
+			fatal("Invalid RSA key length: maximum is %d bits",
+			    SSHBUF_MAX_BIGNUM * 8);
+#endif
 		break;
 	default:
 		break;

@@ -14,6 +14,8 @@ Rust-backed today:
 - backend label in `ssh -V`
 - SHA-256, SHA-384, and SHA-512 digests
 - Ed25519 key generation, signing, and verification
+- RSA key generation, signing, verification, and OpenSSH private/public key
+  parsing (`ssh-rsa`, `rsa-sha2-256`, `rsa-sha2-512`)
 - ECDSA key generation, signing, verification, and host-key parsing
   (`ecdsa-sha2-nistp256`, `ecdsa-sha2-nistp384`, `ecdsa-sha2-nistp521`)
 - Curve25519/X25519 key exchange helpers
@@ -33,9 +35,9 @@ Still on the existing C path today:
 - MD5 and SHA1 digest support
 - SNTRUP761 KEM code
 - MLKEM768 KEM code
-- RSA
 - classic finite-field DH / DH-GEX
 - PKCS#11 and security-key code paths
+- PEM / PKCS#8 parsing for Rust-owned RSA and ECDSA keys
 
 In other words, this is now a mixed Rust/C crypto build, not yet a
 full-Rust transport/backend replacement.
@@ -54,12 +56,15 @@ around OpenSSL.
 | --- | --- | --- | --- |
 | `aes` | AES block primitive used by the Rust AES-CTR transport path | <https://github.com/RustCrypto/block-ciphers> | <https://crates.io/crates/aes> |
 | `poly1305` | Poly1305 authenticator used by the Rust `chacha20-poly1305@openssh.com` transport path | <https://github.com/RustCrypto/universal-hashes> | <https://crates.io/crates/poly1305> |
+| `rsa` | RSA key generation plus PKCS#1 v1.5 signing and verification for `ssh-rsa`, `rsa-sha2-256`, and `rsa-sha2-512` | <https://github.com/RustCrypto/RSA> | <https://crates.io/crates/rsa> |
 | `ed25519-dalek` | Ed25519 key generation, signing, and verification | <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek> | <https://crates.io/crates/ed25519-dalek> |
 | `x25519-dalek` | X25519 key exchange for `curve25519-sha256*` and the X25519 half of hybrid KEX | <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/x25519-dalek> | <https://crates.io/crates/x25519-dalek> |
 | `p256` | NIST P-256 ECDH plus ECDSA support for `ecdh-sha2-nistp256` and `ecdsa-sha2-nistp256` | <https://github.com/RustCrypto/elliptic-curves/tree/master/p256> | <https://crates.io/crates/p256> |
 | `p384` | NIST P-384 ECDH plus ECDSA support for `ecdh-sha2-nistp384` and `ecdsa-sha2-nistp384` | <https://github.com/RustCrypto/elliptic-curves/tree/master/p384> | <https://crates.io/crates/p384> |
 | `p521` | NIST P-521 ECDH plus ECDSA support for `ecdh-sha2-nistp521` and `ecdsa-sha2-nistp521` | <https://github.com/RustCrypto/elliptic-curves/tree/master/p521> | <https://crates.io/crates/p521> |
 | `rand_core` | OS randomness for ephemeral ECDH keys and randomized ECDSA signing where the curve implementation requires it | <https://github.com/rust-random/rand> | <https://crates.io/crates/rand_core> |
+| `sha1` | SHA-1 digest with ASN.1 OID support for legacy `ssh-rsa` PKCS#1 v1.5 signatures | <https://github.com/RustCrypto/hashes/tree/master/sha1> | <https://crates.io/crates/sha1> |
+| `sha2` | SHA-256 / SHA-512 digest with ASN.1 OID support for `rsa-sha2-256` and `rsa-sha2-512` | <https://github.com/RustCrypto/hashes/tree/master/sha2> | <https://crates.io/crates/sha2> |
 | `arbitrary` | Structured fuzz inputs for the Rust fuzz targets | <https://github.com/rust-fuzz/arbitrary> | <https://crates.io/crates/arbitrary> |
 | `libfuzzer-sys` | libFuzzer integration for the Rust fuzz targets | <https://github.com/rust-fuzz/libfuzzer> | <https://crates.io/crates/libfuzzer-sys> |
 
@@ -111,8 +116,8 @@ make rust-crypto-build ssh sshd ssh-keygen
 ```
 
 On this branch, the Rust unit tests include both fixed vectors and
-randomized/property-style checks for digests, Ed25519, ECDSA, X25519, NIST
-ECDH, AES-CTR, and ChaCha20-Poly1305.
+randomized/property-style checks for digests, Ed25519, RSA, ECDSA, X25519,
+NIST ECDH, AES-CTR, and ChaCha20-Poly1305.
 
 ## Prerequisites
 
@@ -374,6 +379,21 @@ printf 'ecdsa rust path 521\n' > /tmp/rust_ecdsa_msg_521
 ./ssh-keygen -Y check-novalidate -n file -s /tmp/rust_ecdsa_msg_521.sig < /tmp/rust_ecdsa_msg_521
 ```
 
+To exercise the Rust-backed RSA path locally:
+
+```sh
+printf 'rsa rust path\n' > /tmp/rust_rsa_msg
+./ssh-keygen -q -t rsa -b 2048 -N '' -f /tmp/rust_rsa_key
+./ssh-keygen -Y sign -f /tmp/rust_rsa_key -n file /tmp/rust_rsa_msg
+./ssh-keygen -Y check-novalidate -n file -s /tmp/rust_rsa_msg.sig < /tmp/rust_rsa_msg
+./ssh -Q key
+```
+
+The important lines there are:
+
+- `Good "file" signature with RSA key ...`
+- `ssh -Q key` includes `ssh-rsa`
+
 To exercise Rust-backed ECDSA host-key verification against a real server that
 offers `ecdsa-sha2-nistp256`:
 
@@ -471,7 +491,6 @@ The intended next steps are described in `RUST_BACKEND_PLAN.md`.
 Until those phases land, do not assume that `--with-rust-crypto` means:
 
 - full replacement for libcrypto,
-- Rust-backed RSA,
 - Rust-backed PKCS#11 or security-key support,
 - full Rust transport cipher coverage,
 - feature parity with the default OpenSSL build.
