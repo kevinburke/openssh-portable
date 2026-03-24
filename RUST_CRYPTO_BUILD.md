@@ -18,6 +18,13 @@ Rust-backed today:
   parsing (`ssh-rsa`, `rsa-sha2-256`, `rsa-sha2-512`)
 - ECDSA key generation, signing, verification, and host-key parsing
   (`ecdsa-sha2-nistp256`, `ecdsa-sha2-nistp384`, `ecdsa-sha2-nistp521`)
+- SSH certificate body parsing
+- SSH public-key blob parsing for Ed25519, RSA, and ECDSA
+- RSA and ECDSA private-key loading for:
+  - legacy PEM
+  - PKCS#8
+  - encrypted legacy PEM
+  - encrypted PKCS#8
 - Curve25519/X25519 key exchange helpers
 - NIST ECDH key exchange helpers
   (`ecdh-sha2-nistp256`, `ecdh-sha2-nistp384`, `ecdh-sha2-nistp521`)
@@ -37,7 +44,7 @@ Still on the existing C path today:
 - MLKEM768 KEM code
 - classic finite-field DH / DH-GEX
 - PKCS#11 and security-key code paths
-- PEM / PKCS#8 parsing for Rust-owned RSA and ECDSA keys
+- OpenSSH private-key-v1 parsing
 
 In other words, this is now a mixed Rust/C crypto build, not yet a
 full-Rust transport/backend replacement.
@@ -76,6 +83,9 @@ Today it runs:
 - `cargo test --manifest-path rust/crypto/Cargo.toml`
 - `cargo build --manifest-path rust/crypto/fuzz/Cargo.toml`
 - `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin ed25519_verify -- -runs=1`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin dh_peer -- -runs=1`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin ecdsa_parse -- -runs=1`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin rsa_parse -- -runs=1`
 - the OpenSSH `unit` and `t-exec` targets under `--with-rust-crypto`
 
 That gives both Rust-native coverage and OpenSSH integration coverage in CI.
@@ -118,6 +128,19 @@ make rust-crypto-build ssh sshd ssh-keygen
 On this branch, the Rust unit tests include both fixed vectors and
 randomized/property-style checks for digests, Ed25519, RSA, ECDSA, X25519,
 NIST ECDH, AES-CTR, and ChaCha20-Poly1305.
+
+For the Rust-backed private-key load path, targeted local checks that are
+worth rerunning are:
+
+```sh
+./ssh-keygen -y -P mekmitasdigoat -f /path/to/rsa_1_pw >/dev/null
+./ssh-keygen -y -P mekmitasdigoat -f /path/to/ecdsa_1_pw >/dev/null
+./ssh-keygen -y -P wrong -f /path/to/rsa_1_pw >/dev/null
+./ssh-keygen -y -P wrong -f /path/to/ecdsa_1_pw >/dev/null
+```
+
+The first two should succeed. The second two should fail with the expected
+OpenSSH wrong-passphrase message.
 
 ## Prerequisites
 

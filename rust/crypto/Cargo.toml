@@ -10,8 +10,16 @@ crate-type = ["staticlib", "rlib"]
 [dependencies]
 # Releases: https://crates.io/crates/aes
 aes = { version = "0.8.4", default-features = false }
+# Releases: https://crates.io/crates/base64ct
+base64ct = { version = "1.8.0", default-features = false, features = ["alloc"] }
+# Releases: https://crates.io/crates/cbc
+cbc = { version = "0.1.2", default-features = false, features = ["block-padding", "alloc"] }
+# Releases: https://crates.io/crates/des
+des = { version = "0.8.1", default-features = false }
 # Releases: https://crates.io/crates/ed25519-dalek
 ed25519-dalek = { version = "2.1.1", default-features = false }
+# Releases: https://crates.io/crates/md-5
+md-5 = { version = "0.10.6", default-features = false }
 # Releases: https://crates.io/crates/p256
 p256 = { version = "0.13.2", default-features = false, features = ["ecdh", "ecdsa", "pkcs8", "pem"] }
 # Releases: https://crates.io/crates/p384
@@ -21,7 +29,7 @@ p521 = { version = "0.13.3", default-features = false, features = ["ecdh", "ecds
 # Releases: https://crates.io/crates/pkcs1
 pkcs1 = { version = "0.7.5", default-features = false, features = ["pem"] }
 # Releases: https://crates.io/crates/pkcs8
-pkcs8 = { version = "0.10.2", default-features = false, features = ["pem"] }
+pkcs8 = { version = "0.10.2", default-features = false, features = ["pem", "encryption", "3des"] }
 # Releases: https://crates.io/crates/poly1305
 poly1305 = { version = "0.8.0", default-features = false }
 # Releases: https://crates.io/crates/rsa

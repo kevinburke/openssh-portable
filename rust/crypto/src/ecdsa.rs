@@ -20,6 +20,9 @@ use p521::SecretKey as P521SecretKey;
 use rand_core::OsRng;
 use pkcs8::{DecodePrivateKey, EncodePrivateKey, LineEnding};
 
+use crate::private_pem::{
+    decrypt_encrypted_pkcs8_pem, decrypt_legacy_private_pem, LegacyPemLabel, PrivatePemError,
+};
 use crate::util::{read_slice, slice_ptr, write_prefix, SshWireReader};
 
 const NID_X9_62_PRIME256V1: c_int = 415;
@@ -227,6 +230,30 @@ impl EcdsaCurve {
             (Self::NistP521, SSHKEY_PRIVATE_PKCS8) => Ok(Self::from_secret_p521(
                 P521SecretKey::from_pkcs8_pem(pem).map_err(|_| ())?,
             )),
+            _ => Err(()),
+        }
+    }
+
+    fn parse_private_der(self, der: &[u8], format: c_int) -> Result<RustEcdsaKey, ()> {
+        match (self, format) {
+            (Self::NistP256, SSHKEY_PRIVATE_PEM) => {
+                Ok(Self::from_secret_p256(P256SecretKey::from_sec1_der(der).map_err(|_| ())?))
+            }
+            (Self::NistP384, SSHKEY_PRIVATE_PEM) => {
+                Ok(Self::from_secret_p384(P384SecretKey::from_sec1_der(der).map_err(|_| ())?))
+            }
+            (Self::NistP521, SSHKEY_PRIVATE_PEM) => {
+                Ok(Self::from_secret_p521(P521SecretKey::from_sec1_der(der).map_err(|_| ())?))
+            }
+            (Self::NistP256, SSHKEY_PRIVATE_PKCS8) => {
+                Ok(Self::from_secret_p256(P256SecretKey::from_pkcs8_der(der).map_err(|_| ())?))
+            }
+            (Self::NistP384, SSHKEY_PRIVATE_PKCS8) => {
+                Ok(Self::from_secret_p384(P384SecretKey::from_pkcs8_der(der).map_err(|_| ())?))
+            }
+            (Self::NistP521, SSHKEY_PRIVATE_PKCS8) => {
+                Ok(Self::from_secret_p521(P521SecretKey::from_pkcs8_der(der).map_err(|_| ())?))
+            }
             _ => Err(()),
         }
     }
@@ -488,23 +515,71 @@ pub(crate) fn ecdsa_curve_nid(key: *const c_void) -> c_int {
 }
 
 pub(crate) fn ecdsa_parse_private_pem(blob: *const u8, blob_len: usize) -> *mut c_void {
+    match ecdsa_parse_private_pem_with_passphrase(blob, blob_len, core::ptr::null(), 0) {
+        Ok(key) => key,
+        Err(_) => core::ptr::null_mut(),
+    }
+}
+
+pub(crate) fn ecdsa_parse_private_pem_with_passphrase(
+    blob: *const u8,
+    blob_len: usize,
+    passphrase: *const u8,
+    passphrase_len: usize,
+) -> Result<*mut c_void, PrivatePemError> {
     let pem = match read_slice(blob, blob_len).and_then(|blob| str::from_utf8(blob).ok()) {
         Some(pem) => pem,
-        None => return core::ptr::null_mut(),
+        None => return Err(PrivatePemError::InvalidFormat),
     };
-    let format = if pem.starts_with("-----BEGIN EC PRIVATE KEY-----") {
-        SSHKEY_PRIVATE_PEM
-    } else if pem.starts_with("-----BEGIN PRIVATE KEY-----") {
-        SSHKEY_PRIVATE_PKCS8
+    let passphrase = if passphrase_len == 0 {
+        &[][..]
     } else {
-        return core::ptr::null_mut();
+        read_slice(passphrase, passphrase_len).ok_or(PrivatePemError::InvalidFormat)?
     };
-    for curve in [EcdsaCurve::NistP256, EcdsaCurve::NistP384, EcdsaCurve::NistP521] {
-        if let Ok(key) = curve.parse_private_pem(pem, format) {
-            return Box::into_raw(Box::new(key)).cast();
+    let curves = [EcdsaCurve::NistP256, EcdsaCurve::NistP384, EcdsaCurve::NistP521];
+
+    if pem.starts_with("-----BEGIN ENCRYPTED PRIVATE KEY-----") {
+        let der = decrypt_encrypted_pkcs8_pem(pem, passphrase)?;
+        for curve in curves {
+            if let Ok(key) = curve.parse_private_der(&der, SSHKEY_PRIVATE_PKCS8) {
+                return Ok(Box::into_raw(Box::new(key)).cast());
+            }
         }
+        return Err(PrivatePemError::InvalidFormat);
     }
-    core::ptr::null_mut()
+
+    if pem.starts_with("-----BEGIN EC PRIVATE KEY-----") {
+        match decrypt_legacy_private_pem(pem, passphrase) {
+            Ok((LegacyPemLabel::EcPrivateKey, der)) => {
+                for curve in curves {
+                    if let Ok(key) = curve.parse_private_der(&der, SSHKEY_PRIVATE_PEM) {
+                        return Ok(Box::into_raw(Box::new(key)).cast());
+                    }
+                }
+                return Err(PrivatePemError::InvalidFormat);
+            }
+            Ok((LegacyPemLabel::RsaPrivateKey, _)) => return Err(PrivatePemError::InvalidFormat),
+            Err(PrivatePemError::WrongPassphrase) => return Err(PrivatePemError::WrongPassphrase),
+            Err(PrivatePemError::InvalidFormat) => {}
+        }
+        for curve in curves {
+            if let Ok(key) = curve.parse_private_pem(pem, SSHKEY_PRIVATE_PEM) {
+                return Ok(Box::into_raw(Box::new(key)).cast());
+            }
+        }
+        return Err(PrivatePemError::InvalidFormat);
+    }
+
+    if pem.starts_with("-----BEGIN PRIVATE KEY-----") {
+        for curve in curves {
+            if let Ok(key) = curve.parse_private_pem(pem, SSHKEY_PRIVATE_PKCS8) {
+                return Ok(Box::into_raw(Box::new(key)).cast());
+            }
+        }
+        return Err(PrivatePemError::InvalidFormat);
+    }
+
+    Err(PrivatePemError::InvalidFormat)
 }
 
 pub(crate) fn ecdsa_private_pem_len(key: *const c_void, format: c_int) -> usize {
@@ -580,9 +655,13 @@ mod tests {
     use super::{
         EcdsaCurve, NID_SECP384R1, NID_SECP521R1, NID_X9_62_PRIME256V1, ecdsa_copy_public,
         ecdsa_equal_public, ecdsa_export_private, ecdsa_export_public, ecdsa_free,
-        ecdsa_from_private, ecdsa_generate, ecdsa_parse_public_blob, ecdsa_sign_prehashed,
-        ecdsa_verify_prehashed,
+        ecdsa_from_private, ecdsa_generate, ecdsa_parse_private_pem_with_passphrase,
+        ecdsa_parse_public_blob, ecdsa_sign_prehashed, ecdsa_verify_prehashed,
     };
+    use crate::private_pem::PrivatePemError;
+    use pkcs8::{EncodePrivateKey, LineEnding};
+    use rand_core::OsRng;
+    use p256::SecretKey as P256SecretKey;
 
     fn put_string(buf: &mut Vec<u8>, bytes: &[u8]) {
         buf.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
@@ -732,5 +811,38 @@ mod tests {
         assert_eq!(consumed, 4 + curve.ssh_name().len() + 4 + public_key.len());
         ecdsa_free(parsed);
         ecdsa_free(key);
+    }
+
+    #[test]
+    fn parses_encrypted_pkcs8_p256() {
+        let secret = P256SecretKey::random(&mut OsRng);
+        let pem = secret
+            .to_pkcs8_encrypted_pem(&mut OsRng, b"password", LineEnding::LF)
+            .unwrap();
+        let parsed = ecdsa_parse_private_pem_with_passphrase(
+            pem.as_bytes().as_ptr(),
+            pem.len(),
+            b"password".as_ptr(),
+            b"password".len(),
+        )
+        .unwrap();
+        assert!(!parsed.is_null());
+        ecdsa_free(parsed);
+    }
+
+    #[test]
+    fn encrypted_pkcs8_reports_wrong_passphrase() {
+        let secret = P256SecretKey::random(&mut OsRng);
+        let pem = secret
+            .to_pkcs8_encrypted_pem(&mut OsRng, b"password", LineEnding::LF)
+            .unwrap();
+        let err = ecdsa_parse_private_pem_with_passphrase(
+            pem.as_bytes().as_ptr(),
+            pem.len(),
+            b"wrong".as_ptr(),
+            b"wrong".len(),
+        )
+        .unwrap_err();
+        assert_eq!(err, PrivatePemError::WrongPassphrase);
     }
 }
