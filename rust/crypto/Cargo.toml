@@ -20,8 +20,14 @@ p384 = { version = "0.13.1", default-features = false, features = ["ecdh", "ecds
 p521 = { version = "0.13.3", default-features = false, features = ["ecdh", "ecdsa"] }
 # Releases: https://crates.io/crates/poly1305
 poly1305 = { version = "0.8.0", default-features = false }
+# Releases: https://crates.io/crates/rsa
+rsa = { version = "0.9.8", default-features = false }
 # Releases: https://crates.io/crates/rand_core
 rand_core = { version = "0.6.4", default-features = false, features = ["getrandom"] }
+# Releases: https://crates.io/crates/sha1
+sha1 = { version = "0.10.6", default-features = false, features = ["oid"] }
+# Releases: https://crates.io/crates/sha2
+sha2 = { version = "0.10.9", default-features = false, features = ["oid"] }
 # Releases: https://crates.io/crates/x25519-dalek
 x25519-dalek = { version = "2.0.1", default-features = false }
 
