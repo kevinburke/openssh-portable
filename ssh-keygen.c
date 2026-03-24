@@ -1087,8 +1087,9 @@ do_gen_all_hostkeys(struct passwd *pw)
 		}
 		if ((r = sshkey_from_private(private, &public)) != 0)
 			fatal_fr(r, "sshkey_from_private");
-		snprintf(comment, sizeof comment, "%s@%s", pw->pw_name,
-		    hostname);
+		strlcpy(comment, pw->pw_name, sizeof(comment));
+		strlcat(comment, "@", sizeof(comment));
+		strlcat(comment, hostname, sizeof(comment));
 		if ((r = sshkey_save_private(private, prv_tmp, "",
 		    comment, private_key_format, openssh_format_cipher,
 		    rounds)) != 0) {
@@ -3892,7 +3893,9 @@ main(int argc, char **argv)
 		strlcpy(comment, identity_comment, sizeof(comment));
 	} else {
 		/* Create default comment field for the passphrase. */
-		snprintf(comment, sizeof comment, "%s@%s", pw->pw_name, hostname);
+		strlcpy(comment, pw->pw_name, sizeof(comment));
+		strlcat(comment, "@", sizeof(comment));
+		strlcat(comment, hostname, sizeof(comment));
 	}
 
 	/* Save the key with the given passphrase and comment. */
