@@ -18,13 +18,13 @@ Rust-backed today:
 - the X25519 portion of the hybrid
   `sntrup761x25519-sha512` and `mlkem768x25519-sha256` KEX paths
 - AES-CTR transport cipher (`aes128-ctr`, `aes192-ctr`, `aes256-ctr`)
+- ChaCha20-Poly1305 transport cipher (`chacha20-poly1305@openssh.com`)
 
 Still on the existing C path today:
 
 - MD5 and SHA1 digest support
 - SNTRUP761 KEM code
 - MLKEM768 KEM code
-- ChaCha20-Poly1305 transport cipher
 - RSA
 - ECDSA / ECDH
 - classic finite-field DH / DH-GEX
