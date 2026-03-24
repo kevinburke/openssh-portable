@@ -13,9 +13,9 @@ name: CI
 
 on:
   push:
-    paths: [ '**.c', '**.h', '**.m4', '**.sh', '**/Makefile.in', 'configure.ac', '.github/configs', '.github/*.sh', '.github/workflows/c-cpp.yml' ]
+    paths: [ '**.c', '**.h', '**.m4', '**.rs', '**.sh', '**/Cargo.toml', '**/Makefile.in', 'configure.ac', '.github/configs', '.github/*.sh', '.github/workflows/c-cpp.yml' ]
   pull_request:
-    paths: [ '**.c', '**.h', '**.m4', '**.sh', '**/Makefile.in', 'configure.ac', '.github/configs', '.github/*.sh', '.github/workflows/c-cpp.yml' ]
+    paths: [ '**.c', '**.h', '**.m4', '**.rs', '**.sh', '**/Cargo.toml', '**/Makefile.in', 'configure.ac', '.github/configs', '.github/*.sh', '.github/workflows/c-cpp.yml' ]
 
 jobs:
   ci:
@@ -156,7 +156,10 @@ jobs:
       run: cargo build --manifest-path rust/crypto/fuzz/Cargo.toml
     - name: cargo fuzz smoke
       if: ${{ matrix.config == 'rust-crypto' }}
-      run: cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin ed25519_verify -- -runs=1
+      run: |
+        for target in ed25519_verify ecdh_peer dh_peer ecdsa_parse rsa_parse chachapoly_decrypt; do
+          cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin "$target" -- -runs=1
+        done
     - name: save config
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # main
       with:
