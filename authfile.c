@@ -318,10 +318,8 @@ sshkey_load_private_cert(int type, const char *filename, const char *passphrase,
 	switch (type) {
 #if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	case KEY_RSA:
-#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
-#ifdef WITH_OPENSSL
 	case KEY_ECDSA:
-#endif /* WITH_OPENSSL */
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 	case KEY_ED25519:
 	case KEY_UNSPEC:
 		break;
