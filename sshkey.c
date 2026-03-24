@@ -1880,15 +1880,21 @@ cert_parse(struct sshbuf *b, struct sshkey *key, struct sshbuf *certbuf)
 {
 	struct sshbuf *principals = NULL, *crit = NULL;
 	struct sshbuf *exts = NULL, *ca = NULL;
+#ifdef WITH_RUST_CRYPTO
 	struct ossh_rust_cert_body_parse parsed;
 	const u_char *blob, *sig;
 	size_t blob_len, signed_len = 0, slen = 0;
+#else
+	u_char *sig = NULL;
+	size_t signed_len = 0, slen = 0, kidlen = 0;
+#endif
 	int ret = SSH_ERR_INTERNAL_ERROR;
 
 	/* Copy the entire key blob for verification and later serialisation */
 	if ((ret = sshbuf_putb(key->cert->certblob, certbuf)) != 0)
 		return ret;
 
+#ifdef WITH_RUST_CRYPTO
 	blob = sshbuf_ptr(b);
 	blob_len = sshbuf_len(b);
 
@@ -1925,6 +1931,30 @@ cert_parse(struct sshbuf *b, struct sshkey *key, struct sshbuf *certbuf)
 		ret = SSH_ERR_ALLOC_FAIL;
 		goto out;
 	}
+#else
+	/* Parse body of certificate up to signature */
+	if ((ret = sshbuf_get_u64(b, &key->cert->serial)) != 0 ||
+	    (ret = sshbuf_get_u32(b, &key->cert->type)) != 0 ||
+	    (ret = sshbuf_get_cstring(b, &key->cert->key_id, &kidlen)) != 0 ||
+	    (ret = sshbuf_froms(b, &principals)) != 0 ||
+	    (ret = sshbuf_get_u64(b, &key->cert->valid_after)) != 0 ||
+	    (ret = sshbuf_get_u64(b, &key->cert->valid_before)) != 0 ||
+	    (ret = sshbuf_froms(b, &crit)) != 0 ||
+	    (ret = sshbuf_froms(b, &exts)) != 0 ||
+	    (ret = sshbuf_get_string_direct(b, NULL, NULL)) != 0 ||
+	    (ret = sshbuf_froms(b, &ca)) != 0) {
+		ret = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+
+	/* Signature is left in the buffer so we can calculate this length */
+	signed_len = sshbuf_len(key->cert->certblob) - sshbuf_len(b);
+
+	if ((ret = sshbuf_get_string(b, &sig, &slen)) != 0) {
+		ret = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+#endif
 
 	if (key->cert->type != SSH2_CERT_TYPE_USER &&
 	    key->cert->type != SSH2_CERT_TYPE_HOST) {
@@ -2011,6 +2041,9 @@ cert_parse(struct sshbuf *b, struct sshkey *key, struct sshbuf *certbuf)
 	sshbuf_free(crit);
 	sshbuf_free(exts);
 	sshbuf_free(principals);
+#ifndef WITH_RUST_CRYPTO
+	free(sig);
+#endif
 	return ret;
 }
 
