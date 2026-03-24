@@ -765,7 +765,9 @@ kex_free(struct kex *kex)
 	if (kex == NULL)
 		return;
 
-#ifdef WITH_OPENSSL
+#ifdef WITH_RUST_CRYPTO
+	freezero(kex->ec_client_key, sizeof(struct rust_ecdh_client_key));
+#elif defined(WITH_OPENSSL)
 	DH_free(kex->dh);
 	EC_KEY_free(kex->ec_client_key);
 #endif /* WITH_OPENSSL */
@@ -1478,4 +1480,3 @@ kex_exchange_identification(struct ssh *ssh, int timeout_ms,
 		errno = oerrno;
 	return r;
 }
-

@@ -128,8 +128,10 @@ ssh_init(struct ssh **sshp, int is_server, struct kex_params *kex_params)
 		ssh->kex->kex[KEX_DH_GRP18_SHA512] = kex_gen_server;
 		ssh->kex->kex[KEX_DH_GEX_SHA1] = kexgex_server;
 		ssh->kex->kex[KEX_DH_GEX_SHA256] = kexgex_server;
-		ssh->kex->kex[KEX_ECDH_SHA2] = kex_gen_server;
 #endif /* WITH_OPENSSL */
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
+		ssh->kex->kex[KEX_ECDH_SHA2] = kex_gen_server;
+#endif
 		ssh->kex->kex[KEX_C25519_SHA256] = kex_gen_server;
 		ssh->kex->kex[KEX_KEM_SNTRUP761X25519_SHA512] = kex_gen_server;
 		ssh->kex->kex[KEX_KEM_MLKEM768X25519_SHA256] = kex_gen_server;
@@ -146,8 +148,10 @@ ssh_init(struct ssh **sshp, int is_server, struct kex_params *kex_params)
 		ssh->kex->kex[KEX_DH_GRP18_SHA512] = kex_gen_client;
 		ssh->kex->kex[KEX_DH_GEX_SHA1] = kexgex_client;
 		ssh->kex->kex[KEX_DH_GEX_SHA256] = kexgex_client;
-		ssh->kex->kex[KEX_ECDH_SHA2] = kex_gen_client;
 #endif /* WITH_OPENSSL */
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
+		ssh->kex->kex[KEX_ECDH_SHA2] = kex_gen_client;
+#endif
 		ssh->kex->kex[KEX_C25519_SHA256] = kex_gen_client;
 		ssh->kex->kex[KEX_KEM_SNTRUP761X25519_SHA512] = kex_gen_client;
 		ssh->kex->kex[KEX_KEM_MLKEM768X25519_SHA256] = kex_gen_client;

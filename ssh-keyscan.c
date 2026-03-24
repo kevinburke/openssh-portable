@@ -293,6 +293,8 @@ keygrab_ssh2(con *c)
 	c->c_ssh->kex->kex[KEX_DH_GRP18_SHA512] = kex_gen_client;
 	c->c_ssh->kex->kex[KEX_DH_GEX_SHA1] = kexgex_client;
 	c->c_ssh->kex->kex[KEX_DH_GEX_SHA256] = kexgex_client;
+#endif
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	c->c_ssh->kex->kex[KEX_ECDH_SHA2] = kex_gen_client;
 #endif
 	c->c_ssh->kex->kex[KEX_C25519_SHA256] = kex_gen_client;

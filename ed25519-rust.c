@@ -1,6 +1,6 @@
 /* $OpenBSD$ */
 /*
- * Copyright (c) 2026 Kevin Burke
+ * Copyright (c) 2026 The OpenSSH contributors
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above

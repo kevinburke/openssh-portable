@@ -15,6 +15,8 @@ Rust-backed today:
 - SHA-256, SHA-384, and SHA-512 digests
 - Ed25519 key generation, signing, and verification
 - Curve25519/X25519 key exchange helpers
+- NIST ECDH key exchange helpers
+  (`ecdh-sha2-nistp256`, `ecdh-sha2-nistp384`, `ecdh-sha2-nistp521`)
 - the X25519 portion of the hybrid
   `sntrup761x25519-sha512` and `mlkem768x25519-sha256` KEX paths
 - AES-CTR transport cipher (`aes128-ctr`, `aes192-ctr`, `aes256-ctr`)
@@ -26,7 +28,7 @@ Still on the existing C path today:
 - SNTRUP761 KEM code
 - MLKEM768 KEM code
 - RSA
-- ECDSA / ECDH
+- ECDSA
 - classic finite-field DH / DH-GEX
 - PKCS#11 and security-key code paths
 
@@ -228,6 +230,37 @@ Plain Curve25519 plus Rust-backed transport ciphers:
   -oHostKeyAlgorithms=ssh-ed25519 \
   -oPubkeyAcceptedAlgorithms=ssh-ed25519 \
   -c chacha20-poly1305@openssh.com \
+  -i ~/.ssh/id_ed25519 \
+  user@host true
+```
+
+To exercise the Rust-backed NIST ECDH paths:
+
+```sh
+./ssh -v \
+  -oBatchMode=yes \
+  -oConnectTimeout=10 \
+  -oKexAlgorithms=ecdh-sha2-nistp256 \
+  -oHostKeyAlgorithms=ssh-ed25519 \
+  -oPubkeyAcceptedAlgorithms=ssh-ed25519 \
+  -i ~/.ssh/id_ed25519 \
+  user@host true
+
+./ssh -v \
+  -oBatchMode=yes \
+  -oConnectTimeout=10 \
+  -oKexAlgorithms=ecdh-sha2-nistp384 \
+  -oHostKeyAlgorithms=ssh-ed25519 \
+  -oPubkeyAcceptedAlgorithms=ssh-ed25519 \
+  -i ~/.ssh/id_ed25519 \
+  user@host true
+
+./ssh -v \
+  -oBatchMode=yes \
+  -oConnectTimeout=10 \
+  -oKexAlgorithms=ecdh-sha2-nistp521 \
+  -oHostKeyAlgorithms=ssh-ed25519 \
+  -oPubkeyAcceptedAlgorithms=ssh-ed25519 \
   -i ~/.ssh/id_ed25519 \
   user@host true
 ```

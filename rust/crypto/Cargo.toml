@@ -8,9 +8,21 @@ publish = false
 crate-type = ["staticlib"]
 
 [dependencies]
+# Releases: https://crates.io/crates/aes
 aes = { version = "0.8.4", default-features = false }
+# Releases: https://crates.io/crates/ed25519-dalek
 ed25519-dalek = { version = "2.1.1", default-features = false }
+# Releases: https://crates.io/crates/p256
+p256 = { version = "0.13.2", default-features = false, features = ["ecdh"] }
+# Releases: https://crates.io/crates/p384
+p384 = { version = "0.13.1", default-features = false, features = ["ecdh"] }
+# Releases: https://crates.io/crates/p521
+p521 = { version = "0.13.3", default-features = false, features = ["ecdh"] }
+# Releases: https://crates.io/crates/poly1305
 poly1305 = { version = "0.8.0", default-features = false }
+# Releases: https://crates.io/crates/rand_core
+rand_core = { version = "0.6.4", default-features = false, features = ["getrandom"] }
+# Releases: https://crates.io/crates/x25519-dalek
 x25519-dalek = { version = "2.0.1", default-features = false }
 
 [profile.release]

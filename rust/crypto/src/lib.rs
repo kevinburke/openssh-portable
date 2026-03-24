@@ -3,10 +3,18 @@ use core::slice;
 use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
 use aes::{Aes128, Aes192, Aes256};
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
+use p256::elliptic_curve::sec1::ToEncodedPoint;
+use p256::{PublicKey as P256PublicKey, SecretKey as P256SecretKey};
+use p384::{PublicKey as P384PublicKey, SecretKey as P384SecretKey};
+use p521::{PublicKey as P521PublicKey, SecretKey as P521SecretKey};
 use poly1305::Poly1305;
+use rand_core::OsRng;
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 5;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 6;
+const OSSH_RUST_ECDH_NISTP256: c_int = 1;
+const OSSH_RUST_ECDH_NISTP384: c_int = 2;
+const OSSH_RUST_ECDH_NISTP521: c_int = 3;
 const SSH_DIGEST_SHA256: c_int = 2;
 const SSH_DIGEST_SHA384: c_int = 3;
 const SSH_DIGEST_SHA512: c_int = 4;
@@ -22,6 +30,12 @@ const ED25519_PUBLIC_KEY_LENGTH: usize = 32;
 const ED25519_SECRET_KEY_LENGTH: usize = 64;
 const ED25519_SIGNATURE_LENGTH: usize = 64;
 const CURVE25519_KEY_LENGTH: usize = 32;
+const ECDH_NISTP256_SECRET_LENGTH: usize = 32;
+const ECDH_NISTP256_PUBLIC_LENGTH: usize = 65;
+const ECDH_NISTP384_SECRET_LENGTH: usize = 48;
+const ECDH_NISTP384_PUBLIC_LENGTH: usize = 97;
+const ECDH_NISTP521_SECRET_LENGTH: usize = 66;
+const ECDH_NISTP521_PUBLIC_LENGTH: usize = 133;
 const AES_BLOCK_SIZE: usize = 16;
 const CHACHA_KEY_LENGTH: usize = 32;
 const CHACHA_BLOCK_SIZE: usize = 64;
@@ -117,6 +131,13 @@ struct ChachaPolyState {
 enum ChachaPolyError {
     Invalid,
     Mac,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EcdhCurve {
+    NistP256,
+    NistP384,
+    NistP521,
 }
 
 impl Sha256State {
@@ -478,6 +499,102 @@ impl ChachaPolyState {
     fn scrub(&mut self) {
         self.main_key = [0; CHACHA_KEY_LENGTH];
         self.header_key = [0; CHACHA_KEY_LENGTH];
+    }
+}
+
+impl EcdhCurve {
+    fn from_id(curve_id: c_int) -> Option<Self> {
+        match curve_id {
+            OSSH_RUST_ECDH_NISTP256 => Some(Self::NistP256),
+            OSSH_RUST_ECDH_NISTP384 => Some(Self::NistP384),
+            OSSH_RUST_ECDH_NISTP521 => Some(Self::NistP521),
+            _ => None,
+        }
+    }
+
+    fn secret_len(self) -> usize {
+        match self {
+            Self::NistP256 => ECDH_NISTP256_SECRET_LENGTH,
+            Self::NistP384 => ECDH_NISTP384_SECRET_LENGTH,
+            Self::NistP521 => ECDH_NISTP521_SECRET_LENGTH,
+        }
+    }
+
+    fn public_len(self) -> usize {
+        match self {
+            Self::NistP256 => ECDH_NISTP256_PUBLIC_LENGTH,
+            Self::NistP384 => ECDH_NISTP384_PUBLIC_LENGTH,
+            Self::NistP521 => ECDH_NISTP521_PUBLIC_LENGTH,
+        }
+    }
+
+    fn shared_len(self) -> usize {
+        self.secret_len()
+    }
+
+    fn generate_keypair(self, secret_out: &mut [u8], public_out: &mut [u8]) -> Result<(), ()> {
+        if secret_out.len() != self.secret_len() || public_out.len() != self.public_len() {
+            return Err(());
+        }
+        match self {
+            Self::NistP256 => {
+                let secret = P256SecretKey::random(&mut OsRng);
+                let public = secret.public_key().to_encoded_point(false);
+                secret_out.copy_from_slice(secret.to_bytes().as_slice());
+                public_out.copy_from_slice(public.as_bytes());
+            }
+            Self::NistP384 => {
+                let secret = P384SecretKey::random(&mut OsRng);
+                let public = secret.public_key().to_encoded_point(false);
+                secret_out.copy_from_slice(secret.to_bytes().as_slice());
+                public_out.copy_from_slice(public.as_bytes());
+            }
+            Self::NistP521 => {
+                let secret = P521SecretKey::random(&mut OsRng);
+                let public = secret.public_key().to_encoded_point(false);
+                secret_out.copy_from_slice(secret.to_bytes().as_slice());
+                public_out.copy_from_slice(public.as_bytes());
+            }
+        }
+        Ok(())
+    }
+
+    fn shared_secret(
+        self,
+        secret_key: &[u8],
+        public_key: &[u8],
+        shared_out: &mut [u8],
+    ) -> Result<(), ()> {
+        if secret_key.len() != self.secret_len()
+            || public_key.len() != self.public_len()
+            || shared_out.len() != self.shared_len()
+        {
+            return Err(());
+        }
+        match self {
+            Self::NistP256 => {
+                let secret = P256SecretKey::from_slice(secret_key).map_err(|_| ())?;
+                let public = P256PublicKey::from_sec1_bytes(public_key).map_err(|_| ())?;
+                let shared =
+                    p256::ecdh::diffie_hellman(secret.to_nonzero_scalar(), public.as_affine());
+                shared_out.copy_from_slice(shared.raw_secret_bytes().as_slice());
+            }
+            Self::NistP384 => {
+                let secret = P384SecretKey::from_slice(secret_key).map_err(|_| ())?;
+                let public = P384PublicKey::from_sec1_bytes(public_key).map_err(|_| ())?;
+                let shared =
+                    p384::ecdh::diffie_hellman(secret.to_nonzero_scalar(), public.as_affine());
+                shared_out.copy_from_slice(shared.raw_secret_bytes().as_slice());
+            }
+            Self::NistP521 => {
+                let secret = P521SecretKey::from_slice(secret_key).map_err(|_| ())?;
+                let public = P521PublicKey::from_sec1_bytes(public_key).map_err(|_| ())?;
+                let shared =
+                    p521::ecdh::diffie_hellman(secret.to_nonzero_scalar(), public.as_affine());
+                shared_out.copy_from_slice(shared.raw_secret_bytes().as_slice());
+            }
+        }
+        Ok(())
     }
 }
 
@@ -976,6 +1093,67 @@ pub extern "C" fn ossh_rust_curve25519_shared_secret(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdh_keypair(
+    curve_id: c_int,
+    secret_key: *mut u8,
+    secret_key_len: usize,
+    public_key: *mut u8,
+    public_key_len: usize,
+) -> c_int {
+    if secret_key.is_null() || public_key.is_null() {
+        return -1;
+    }
+    let curve = match EcdhCurve::from_id(curve_id) {
+        Some(curve) => curve,
+        None => return -1,
+    };
+    if secret_key_len != curve.secret_len() || public_key_len != curve.public_len() {
+        return -1;
+    }
+    let secret_key = unsafe { slice::from_raw_parts_mut(secret_key, secret_key_len) };
+    let public_key = unsafe { slice::from_raw_parts_mut(public_key, public_key_len) };
+    if curve.generate_keypair(secret_key, public_key).is_err() {
+        return -1;
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_ecdh_shared_secret(
+    curve_id: c_int,
+    secret_key: *const u8,
+    secret_key_len: usize,
+    public_key: *const u8,
+    public_key_len: usize,
+    shared_secret: *mut u8,
+    shared_secret_len: usize,
+) -> c_int {
+    if secret_key.is_null() || public_key.is_null() || shared_secret.is_null() {
+        return -1;
+    }
+    let curve = match EcdhCurve::from_id(curve_id) {
+        Some(curve) => curve,
+        None => return -1,
+    };
+    if secret_key_len != curve.secret_len()
+        || public_key_len != curve.public_len()
+        || shared_secret_len != curve.shared_len()
+    {
+        return -1;
+    }
+    let secret_key = unsafe { slice::from_raw_parts(secret_key, secret_key_len) };
+    let public_key = unsafe { slice::from_raw_parts(public_key, public_key_len) };
+    let shared_secret = unsafe { slice::from_raw_parts_mut(shared_secret, shared_secret_len) };
+    if curve
+        .shared_secret(secret_key, public_key, shared_secret)
+        .is_err()
+    {
+        return -1;
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_aesctr_init(
     key: *const u8,
     key_len: usize,
@@ -1137,9 +1315,12 @@ pub extern "C" fn ossh_rust_chachapoly_free(ctx: *mut c_void) {
 #[cfg(test)]
 mod tests {
     use super::{
-        x25519, AesCtrState, ChachaPolyError, ChachaPolyState, DigestState,
+        x25519, ossh_rust_ecdh_keypair, ossh_rust_ecdh_shared_secret,
+        AesCtrState, ChachaPolyError, ChachaPolyState, DigestState,
         Signature, SigningKey, VerifyingKey, X25519_BASEPOINT_BYTES,
-        SHA256_DIGEST_LENGTH, SHA384_DIGEST_LENGTH, SHA512_DIGEST_LENGTH,
+        OSSH_RUST_ECDH_NISTP256, OSSH_RUST_ECDH_NISTP384,
+        OSSH_RUST_ECDH_NISTP521, SHA256_DIGEST_LENGTH,
+        SHA384_DIGEST_LENGTH, SHA512_DIGEST_LENGTH,
     };
     use ed25519_dalek::Signer;
 
@@ -1162,6 +1343,67 @@ mod tests {
             out.push(((hi << 4) | lo) as u8);
         }
         out
+    }
+
+    fn assert_nist_ecdh_roundtrip(
+        curve_id: i32,
+        secret_len: usize,
+        public_len: usize,
+        shared_len: usize,
+    ) {
+        let mut alice_secret = vec![0u8; secret_len];
+        let mut alice_public = vec![0u8; public_len];
+        let mut bob_secret = vec![0u8; secret_len];
+        let mut bob_public = vec![0u8; public_len];
+        let mut alice_shared = vec![0u8; shared_len];
+        let mut bob_shared = vec![0u8; shared_len];
+
+        assert_eq!(
+            ossh_rust_ecdh_keypair(
+                curve_id,
+                alice_secret.as_mut_ptr(),
+                alice_secret.len(),
+                alice_public.as_mut_ptr(),
+                alice_public.len(),
+            ),
+            0
+        );
+        assert_eq!(
+            ossh_rust_ecdh_keypair(
+                curve_id,
+                bob_secret.as_mut_ptr(),
+                bob_secret.len(),
+                bob_public.as_mut_ptr(),
+                bob_public.len(),
+            ),
+            0
+        );
+        assert_eq!(
+            ossh_rust_ecdh_shared_secret(
+                curve_id,
+                alice_secret.as_ptr(),
+                alice_secret.len(),
+                bob_public.as_ptr(),
+                bob_public.len(),
+                alice_shared.as_mut_ptr(),
+                alice_shared.len(),
+            ),
+            0
+        );
+        assert_eq!(
+            ossh_rust_ecdh_shared_secret(
+                curve_id,
+                bob_secret.as_ptr(),
+                bob_secret.len(),
+                alice_public.as_ptr(),
+                alice_public.len(),
+                bob_shared.as_mut_ptr(),
+                bob_shared.len(),
+            ),
+            0
+        );
+        assert_eq!(alice_shared, bob_shared);
+        assert!(alice_shared.iter().any(|byte| *byte != 0));
     }
 
     #[test]
@@ -1296,6 +1538,21 @@ mod tests {
         assert_eq!(x25519(bob_secret, X25519_BASEPOINT_BYTES).as_slice(), bob_public.as_slice());
         assert_eq!(x25519(alice_secret, bob_public.as_slice().try_into().unwrap()).as_slice(), shared.as_slice());
         assert_eq!(x25519(bob_secret, alice_public.as_slice().try_into().unwrap()).as_slice(), shared.as_slice());
+    }
+
+    #[test]
+    fn nistp256_ecdh_roundtrip() {
+        assert_nist_ecdh_roundtrip(OSSH_RUST_ECDH_NISTP256, 32, 65, 32);
+    }
+
+    #[test]
+    fn nistp384_ecdh_roundtrip() {
+        assert_nist_ecdh_roundtrip(OSSH_RUST_ECDH_NISTP384, 48, 97, 48);
+    }
+
+    #[test]
+    fn nistp521_ecdh_roundtrip() {
+        assert_nist_ecdh_roundtrip(OSSH_RUST_ECDH_NISTP521, 66, 133, 66);
     }
 
     #[test]
