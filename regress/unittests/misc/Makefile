@@ -9,6 +9,7 @@ SRCS+=	test_parse.c
 SRCS+=	test_argv.c
 SRCS+=	test_strdelim.c
 SRCS+=	test_hpdelim.c
+SRCS+=	test_user_host_port.c
 SRCS+=	test_ptimeout.c
 SRCS+=	test_xextendf.c
 
