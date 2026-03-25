@@ -577,32 +577,38 @@ regress-prep:
 	[ -f `pwd`/regress/Makefile ] || \
 	    ln -s `cd $(srcdir) && pwd`/regress/Makefile `pwd`/regress/Makefile
 
-REGRESSLIBS=libssh.a $(LIBCOMPAT)
+REGRESSLIBS=libssh.a $(LIBCOMPAT) $(RUST_CRYPTO_BUILD_DEPS)
 TESTLIBS=$(LIBS) $(CHANNELLIBS) @TESTLIBS@
 
 regress/modpipe$(EXEEXT): $(srcdir)/regress/modpipe.c $(REGRESSLIBS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $(srcdir)/regress/modpipe.c \
-	$(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat $(TESTLIBS)
+	$(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat \
+	$(RUST_CRYPTO_LINK_LIB) $(TESTLIBS)
 
 regress/timestamp$(EXEEXT): $(srcdir)/regress/timestamp.c $(REGRESSLIBS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $(srcdir)/regress/timestamp.c \
-	$(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat $(TESTLIBS)
+	$(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat \
+	$(RUST_CRYPTO_LINK_LIB) $(TESTLIBS)
 
 regress/setuid-allowed$(EXEEXT): $(srcdir)/regress/setuid-allowed.c $(REGRESSLIBS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $(srcdir)/regress/setuid-allowed.c \
-	$(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat $(TESTLIBS)
+	$(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat \
+	$(RUST_CRYPTO_LINK_LIB) $(TESTLIBS)
 
 regress/netcat$(EXEEXT): $(srcdir)/regress/netcat.c $(REGRESSLIBS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $(srcdir)/regress/netcat.c \
-	$(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat $(TESTLIBS)
+	$(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat \
+	$(RUST_CRYPTO_LINK_LIB) $(TESTLIBS)
 
 regress/check-perm$(EXEEXT): $(srcdir)/regress/check-perm.c $(REGRESSLIBS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $(srcdir)/regress/check-perm.c \
-	$(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat $(TESTLIBS)
+	$(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat \
+	$(RUST_CRYPTO_LINK_LIB) $(TESTLIBS)
 
 regress/mkdtemp$(EXEEXT): $(srcdir)/regress/mkdtemp.c $(REGRESSLIBS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $(srcdir)/regress/mkdtemp.c \
-	$(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat $(TESTLIBS)
+	$(LDFLAGS) -lssh -lopenbsd-compat -lssh -lopenbsd-compat \
+	$(RUST_CRYPTO_LINK_LIB) $(TESTLIBS)
 
 UNITTESTS_TEST_HELPER_OBJS=\
 	regress/unittests/test_helper/test_helper.o \
