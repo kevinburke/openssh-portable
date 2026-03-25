@@ -6,7 +6,7 @@ tid="keygen moduli"
 dhgex=0
 for kex in `${SSH} -Q kex`; do
 	case $kex in
-		diffie-hellman-group*)	dhgex=1 ;;
+		diffie-hellman-group-exchange-*)	dhgex=1 ;;
 	esac
 done
 
