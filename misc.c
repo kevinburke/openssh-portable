@@ -1003,6 +1003,47 @@ out:
 int
 parse_user_host_port(const char *s, char **userp, char **hostp, int *portp)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_user_host_port_parse parsed;
+	char *user = NULL, *host = NULL;
+	int port = -1, ret = -1;
+
+	if (userp != NULL)
+		*userp = NULL;
+	if (hostp != NULL)
+		*hostp = NULL;
+	if (portp != NULL)
+		*portp = -1;
+
+	if (s == NULL)
+		return -1;
+	if (ossh_rust_parse_user_host_port((const u_char *)s, strlen(s),
+	    &parsed) != 0)
+		return -1;
+	if ((host = strndup(s + parsed.host_offset, parsed.host_len)) == NULL)
+		goto out;
+	if (parsed.has_user != 0 &&
+	    (user = strndup(s + parsed.user_offset, parsed.user_len)) == NULL)
+		goto out;
+	if (parsed.has_port != 0 &&
+	    (port = a2port(s + parsed.port_offset)) <= 0)
+		goto out;
+	if (userp != NULL) {
+		*userp = user;
+		user = NULL;
+	}
+	if (hostp != NULL) {
+		*hostp = host;
+		host = NULL;
+	}
+	if (portp != NULL)
+		*portp = port;
+	ret = 0;
+ out:
+	free(user);
+	free(host);
+	return ret;
+#else
 	char *sdup, *cp, *tmp;
 	char *user = NULL, *host = NULL;
 	int port = -1, ret = -1;
@@ -1051,6 +1092,7 @@ parse_user_host_port(const char *s, char **userp, char **hostp, int *portp)
 	free(user);
 	free(host);
 	return ret;
+#endif
 }
 
 /*
