@@ -1,4 +1,4 @@
-use base64ct::{Base64, Encoding};
+use base64ct::{Base64, Base64Unpadded, Encoding};
 
 use crate::util::{read_slice, write_prefix, SshWireReader};
 
@@ -55,11 +55,51 @@ pub(crate) struct OpenSshPrivate2PlaintextParse {
     pub(crate) part6_len: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct OpenSshPublicLineParse {
+    pub(crate) key_type_offset: usize,
+    pub(crate) key_type_len: usize,
+    pub(crate) key_blob_offset: usize,
+    pub(crate) key_blob_len: usize,
+    pub(crate) comment_offset: usize,
+}
+
 pub(crate) fn openssh_private2_decode_len(input: *const u8, input_len: usize) -> usize {
     let Some(input) = read_slice(input, input_len) else {
         return 0;
     };
     decode_private2_armored(input).map_or(0, |decoded| decoded.len())
+}
+
+pub(crate) fn openssh_public_line_parse(
+    input: *const u8,
+    input_len: usize,
+) -> Option<OpenSshPublicLineParse> {
+    let input = read_slice(input, input_len)?;
+    parse_public_key_line(input)
+}
+
+pub(crate) fn openssh_public_blob_decode_len(input: *const u8, input_len: usize) -> usize {
+    let Some(input) = read_slice(input, input_len) else {
+        return 0;
+    };
+    decode_public_blob(input).map_or(0, |decoded| decoded.len())
+}
+
+pub(crate) fn openssh_public_blob_decode_write(
+    input: *const u8,
+    input_len: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> i32 {
+    let Some(input) = read_slice(input, input_len) else {
+        return -1;
+    };
+    let decoded = match decode_public_blob(input) {
+        Some(decoded) => decoded,
+        None => return -1,
+    };
+    write_prefix(out, out_len, &decoded)
 }
 
 pub(crate) fn openssh_private2_decode_write(
@@ -294,6 +334,48 @@ fn parse_private2_plaintext(decrypted: &[u8]) -> Option<OpenSshPrivate2Plaintext
     })
 }
 
+fn parse_public_key_line(input: &[u8]) -> Option<OpenSshPublicLineParse> {
+    let key_type_len = input.iter().position(|byte| *byte == b' ' || *byte == b'\t')?;
+    let key_type_offset = 0usize;
+    if key_type_len == 0 {
+        return None;
+    }
+
+    let mut offset = key_type_len;
+    while matches!(input.get(offset), Some(b' ' | b'\t')) {
+        offset += 1;
+    }
+    let key_blob_offset = offset;
+    if key_blob_offset >= input.len() {
+        return None;
+    }
+    let key_blob_len = input[key_blob_offset..]
+        .iter()
+        .position(|byte| *byte == b' ' || *byte == b'\t')
+        .unwrap_or(input.len() - key_blob_offset);
+    if key_blob_len == 0 {
+        return None;
+    }
+    offset = key_blob_offset + key_blob_len;
+    while matches!(input.get(offset), Some(b' ' | b'\t')) {
+        offset += 1;
+    }
+    Some(OpenSshPublicLineParse {
+        key_type_offset,
+        key_type_len,
+        key_blob_offset,
+        key_blob_len,
+        comment_offset: offset,
+    })
+}
+
+fn decode_public_blob(input: &[u8]) -> Option<Vec<u8>> {
+    let token = core::str::from_utf8(input).ok()?;
+    Base64Unpadded::decode_vec(token)
+        .ok()
+        .or_else(|| Base64::decode_vec(token).ok())
+}
+
 fn is_cert_key_type(key_type: &[u8]) -> bool {
     key_type.ends_with(b"-cert-v01@openssh.com")
 }
@@ -319,8 +401,9 @@ fn curve_nid_for_key_type(key_type: &[u8]) -> Option<i32> {
 #[cfg(test)]
 mod tests {
     use super::{
-        openssh_private2_parse, openssh_private2_parse_plaintext, OSSH_RUST_PRIVATE2_KDF_BCRYPT,
-        OSSH_RUST_PRIVATE2_KDF_NONE,
+        openssh_private2_parse, openssh_private2_parse_plaintext,
+        openssh_public_blob_decode_len, openssh_public_blob_decode_write,
+        openssh_public_line_parse, OSSH_RUST_PRIVATE2_KDF_BCRYPT, OSSH_RUST_PRIVATE2_KDF_NONE,
     };
 
     const ED25519_1: &[u8] =
@@ -440,5 +523,32 @@ mod tests {
         out.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
         out.extend_from_slice(bytes);
         out
+    }
+
+    #[test]
+    fn parses_public_key_line_with_comment() {
+        let line = b"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFOG6kY7Rf4UtCFvPwKgo/BztXck2xC4a2WyA34XtIwZ comment here";
+        let parsed = openssh_public_line_parse(line.as_ptr(), line.len()).unwrap();
+
+        assert_eq!(&line[parsed.key_type_offset..parsed.key_type_offset + parsed.key_type_len], b"ssh-ed25519");
+        assert_eq!(&line[parsed.comment_offset..], b"comment here");
+    }
+
+    #[test]
+    fn decodes_unpadded_public_blob() {
+        let blob = b"AAAAC3NzaC1lZDI1NTE5AAAAIFOG6kY7Rf4UtCFvPwKgo/BztXck2xC4a2WyA34XtIwZ";
+        let decoded_len = openssh_public_blob_decode_len(blob.as_ptr(), blob.len());
+        assert!(decoded_len > 0);
+        let mut decoded = vec![0u8; decoded_len];
+        assert_eq!(
+            0,
+            openssh_public_blob_decode_write(
+                blob.as_ptr(),
+                blob.len(),
+                decoded.as_mut_ptr(),
+                decoded.len(),
+            )
+        );
+        assert!(!decoded.is_empty());
     }
 }
