@@ -41,7 +41,7 @@ use rsa::{
     rsa_parse_private_pem_with_passphrase, rsa_parse_public_blob,
     rsa_private_pem_len, rsa_private_pem_write, rsa_sign_prehashed, rsa_verify_prehashed,
 };
-use util::{argv_split_parse, argv_split_write, read_slice, write_prefix};
+use util::{argv_split_parse, argv_split_write, read_slice, strdelim_parse_in_place, write_prefix};
 
 const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 15;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
@@ -150,6 +150,12 @@ pub struct RustPublicLineParse {
 pub struct RustArgvSplitParse {
     argc: usize,
     packed_len: usize,
+}
+
+#[repr(C)]
+pub struct RustStrdelimParse {
+    next_offset: usize,
+    next_is_null: u32,
 }
 
 #[unsafe(no_mangle)]
@@ -348,6 +354,28 @@ pub extern "C" fn ossh_rust_argv_split_write(
     out_len: usize,
 ) -> c_int {
     argv_split_write(input, input_len, terminate_on_comment, out, out_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_strdelim_parse(
+    input: *mut u8,
+    input_len: usize,
+    split_equals: c_int,
+    out: *mut RustStrdelimParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(parsed) = strdelim_parse_in_place(input, input_len, split_equals) else {
+        return -1;
+    };
+    unsafe {
+        *out = RustStrdelimParse {
+            next_offset: parsed.next_offset,
+            next_is_null: parsed.next_is_null,
+        };
+    }
+    0
 }
 
 #[unsafe(no_mangle)]

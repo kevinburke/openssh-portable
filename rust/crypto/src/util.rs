@@ -9,6 +9,12 @@ pub(crate) struct ArgvSplitParse {
     pub(crate) packed_len: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct StrdelimParse {
+    pub(crate) next_offset: usize,
+    pub(crate) next_is_null: u32,
+}
+
 pub(crate) fn read_array<const N: usize>(ptr: *const u8, len: usize) -> Option<[u8; N]> {
     if ptr.is_null() || len != N {
         return None;
@@ -25,6 +31,16 @@ pub(crate) fn read_slice<'a>(ptr: *const u8, len: usize) -> Option<&'a [u8]> {
         None
     } else {
         Some(unsafe { slice::from_raw_parts(ptr, len) })
+    }
+}
+
+pub(crate) fn read_slice_mut<'a>(ptr: *mut u8, len: usize) -> Option<&'a mut [u8]> {
+    if len == 0 {
+        Some(&mut [])
+    } else if ptr.is_null() {
+        None
+    } else {
+        Some(unsafe { slice::from_raw_parts_mut(ptr, len) })
     }
 }
 
@@ -171,6 +187,72 @@ pub(crate) fn argv_split_write(
     0
 }
 
+pub(crate) fn strdelim_parse_in_place(
+    input: *mut u8,
+    input_len: usize,
+    split_equals: c_int,
+) -> Option<StrdelimParse> {
+    let input = read_slice_mut(input, input_len)?;
+    if input.is_empty() {
+        return Some(StrdelimParse {
+            next_offset: 0,
+            next_is_null: 1,
+        });
+    }
+    let nul = input.iter().position(|byte| *byte == 0)?;
+    let split_equals = split_equals != 0;
+    let mut delim = None;
+    for (idx, byte) in input[..nul].iter().enumerate() {
+        if matches!(*byte, b' ' | b'\t' | b'\r' | b'\n' | b'"')
+            || (split_equals && *byte == b'=')
+        {
+            delim = Some(idx);
+            break;
+        }
+    }
+    let Some(pos) = delim else {
+        return Some(StrdelimParse {
+            next_offset: 0,
+            next_is_null: 1,
+        });
+    };
+
+    if input[pos] == b'"' {
+        input.copy_within(pos + 1..=nul, pos);
+        let new_nul = nul - 1;
+        let closing = input[pos..new_nul]
+            .iter()
+            .position(|byte| *byte == b'"')
+            .map(|off| pos + off)?;
+        input[closing] = 0;
+        let mut next_offset = closing + 1;
+        while matches!(input.get(next_offset), Some(b' ' | b'\t' | b'\r' | b'\n')) {
+            next_offset += 1;
+        }
+        return Some(StrdelimParse {
+            next_offset,
+            next_is_null: 0,
+        });
+    }
+
+    let wspace = split_equals && input[pos] == b'=';
+    input[pos] = 0;
+    let mut next_offset = pos + 1;
+    while matches!(input.get(next_offset), Some(b' ' | b'\t' | b'\r' | b'\n')) {
+        next_offset += 1;
+    }
+    if split_equals && matches!(input.get(next_offset), Some(b'=')) && !wspace {
+        next_offset += 1;
+        while matches!(input.get(next_offset), Some(b' ' | b'\t' | b'\r' | b'\n')) {
+            next_offset += 1;
+        }
+    }
+    Some(StrdelimParse {
+        next_offset,
+        next_is_null: 0,
+    })
+}
+
 fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
     let mut argv = Vec::new();
     let mut i = 0usize;
@@ -220,7 +302,7 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 
 #[cfg(test)]
 mod tests {
-    use super::{argv_split_parse, argv_split_write};
+    use super::{argv_split_parse, argv_split_write, strdelim_parse_in_place};
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
         let parsed = argv_split_parse(input.as_ptr(), input.len(), terminate_on_comment as i32)?;
@@ -283,5 +365,44 @@ mod tests {
     fn argv_split_rejects_unterminated_quote() {
         assert_eq!(split(br#""smiley"#, false), None);
         assert_eq!(split(b"'smiley", false), None);
+    }
+
+    fn strdelim_next(input: &[u8], split_equals: bool) -> Option<(Vec<u8>, Option<Vec<u8>>)> {
+        let mut buf = input.to_vec();
+        buf.push(0);
+        let parsed = strdelim_parse_in_place(buf.as_mut_ptr(), buf.len(), split_equals as i32)?;
+        let token_end = buf.iter().position(|byte| *byte == 0)?;
+        let token = buf[..token_end].to_vec();
+        let rest = if parsed.next_is_null != 0 {
+            None
+        } else {
+            let rest_end = buf[parsed.next_offset..]
+                .iter()
+                .position(|byte| *byte == 0)
+                .map(|off| parsed.next_offset + off)?;
+            Some(buf[parsed.next_offset..rest_end].to_vec())
+        };
+        Some((token, rest))
+    }
+
+    #[test]
+    fn strdelim_handles_equals_and_quotes() {
+        assert_eq!(
+            strdelim_next(b"blob1=blob2", true),
+            Some((b"blob1".to_vec(), Some(b"blob2".to_vec())))
+        );
+        assert_eq!(
+            strdelim_next(b"\"blob1\" blob2", true),
+            Some((b"blob1".to_vec(), Some(b"blob2".to_vec())))
+        );
+        assert_eq!(
+            strdelim_next(b"blob1=blob2", false),
+            Some((b"blob1=blob2".to_vec(), None))
+        );
+    }
+
+    #[test]
+    fn strdelim_rejects_unterminated_quote() {
+        assert_eq!(strdelim_next(b"\"blob", true), None);
     }
 }

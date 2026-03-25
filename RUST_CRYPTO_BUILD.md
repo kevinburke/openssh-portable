@@ -35,6 +35,9 @@ Rust-backed today:
   - client and server config-file option splitting
   - `ProxyCommand` / helper command parsing
   - auth-command and related quoted-argument consumers
+- `strdelim()` / `strdelimw()` tokenization used by:
+  - client and server config-file line splitting
+  - keyword / argument boundary parsing in `readconf.c` and `servconf.c`
 - RSA and ECDSA private-key loading for:
   - legacy PEM
   - PKCS#8
@@ -146,8 +149,11 @@ On this branch, the Rust unit tests include both fixed vectors and
 randomized/property-style checks for digests, Ed25519, RSA, ECDSA, X25519,
 NIST ECDH, AES-CTR, and ChaCha20-Poly1305.
 
-The existing OpenSSH unit suite also exercises the Rust `argv_split()`
-replacement through `regress/unittests/misc/test_argv.c`.
+The existing OpenSSH unit suite also exercises the Rust config-token parsing
+replacements through:
+
+- `regress/unittests/misc/test_argv.c`
+- `regress/unittests/misc/test_strdelim.c`
 
 For the Rust-backed private-key load path, targeted local checks that are
 worth rerunning are:
