@@ -94,7 +94,12 @@ impl<'a> SshWireReader<'a> {
     }
 
     pub(crate) fn get_mpint(&mut self) -> Option<&'a [u8]> {
-        let bytes = self.get_string()?;
+        let (_, bytes) = self.get_mpint_with_offset()?;
+        Some(bytes)
+    }
+
+    pub(crate) fn get_mpint_with_offset(&mut self) -> Option<(usize, &'a [u8])> {
+        let (offset, bytes) = self.get_string_with_offset()?;
         if !bytes.is_empty() && (bytes[0] & 0x80) != 0 {
             return None;
         }
@@ -104,7 +109,7 @@ impl<'a> SshWireReader<'a> {
             return None;
         }
         let first_nonzero = bytes.iter().position(|byte| *byte != 0).unwrap_or(bytes.len());
-        Some(&bytes[first_nonzero..])
+        Some((offset + first_nonzero, &bytes[first_nonzero..]))
     }
 }
 
