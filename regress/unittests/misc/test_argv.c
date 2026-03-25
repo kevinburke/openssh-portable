@@ -178,6 +178,30 @@ test_argv(void)
 	ASSERT_STRING_EQ(av[0], "leamas#gold");
 	ASSERT_PTR_EQ(av[1], NULL);
 	RESET_ARGV();
+	ASSERT_INT_EQ(argv_split("   # gold", &ac, &av, 1), 0);
+	ASSERT_INT_EQ(ac, 0);
+	ASSERT_PTR_NE(av, NULL);
+	ASSERT_PTR_EQ(av[0], NULL);
+	RESET_ARGV();
+	ASSERT_INT_EQ(argv_split("\"leamas\" #gold", &ac, &av, 1), 0);
+	ASSERT_INT_EQ(ac, 1);
+	ASSERT_PTR_NE(av, NULL);
+	ASSERT_STRING_EQ(av[0], "leamas");
+	ASSERT_PTR_EQ(av[1], NULL);
+	RESET_ARGV();
+	TEST_DONE();
+
+	TEST_START("invalid");
+	ASSERT_INT_EQ(argv_split("'smiley", &ac, &av, 0),
+	    SSH_ERR_INVALID_FORMAT);
+	ASSERT_INT_EQ(ac, 0);
+	ASSERT_PTR_EQ(av, NULL);
+	RESET_ARGV();
+	ASSERT_INT_EQ(argv_split("\"leamas", &ac, &av, 0),
+	    SSH_ERR_INVALID_FORMAT);
+	ASSERT_INT_EQ(ac, 0);
+	ASSERT_PTR_EQ(av, NULL);
+	RESET_ARGV();
 	TEST_DONE();
 
 	/* XXX test char *argv_assemble(int argc, char **argv) */

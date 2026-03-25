@@ -237,6 +237,19 @@ get_private(const char *n)
 	return ret;
 }
 
+static char *
+load_public_text_line(const char *name)
+{
+	struct sshbuf *b;
+	char *ret;
+
+	b = load_text_file(name);
+	ret = strdup((const char *)sshbuf_ptr(b));
+	ASSERT_PTR_NE(ret, NULL);
+	sshbuf_free(b);
+	return ret;
+}
+
 void
 sshkey_tests(void)
 {
@@ -485,6 +498,91 @@ sshkey_tests(void)
 #endif /* OPENSSL_HAS_ECC */
 #endif /* WITH_OPENSSL */
 	sshkey_free(kf);
+
+	TEST_START("read public line ED25519");
+	{
+		char *line = load_public_text_line("ed25519_1.pub");
+		char *cp = line;
+
+		k1 = sshkey_new(KEY_UNSPEC);
+		ASSERT_PTR_NE(k1, NULL);
+		ASSERT_INT_EQ(sshkey_read(k1, &cp), 0);
+		ASSERT_INT_EQ(k1->type, KEY_ED25519);
+		ASSERT_STRING_EQ(cp, "ED25519 test key #1");
+		free(line);
+		sshkey_free(k1);
+		k1 = NULL;
+	}
+	TEST_DONE();
+
+	TEST_START("read public line invalid");
+	{
+		char *line = strdup("ssh-ed25519 !!! not-base64");
+		char *cp = line;
+
+		ASSERT_PTR_NE(line, NULL);
+		k1 = sshkey_new(KEY_UNSPEC);
+		ASSERT_PTR_NE(k1, NULL);
+		ASSERT_INT_EQ(sshkey_read(k1, &cp), SSH_ERR_INVALID_FORMAT);
+		free(line);
+		sshkey_free(k1);
+		k1 = NULL;
+	}
+	TEST_DONE();
+
+	TEST_START("read public line type mismatch");
+	{
+		char *line = load_public_text_line("ed25519_1.pub");
+		char *space = strchr(line, ' ');
+		char *mismatch;
+		char *cp;
+
+		ASSERT_PTR_NE(space, NULL);
+		mismatch = malloc(strlen("ssh-rsa") + strlen(space) + 1);
+		ASSERT_PTR_NE(mismatch, NULL);
+		snprintf(mismatch, strlen("ssh-rsa") + strlen(space) + 1,
+		    "ssh-rsa%s", space);
+		cp = mismatch;
+		k1 = sshkey_new(KEY_UNSPEC);
+		ASSERT_PTR_NE(k1, NULL);
+		ASSERT_INT_EQ(sshkey_read(k1, &cp), SSH_ERR_KEY_TYPE_MISMATCH);
+		free(mismatch);
+		free(line);
+		sshkey_free(k1);
+		k1 = NULL;
+	}
+	TEST_DONE();
+
+	TEST_START("read public line ECDSA curve mismatch");
+	{
+		char *line = load_public_text_line("ecdsa_1.pub");
+		char *cp = line;
+
+		memcpy(line, "ecdsa-sha2-nistp384", strlen("ecdsa-sha2-nistp384"));
+		k1 = sshkey_new(KEY_UNSPEC);
+		ASSERT_PTR_NE(k1, NULL);
+		ASSERT_INT_EQ(sshkey_read(k1, &cp), SSH_ERR_EC_CURVE_MISMATCH);
+		free(line);
+		sshkey_free(k1);
+		k1 = NULL;
+	}
+	TEST_DONE();
+
+	TEST_START("read public line certificate");
+	{
+		char *line = load_public_text_line("ecdsa_1-cert.pub");
+		char *cp = line;
+
+		k1 = sshkey_new(KEY_UNSPEC);
+		ASSERT_PTR_NE(k1, NULL);
+		ASSERT_INT_EQ(sshkey_read(k1, &cp), 0);
+		ASSERT_INT_EQ(k1->type, KEY_ECDSA_CERT);
+		ASSERT_STRING_EQ(cp, "ECDSA test key #1");
+		free(line);
+		sshkey_free(k1);
+		k1 = NULL;
+	}
+	TEST_DONE();
 
 	TEST_START("certify key");
 	ASSERT_INT_EQ(sshkey_load_public(test_data_file("ed25519_1.pub"),
