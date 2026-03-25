@@ -77,4 +77,19 @@ test_hpdelim(void)
 	DONE_STRING();
 	TEST_DONE();
 
+	TEST_START("hpdelim [host] only");
+	START_STRING("[::1]");
+	cp = hpdelim(&str);
+	ASSERT_STRING_EQ(cp, "[::1]");
+	ASSERT_PTR_EQ(str, NULL);
+	DONE_STRING();
+	TEST_DONE();
+
+	TEST_START("hpdelim host/path rejects slash");
+	START_STRING("host/path");
+	cp = hpdelim(&str);
+	ASSERT_PTR_EQ(cp, NULL);
+	DONE_STRING();
+	TEST_DONE();
+
 }
