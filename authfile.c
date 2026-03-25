@@ -218,6 +218,7 @@ sshkey_try_load_public(struct sshkey **kp, const char *filename,
 	}
 	while (getline(&line, &linesize, f) != -1) {
 		cp = line;
+		cp[strcspn(cp, "\r\n")] = '\0';
 		switch (*cp) {
 		case '#':
 		case '\n':

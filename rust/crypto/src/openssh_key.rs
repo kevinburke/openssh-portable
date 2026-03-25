@@ -351,7 +351,7 @@ fn parse_public_key_line(input: &[u8]) -> Option<OpenSshPublicLineParse> {
     }
     let key_blob_len = input[key_blob_offset..]
         .iter()
-        .position(|byte| *byte == b' ' || *byte == b'\t')
+        .position(|byte| matches!(*byte, b' ' | b'\t' | b'\r' | b'\n'))
         .unwrap_or(input.len() - key_blob_offset);
     if key_blob_len == 0 {
         return None;
@@ -541,6 +541,16 @@ mod tests {
 
         assert_eq!(&line[parsed.key_type_offset..parsed.key_type_offset + parsed.key_type_len], b"ssh-ed25519");
         assert_eq!(parsed.comment_offset, line.len());
+    }
+
+    #[test]
+    fn parses_public_key_line_without_comment_and_trailing_newline() {
+        let line =
+            b"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFOG6kY7Rf4UtCFvPwKgo/BztXck2xC4a2WyA34XtIwZ\n";
+        let parsed = openssh_public_line_parse(line.as_ptr(), line.len()).unwrap();
+
+        assert_eq!(&line[parsed.key_type_offset..parsed.key_type_offset + parsed.key_type_len], b"ssh-ed25519");
+        assert_eq!(parsed.comment_offset, line.len() - 1);
     }
 
     #[test]
