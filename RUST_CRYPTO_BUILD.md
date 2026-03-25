@@ -46,6 +46,10 @@ Rust-backed today:
   - `host:port`
   - `user@[host]:port`
   - similar destination parsing helpers layered above `hpdelim()`
+- `parse_user_host_path()` parsing used by:
+  - `user@host:path`
+  - `user@[host]:path`
+  - similar scp / sftp target parsing helpers
 - `parse_uri()` parsing used by:
   - `ssh://[user@]host[:port][/path]`
   - similar `scp://` / `sftp://` style URI entry points
