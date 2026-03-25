@@ -20,6 +20,10 @@ Rust-backed today:
   (`ecdsa-sha2-nistp256`, `ecdsa-sha2-nistp384`, `ecdsa-sha2-nistp521`)
 - SSH certificate body parsing
 - SSH public-key blob parsing for Ed25519, RSA, and ECDSA
+- SSH public-key and certificate text-line parsing through `sshkey_read()`:
+  - `.pub` and `-cert.pub` files
+  - `authorized_keys` / `known_hosts` style key lines after host/option fields
+  - `sshsig` key-file consumers and similar text-key entry points
 - OpenSSH `openssh-key-v1` armor and header parsing
 - OpenSSH `openssh-key-v1` decrypted private-section parsing for Ed25519,
   RSA, and ECDSA keys:
@@ -27,6 +31,10 @@ Rust-backed today:
   - cert-prefixed private-key body handling
   - embedded comment extraction
   - deterministic padding validation
+- `argv_split()` tokenization used by:
+  - client and server config-file option splitting
+  - `ProxyCommand` / helper command parsing
+  - auth-command and related quoted-argument consumers
 - RSA and ECDSA private-key loading for:
   - legacy PEM
   - PKCS#8
@@ -53,6 +61,7 @@ Still on the existing C path today:
 - PKCS#11 and security-key code paths
 - SK / FIDO private-key deserialization inside decrypted
   `openssh-key-v1` private sections
+- most client/server config-file semantics beyond shared tokenization
 
 In other words, this is now a mixed Rust/C crypto build, not yet a
 full-Rust transport/backend replacement.
@@ -137,6 +146,9 @@ On this branch, the Rust unit tests include both fixed vectors and
 randomized/property-style checks for digests, Ed25519, RSA, ECDSA, X25519,
 NIST ECDH, AES-CTR, and ChaCha20-Poly1305.
 
+The existing OpenSSH unit suite also exercises the Rust `argv_split()`
+replacement through `regress/unittests/misc/test_argv.c`.
+
 For the Rust-backed private-key load path, targeted local checks that are
 worth rerunning are:
 
@@ -149,6 +161,14 @@ worth rerunning are:
 
 The first two should succeed. The second two should fail with the expected
 OpenSSH wrong-passphrase message.
+
+For the Rust-backed public text-key path, representative checks are:
+
+```sh
+./ssh-keygen -l -f regress/unittests/sshkey/testdata/ed25519_1.pub
+./ssh-keygen -l -f regress/unittests/sshkey/testdata/ecdsa_1-cert.pub
+./ssh-keygen -l -f regress/unittests/sshkey/testdata/rsa_1.pub
+```
 
 ## Prerequisites
 
