@@ -86,4 +86,21 @@ test_parse(void)
 	ASSERT_STRING_EQ(path, "some/path");
 	free(user); free(host); free(path);
 	TEST_DONE();
+
+	TEST_START("misc_parse_uri_encoded_and_params");
+	user = host = path = NULL;
+	ASSERT_INT_EQ(parse_uri("ssh",
+	    "ssh://someuser;ignored@some.host:2222/some%20path",
+	    &user, &host, &port, &path), 0);
+	ASSERT_STRING_EQ(user, "someuser");
+	ASSERT_STRING_EQ(host, "some.host");
+	ASSERT_INT_EQ(port, 2222);
+	ASSERT_STRING_EQ(path, "some path");
+	free(user); free(host); free(path);
+	TEST_DONE();
+
+	TEST_START("misc_parse_uri_rejects_empty_user");
+	ASSERT_INT_EQ(parse_uri("ssh", "ssh://@some.host:22/path",
+	    &user, &host, &port, &path), -1);
+	TEST_DONE();
 }

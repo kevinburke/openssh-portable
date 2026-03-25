@@ -177,6 +177,21 @@ pub struct RustUserHostPortParse {
     has_port: u32,
 }
 
+#[repr(C)]
+pub struct RustUriParse {
+    user_offset: usize,
+    user_len: usize,
+    host_offset: usize,
+    host_len: usize,
+    port_offset: usize,
+    port_len: usize,
+    path_offset: usize,
+    path_len: usize,
+    has_user: u32,
+    has_port: u32,
+    has_path: u32,
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_cert_parse_body(
     input: *const u8,
@@ -441,6 +456,36 @@ pub extern "C" fn ossh_rust_parse_user_host_port(
             port_len: parsed.port_len,
             has_user: parsed.has_user,
             has_port: parsed.has_port,
+        };
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_parse_uri(
+    input: *const u8,
+    input_len: usize,
+    out: *mut RustUriParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(parsed) = util::parse_uri(input, input_len) else {
+        return -1;
+    };
+    unsafe {
+        *out = RustUriParse {
+            user_offset: parsed.user_offset,
+            user_len: parsed.user_len,
+            host_offset: parsed.host_offset,
+            host_len: parsed.host_len,
+            port_offset: parsed.port_offset,
+            port_len: parsed.port_len,
+            path_offset: parsed.path_offset,
+            path_len: parsed.path_len,
+            has_user: parsed.has_user,
+            has_port: parsed.has_port,
+            has_path: parsed.has_path,
         };
     }
     0
