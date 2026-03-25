@@ -659,10 +659,11 @@ mod tests {
     use core::ffi::c_int;
 
     use super::{
-        EcdsaCurve, NID_SECP384R1, NID_SECP521R1, NID_X9_62_PRIME256V1, ecdsa_copy_public,
-        ecdsa_equal_public, ecdsa_export_private, ecdsa_export_public, ecdsa_free,
-        ecdsa_from_private, ecdsa_generate, ecdsa_parse_private_pem_with_passphrase,
-        ecdsa_parse_public_blob, ecdsa_sign_prehashed, ecdsa_verify_prehashed,
+        EcdsaCurve, NID_SECP384R1, NID_SECP521R1, NID_X9_62_PRIME256V1,
+        OSSH_RUST_ECDSA_PARSE_CURVE_MISMATCH, ecdsa_copy_public, ecdsa_equal_public,
+        ecdsa_export_private, ecdsa_export_public, ecdsa_free, ecdsa_from_private,
+        ecdsa_generate, ecdsa_parse_private_pem_with_passphrase, ecdsa_parse_public_blob,
+        ecdsa_sign_prehashed, ecdsa_verify_prehashed,
     };
     use crate::private_pem::PrivatePemError;
     use pkcs8::{EncodePrivateKey, LineEnding};
@@ -813,9 +814,33 @@ mod tests {
             blob.len(),
             &mut consumed,
         );
+        let parsed = parsed.expect("valid ECDSA public blob");
         assert!(!parsed.is_null());
         assert_eq!(consumed, 4 + curve.ssh_name().len() + 4 + public_key.len());
         ecdsa_free(parsed);
+        ecdsa_free(key);
+    }
+
+    #[test]
+    fn public_blob_parse_reports_curve_mismatch() {
+        let curve = EcdsaCurve::NistP256;
+        let key = ecdsa_generate(NID_X9_62_PRIME256V1);
+        let mut public_key = vec![0u8; curve.public_len()];
+
+        assert!(!key.is_null());
+        assert_eq!(0, ecdsa_export_public(key, public_key.as_mut_ptr(), public_key.len()));
+
+        let mut blob = Vec::new();
+        put_string(&mut blob, curve.ssh_name());
+        put_string(&mut blob, &public_key);
+
+        let parsed = ecdsa_parse_public_blob(
+            NID_SECP384R1,
+            blob.as_ptr(),
+            blob.len(),
+            core::ptr::null_mut(),
+        );
+        assert_eq!(parsed, Err(OSSH_RUST_ECDSA_PARSE_CURVE_MISMATCH));
         ecdsa_free(key);
     }
 
