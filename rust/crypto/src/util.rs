@@ -34,6 +34,21 @@ pub(crate) struct UserHostPortParse {
     pub(crate) has_port: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct UriParse {
+    pub(crate) user_offset: usize,
+    pub(crate) user_len: usize,
+    pub(crate) host_offset: usize,
+    pub(crate) host_len: usize,
+    pub(crate) port_offset: usize,
+    pub(crate) port_len: usize,
+    pub(crate) path_offset: usize,
+    pub(crate) path_len: usize,
+    pub(crate) has_user: u32,
+    pub(crate) has_port: u32,
+    pub(crate) has_path: u32,
+}
+
 pub(crate) fn read_array<const N: usize>(ptr: *const u8, len: usize) -> Option<[u8; N]> {
     if ptr.is_null() || len != N {
         return None;
@@ -382,6 +397,103 @@ pub(crate) fn parse_user_host_port(input: *const u8, input_len: usize) -> Option
     })
 }
 
+pub(crate) fn parse_uri(input: *const u8, input_len: usize) -> Option<UriParse> {
+    let input = read_slice(input, input_len)?;
+    if input.is_empty() {
+        return None;
+    }
+
+    let authority_end = input
+        .iter()
+        .position(|byte| *byte == b'/')
+        .unwrap_or(input.len());
+    let authority = &input[..authority_end];
+    if authority.is_empty() {
+        return None;
+    }
+
+    let (user_offset, user_len, authority_offset) = match authority.iter().position(|byte| *byte == b'@') {
+        Some(at) => {
+            if at == 0 || at + 1 >= authority.len() {
+                return None;
+            }
+            let user_len = authority[..at]
+                .iter()
+                .position(|byte| *byte == b';')
+                .unwrap_or(at);
+            if user_len == 0 {
+                return None;
+            }
+            (0, user_len, at + 1)
+        }
+        None => (0, 0, 0),
+    };
+    let host_port = &authority[authority_offset..];
+
+    let (host_offset, host_len, port_offset, port_len) = if host_port.first() == Some(&b'[') {
+        let close = host_port.iter().position(|byte| *byte == b']')?;
+        if close == 1 {
+            return None;
+        }
+        let host_offset = authority_offset + 1;
+        let host_len = close - 1;
+        if close + 1 == host_port.len() {
+            (host_offset, host_len, 0, 0)
+        } else if host_port.get(close + 1) == Some(&b':') {
+            let port_offset = authority_offset + close + 2;
+            let port_len = host_port.len().checked_sub(close + 2)?;
+            if port_len == 0 {
+                return None;
+            }
+            (host_offset, host_len, port_offset, port_len)
+        } else {
+            return None;
+        }
+    } else {
+        match host_port.iter().position(|byte| *byte == b':') {
+            Some(colon) => {
+                if colon == 0 || colon + 1 >= host_port.len() {
+                    return None;
+                }
+                (
+                    authority_offset,
+                    colon,
+                    authority_offset + colon + 1,
+                    host_port.len() - colon - 1,
+                )
+            }
+            None => {
+                if host_port.is_empty() {
+                    return None;
+                }
+                (authority_offset, host_port.len(), 0, 0)
+            }
+        }
+    };
+
+    let (path_offset, path_len) = if authority_end == input.len() {
+        (0, 0)
+    } else {
+        let path_offset = authority_end + 1;
+        let path_len = input.len() - path_offset;
+        (path_offset, path_len)
+    };
+
+    Some(UriParse {
+        user_offset,
+        user_len,
+        host_offset,
+        host_len,
+        port_offset,
+        port_len,
+        path_offset,
+        path_len,
+        has_user: u32::from(user_len != 0),
+        has_port: u32::from(port_len != 0),
+        has_path: u32::from(path_len != 0),
+    })
+}
+
 fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
     let mut argv = Vec::new();
     let mut i = 0usize;
@@ -432,8 +544,8 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 #[cfg(test)]
 mod tests {
     use super::{
-        argv_split_parse, argv_split_write, hpdelim2_parse_in_place, parse_user_host_port,
-        strdelim_parse_in_place, UserHostPortParse,
+        argv_split_parse, argv_split_write, hpdelim2_parse_in_place, parse_uri,
+        parse_user_host_port, strdelim_parse_in_place, UriParse, UserHostPortParse,
     };
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
@@ -629,5 +741,50 @@ mod tests {
         assert_eq!(parse_user_host_port(b"host/path".as_ptr(), 9), None);
         assert_eq!(parse_user_host_port(b"[::1".as_ptr(), 4), None);
         assert_eq!(parse_user_host_port(b"[]:22".as_ptr(), 5), None);
+    }
+
+    #[test]
+    fn parse_uri_handles_basic_forms() {
+        assert_eq!(
+            parse_uri(b"someuser@some.host:22/some/path".as_ptr(), 31),
+            Some(UriParse {
+                user_offset: 0,
+                user_len: 8,
+                host_offset: 9,
+                host_len: 9,
+                port_offset: 19,
+                port_len: 2,
+                path_offset: 22,
+                path_len: 9,
+                has_user: 1,
+                has_port: 1,
+                has_path: 1,
+            })
+        );
+        assert_eq!(
+            parse_uri(b"someuser;ignored@[::1]:2222".as_ptr(), 27),
+            Some(UriParse {
+                user_offset: 0,
+                user_len: 8,
+                host_offset: 18,
+                host_len: 3,
+                port_offset: 23,
+                port_len: 4,
+                path_offset: 0,
+                path_len: 0,
+                has_user: 1,
+                has_port: 1,
+                has_path: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_uri_rejects_bad_forms() {
+        assert_eq!(parse_uri(b"".as_ptr(), 0), None);
+        assert_eq!(parse_uri(b"@host".as_ptr(), 5), None);
+        assert_eq!(parse_uri(b"user@".as_ptr(), 5), None);
+        assert_eq!(parse_uri(b"host:".as_ptr(), 5), None);
+        assert_eq!(parse_uri(b"[]:22".as_ptr(), 5), None);
     }
 }
