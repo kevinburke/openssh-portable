@@ -472,12 +472,26 @@ static char *
 strdelim_internal(char **s, int split_equals)
 {
 	char *old;
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_strdelim_parse parsed;
+	size_t len;
+#else
 	int wspace = 0;
+#endif
 
 	if (*s == NULL)
 		return NULL;
 
 	old = *s;
+
+#ifdef WITH_RUST_CRYPTO
+	len = strlen(*s) + 1;
+	if (ossh_rust_strdelim_parse((u_char *)*s, len, split_equals,
+	    &parsed) != 0)
+		return NULL;
+	*s = parsed.next_is_null != 0 ? NULL : old + parsed.next_offset;
+	return old;
+#else
 
 	*s = strpbrk(*s,
 	    split_equals ? WHITESPACE QUOTE "=" : WHITESPACE QUOTE);
@@ -507,6 +521,7 @@ strdelim_internal(char **s, int split_equals)
 		*s += strspn(*s + 1, WHITESPACE) + 1;
 
 	return (old);
+#endif
 }
 
 /*
