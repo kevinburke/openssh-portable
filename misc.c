@@ -65,6 +65,9 @@
 #include "sshbuf.h"
 #include "ssherr.h"
 #include "platform.h"
+#ifdef WITH_RUST_CRYPTO
+#include "rust-crypto.h"
+#endif
 
 /* remove newline at end of string */
 char *
@@ -2130,12 +2133,52 @@ int
 argv_split(const char *s, int *argcp, char ***argvp, int terminate_on_comment)
 {
 	int r = SSH_ERR_INTERNAL_ERROR;
-	int argc = 0, quote, i, j;
-	char *arg, **argv = xcalloc(1, sizeof(*argv));
+	int argc = 0, i;
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_argv_split_parse parsed;
+	u_char *packed = NULL, *cp;
+#else
+	int quote, j;
+	char *arg;
+#endif
+	char **argv = xcalloc(1, sizeof(*argv));
 
 	*argvp = NULL;
 	*argcp = 0;
 
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_argv_split_parse((const u_char *)s, strlen(s),
+	    terminate_on_comment, &parsed) != 0) {
+		r = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+	if (parsed.argc > INT_MAX) {
+		r = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+	argv = xreallocarray(argv, parsed.argc + 1, sizeof(*argv));
+	if (parsed.packed_len != 0) {
+		packed = xmalloc(parsed.packed_len);
+		if (ossh_rust_argv_split_write((const u_char *)s, strlen(s),
+		    terminate_on_comment, packed, parsed.packed_len) != 0) {
+			r = SSH_ERR_INVALID_FORMAT;
+			goto out;
+		}
+	}
+	cp = packed;
+	for (i = 0; i < (int)parsed.argc; i++) {
+		argv[i] = xstrdup((const char *)cp);
+		cp += strlen((const char *)cp) + 1;
+	}
+	argv[parsed.argc] = NULL;
+	*argcp = argc = (int)parsed.argc;
+	*argvp = argv;
+	argv = NULL;
+	argc = 0;
+	r = 0;
+ out:
+	free(packed);
+#else
 	for (i = 0; s[i] != '\0'; i++) {
 		/* Skip leading whitespace */
 		if (s[i] == ' ' || s[i] == '\t')
@@ -2187,6 +2230,7 @@ argv_split(const char *s, int *argcp, char ***argvp, int terminate_on_comment)
 	argv = NULL;
 	r = 0;
  out:
+#endif
 	if (argc != 0 && argv != NULL) {
 		for (i = 0; i < argc; i++)
 			free(argv[i]);
