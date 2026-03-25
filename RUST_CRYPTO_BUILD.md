@@ -38,6 +38,10 @@ Rust-backed today:
 - `strdelim()` / `strdelimw()` tokenization used by:
   - client and server config-file line splitting
   - keyword / argument boundary parsing in `readconf.c` and `servconf.c`
+- `hpdelim()` / `hpdelim2()` host-field splitting used by:
+  - config-file `host:port` consumers
+  - forwarding / permit-open style host-and-port parsing
+  - `parse_user_host_port()` and similar host target parsing helpers
 - RSA and ECDSA private-key loading for:
   - legacy PEM
   - PKCS#8
@@ -154,6 +158,7 @@ replacements through:
 
 - `regress/unittests/misc/test_argv.c`
 - `regress/unittests/misc/test_strdelim.c`
+- `regress/unittests/misc/test_hpdelim.c`
 
 For the Rust-backed private-key load path, targeted local checks that are
 worth rerunning are:
