@@ -827,11 +827,27 @@ put_host_port(const char *host, u_short port)
 char *
 hpdelim2(char **cp, char *delim)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_hpdelim_parse parsed;
+	char *old;
+	size_t len;
+#else
 	char *s, *old;
+#endif
 
 	if (cp == NULL || *cp == NULL)
 		return NULL;
 
+#ifdef WITH_RUST_CRYPTO
+	old = *cp;
+	len = strlen(*cp) + 1;
+	if (ossh_rust_hpdelim2_parse((u_char *)*cp, len, &parsed) != 0)
+		return NULL;
+	if (delim != NULL)
+		*delim = (char)parsed.delim;
+	*cp = parsed.next_is_null != 0 ? NULL : old + parsed.next_offset;
+	return old;
+#else
 	old = s = *cp;
 	if (*s == '[') {
 		if ((s = strchr(s, ']')) == NULL)
@@ -859,6 +875,7 @@ hpdelim2(char **cp, char *delim)
 	}
 
 	return old;
+#endif
 }
 
 /* The common case: only accept colon as delimiter. */

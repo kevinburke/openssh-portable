@@ -15,6 +15,13 @@ pub(crate) struct StrdelimParse {
     pub(crate) next_is_null: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct HpdelimParse {
+    pub(crate) next_offset: usize,
+    pub(crate) next_is_null: u32,
+    pub(crate) delim: u8,
+}
+
 pub(crate) fn read_array<const N: usize>(ptr: *const u8, len: usize) -> Option<[u8; N]> {
     if ptr.is_null() || len != N {
         return None;
@@ -253,6 +260,43 @@ pub(crate) fn strdelim_parse_in_place(
     })
 }
 
+pub(crate) fn hpdelim2_parse_in_place(input: *mut u8, input_len: usize) -> Option<HpdelimParse> {
+    let input = read_slice_mut(input, input_len)?;
+    if input.is_empty() {
+        return None;
+    }
+    let nul = input.iter().position(|byte| *byte == 0)?;
+    let pos = if input.first() == Some(&b'[') {
+        input[..nul]
+            .iter()
+            .position(|byte| *byte == b']')
+            .map(|idx| idx + 1)?
+    } else {
+        input[..nul]
+            .iter()
+            .position(|byte| matches!(*byte, b':' | b'/'))
+            .unwrap_or(nul)
+    };
+
+    match input[pos] {
+        0 => Some(HpdelimParse {
+            next_offset: 0,
+            next_is_null: 1,
+            delim: 0,
+        }),
+        b':' | b'/' => {
+            let delim = input[pos];
+            input[pos] = 0;
+            Some(HpdelimParse {
+                next_offset: pos + 1,
+                next_is_null: 0,
+                delim,
+            })
+        }
+        _ => None,
+    }
+}
+
 fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
     let mut argv = Vec::new();
     let mut i = 0usize;
@@ -302,7 +346,7 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 
 #[cfg(test)]
 mod tests {
-    use super::{argv_split_parse, argv_split_write, strdelim_parse_in_place};
+    use super::{argv_split_parse, argv_split_write, hpdelim2_parse_in_place, strdelim_parse_in_place};
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
         let parsed = argv_split_parse(input.as_ptr(), input.len(), terminate_on_comment as i32)?;
@@ -404,5 +448,45 @@ mod tests {
     #[test]
     fn strdelim_rejects_unterminated_quote() {
         assert_eq!(strdelim_next(b"\"blob", true), None);
+    }
+
+    fn hpdelim_next(input: &[u8]) -> Option<(Vec<u8>, Option<Vec<u8>>, u8)> {
+        let mut buf = input.to_vec();
+        buf.push(0);
+        let parsed = hpdelim2_parse_in_place(buf.as_mut_ptr(), buf.len())?;
+        let token_end = buf.iter().position(|byte| *byte == 0)?;
+        let token = buf[..token_end].to_vec();
+        let rest = if parsed.next_is_null != 0 {
+            None
+        } else {
+            let rest_end = buf[parsed.next_offset..]
+                .iter()
+                .position(|byte| *byte == 0)
+                .map(|off| parsed.next_offset + off)?;
+            Some(buf[parsed.next_offset..rest_end].to_vec())
+        };
+        Some((token, rest, parsed.delim))
+    }
+
+    #[test]
+    fn hpdelim_handles_host_and_port_forms() {
+        assert_eq!(hpdelim_next(b"host"), Some((b"host".to_vec(), None, 0)));
+        assert_eq!(
+            hpdelim_next(b"host:1234"),
+            Some((b"host".to_vec(), Some(b"1234".to_vec()), b':'))
+        );
+        assert_eq!(
+            hpdelim_next(b"[::1]:1234"),
+            Some((b"[::1]".to_vec(), Some(b"1234".to_vec()), b':'))
+        );
+        assert_eq!(
+            hpdelim_next(b"host/path"),
+            Some((b"host".to_vec(), Some(b"path".to_vec()), b'/'))
+        );
+    }
+
+    #[test]
+    fn hpdelim_rejects_unclosed_bracket() {
+        assert_eq!(hpdelim_next(b"[::1:1234"), None);
     }
 }
