@@ -22,6 +22,18 @@ pub(crate) struct HpdelimParse {
     pub(crate) delim: u8,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct UserHostPortParse {
+    pub(crate) user_offset: usize,
+    pub(crate) user_len: usize,
+    pub(crate) host_offset: usize,
+    pub(crate) host_len: usize,
+    pub(crate) port_offset: usize,
+    pub(crate) port_len: usize,
+    pub(crate) has_user: u32,
+    pub(crate) has_port: u32,
+}
+
 pub(crate) fn read_array<const N: usize>(ptr: *const u8, len: usize) -> Option<[u8; N]> {
     if ptr.is_null() || len != N {
         return None;
@@ -297,6 +309,79 @@ pub(crate) fn hpdelim2_parse_in_place(input: *mut u8, input_len: usize) -> Optio
     }
 }
 
+pub(crate) fn parse_user_host_port(input: *const u8, input_len: usize) -> Option<UserHostPortParse> {
+    let input = read_slice(input, input_len)?;
+    if input.is_empty() {
+        return None;
+    }
+
+    let (user_offset, user_len, host_part_offset) = match input.iter().rposition(|byte| *byte == b'@') {
+        Some(at) => {
+            if at == 0 || at + 1 >= input.len() {
+                return None;
+            }
+            (0, at, at + 1)
+        }
+        None => (0, 0, 0),
+    };
+    let host_part = &input[host_part_offset..];
+
+    let (host_offset, host_len, port_offset, port_len) = if host_part.first() == Some(&b'[') {
+        let close = host_part.iter().position(|byte| *byte == b']')?;
+        if close == 1 {
+            return None;
+        }
+        let host_offset = host_part_offset + 1;
+        let host_len = close - 1;
+        if close + 1 == host_part.len() {
+            (host_offset, host_len, 0, 0)
+        } else if host_part.get(close + 1) == Some(&b':') {
+            let port_offset = host_part_offset + close + 2;
+            let port_len = host_part.len().checked_sub(close + 2)?;
+            if port_len == 0 {
+                return None;
+            }
+            (host_offset, host_len, port_offset, port_len)
+        } else {
+            return None;
+        }
+    } else {
+        let colon = host_part.iter().position(|byte| *byte == b':');
+        let slash = host_part.iter().position(|byte| *byte == b'/');
+        match (colon, slash) {
+            (_, Some(slash_pos)) if colon.is_none() || slash_pos < colon.unwrap() => return None,
+            (Some(colon_pos), _) => {
+                if colon_pos == 0 || colon_pos + 1 >= host_part.len() {
+                    return None;
+                }
+                (
+                    host_part_offset,
+                    colon_pos,
+                    host_part_offset + colon_pos + 1,
+                    host_part.len() - colon_pos - 1,
+                )
+            }
+            (None, _) => {
+                if host_part.is_empty() {
+                    return None;
+                }
+                (host_part_offset, host_part.len(), 0, 0)
+            }
+        }
+    };
+
+    Some(UserHostPortParse {
+        user_offset,
+        user_len,
+        host_offset,
+        host_len,
+        port_offset,
+        port_len,
+        has_user: u32::from(user_len != 0),
+        has_port: u32::from(port_len != 0),
+    })
+}
+
 fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
     let mut argv = Vec::new();
     let mut i = 0usize;
@@ -346,7 +431,10 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 
 #[cfg(test)]
 mod tests {
-    use super::{argv_split_parse, argv_split_write, hpdelim2_parse_in_place, strdelim_parse_in_place};
+    use super::{
+        argv_split_parse, argv_split_write, hpdelim2_parse_in_place, parse_user_host_port,
+        strdelim_parse_in_place, UserHostPortParse,
+    };
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
         let parsed = argv_split_parse(input.as_ptr(), input.len(), terminate_on_comment as i32)?;
@@ -488,5 +576,58 @@ mod tests {
     #[test]
     fn hpdelim_rejects_unclosed_bracket() {
         assert_eq!(hpdelim_next(b"[::1:1234"), None);
+    }
+
+    #[test]
+    fn parse_user_host_port_handles_basic_forms() {
+        assert_eq!(
+            parse_user_host_port(b"host".as_ptr(), 4),
+            Some(UserHostPortParse {
+                user_offset: 0,
+                user_len: 0,
+                host_offset: 0,
+                host_len: 4,
+                port_offset: 0,
+                port_len: 0,
+                has_user: 0,
+                has_port: 0,
+            })
+        );
+        assert_eq!(
+            parse_user_host_port(b"user@host:2222".as_ptr(), 14),
+            Some(UserHostPortParse {
+                user_offset: 0,
+                user_len: 4,
+                host_offset: 5,
+                host_len: 4,
+                port_offset: 10,
+                port_len: 4,
+                has_user: 1,
+                has_port: 1,
+            })
+        );
+        assert_eq!(
+            parse_user_host_port(b"user@[::1]:22".as_ptr(), 13),
+            Some(UserHostPortParse {
+                user_offset: 0,
+                user_len: 4,
+                host_offset: 6,
+                host_len: 3,
+                port_offset: 11,
+                port_len: 2,
+                has_user: 1,
+                has_port: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_user_host_port_rejects_bad_forms() {
+        assert_eq!(parse_user_host_port(b"".as_ptr(), 0), None);
+        assert_eq!(parse_user_host_port(b"@host".as_ptr(), 5), None);
+        assert_eq!(parse_user_host_port(b"host:".as_ptr(), 5), None);
+        assert_eq!(parse_user_host_port(b"host/path".as_ptr(), 9), None);
+        assert_eq!(parse_user_host_port(b"[::1".as_ptr(), 4), None);
+        assert_eq!(parse_user_host_port(b"[]:22".as_ptr(), 5), None);
     }
 }

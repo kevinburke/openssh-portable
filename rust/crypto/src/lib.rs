@@ -165,6 +165,18 @@ pub struct RustHpdelimParse {
     delim: u8,
 }
 
+#[repr(C)]
+pub struct RustUserHostPortParse {
+    user_offset: usize,
+    user_len: usize,
+    host_offset: usize,
+    host_len: usize,
+    port_offset: usize,
+    port_len: usize,
+    has_user: u32,
+    has_port: u32,
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_cert_parse_body(
     input: *const u8,
@@ -402,6 +414,33 @@ pub extern "C" fn ossh_rust_hpdelim2_parse(
             next_offset: parsed.next_offset,
             next_is_null: parsed.next_is_null,
             delim: parsed.delim,
+        };
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_parse_user_host_port(
+    input: *const u8,
+    input_len: usize,
+    out: *mut RustUserHostPortParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(parsed) = util::parse_user_host_port(input, input_len) else {
+        return -1;
+    };
+    unsafe {
+        *out = RustUserHostPortParse {
+            user_offset: parsed.user_offset,
+            user_len: parsed.user_len,
+            host_offset: parsed.host_offset,
+            host_len: parsed.host_len,
+            port_offset: parsed.port_offset,
+            port_len: parsed.port_len,
+            has_user: parsed.has_user,
+            has_port: parsed.has_port,
         };
     }
     0
