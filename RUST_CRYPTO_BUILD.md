@@ -46,6 +46,9 @@ Rust-backed today:
   - `host:port`
   - `user@[host]:port`
   - similar destination parsing helpers layered above `hpdelim()`
+- `parse_uri()` parsing used by:
+  - `ssh://[user@]host[:port][/path]`
+  - similar `scp://` / `sftp://` style URI entry points
 - RSA and ECDSA private-key loading for:
   - legacy PEM
   - PKCS#8
@@ -164,6 +167,7 @@ replacements through:
 - `regress/unittests/misc/test_strdelim.c`
 - `regress/unittests/misc/test_hpdelim.c`
 - `regress/unittests/misc/test_user_host_port.c`
+- `regress/unittests/misc/test_parse.c`
 
 For the Rust-backed private-key load path, targeted local checks that are
 worth rerunning are:
