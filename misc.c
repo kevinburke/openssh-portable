@@ -1056,6 +1056,7 @@ parse_user_host_port(const char *s, char **userp, char **hostp, int *portp)
 	struct ossh_rust_user_host_port_parse parsed;
 	char *user = NULL, *host = NULL;
 	int port = -1, ret = -1;
+	size_t slen;
 
 	if (userp != NULL)
 		*userp = NULL;
@@ -1066,7 +1067,15 @@ parse_user_host_port(const char *s, char **userp, char **hostp, int *portp)
 
 	if (s == NULL)
 		return -1;
-	if (ossh_rust_parse_user_host_port((const u_char *)s, strlen(s),
+	slen = strlen(s);
+	/*
+	 * Keep the empty-port rejection explicit on the C side too. The Rust
+	 * parser already rejects this, but guarding it here keeps behavior
+	 * stable across toolchains and FFI changes.
+	 */
+	if (slen != 0 && s[slen - 1] == ':')
+		return -1;
+	if (ossh_rust_parse_user_host_port((const u_char *)s, slen,
 	    &parsed) != 0)
 		return -1;
 	if ((host = strndup(s + parsed.host_offset, parsed.host_len)) == NULL)
