@@ -15,12 +15,16 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 13U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 14U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
 #define OSSH_RUST_PRIVATE2_KDF_NONE 0
 #define OSSH_RUST_PRIVATE2_KDF_BCRYPT 1
+#define OSSH_RUST_PRIVATE2_KEY_UNSUPPORTED 0
+#define OSSH_RUST_PRIVATE2_KEY_ED25519 1
+#define OSSH_RUST_PRIVATE2_KEY_ECDSA 2
+#define OSSH_RUST_PRIVATE2_KEY_RSA 3
 #define OSSH_RUST_DH_GROUP14 14
 #define OSSH_RUST_ECDH_NISTP256 1
 #define OSSH_RUST_ECDH_NISTP384 2
@@ -80,8 +84,23 @@ struct ossh_rust_private2_header_parse {
 	uint32_t kdf_kind;
 };
 struct ossh_rust_private2_plaintext_parse {
+	uint32_t key_kind;
+	int curve_nid;
+	uint32_t is_cert;
 	size_t comment_offset;
 	size_t comment_len;
+	size_t part1_offset;
+	size_t part1_len;
+	size_t part2_offset;
+	size_t part2_len;
+	size_t part3_offset;
+	size_t part3_len;
+	size_t part4_offset;
+	size_t part4_len;
+	size_t part5_offset;
+	size_t part5_len;
+	size_t part6_offset;
+	size_t part6_len;
 };
 int ossh_rust_cert_parse_body(const uint8_t *input, size_t input_len,
     struct ossh_rust_cert_body_parse *out);

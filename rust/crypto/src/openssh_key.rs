@@ -10,6 +10,9 @@ const KDF_BCRYPT: &[u8] = b"bcrypt";
 
 pub(crate) const OSSH_RUST_PRIVATE2_KDF_NONE: u32 = 0;
 pub(crate) const OSSH_RUST_PRIVATE2_KDF_BCRYPT: u32 = 1;
+pub(crate) const OSSH_RUST_PRIVATE2_KEY_ED25519: u32 = 1;
+pub(crate) const OSSH_RUST_PRIVATE2_KEY_ECDSA: u32 = 2;
+pub(crate) const OSSH_RUST_PRIVATE2_KEY_RSA: u32 = 3;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct OpenSshPrivate2Parse {
@@ -31,8 +34,23 @@ pub(crate) struct OpenSshPrivate2Parse {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct OpenSshPrivate2PlaintextParse {
+    pub(crate) key_kind: u32,
+    pub(crate) curve_nid: i32,
+    pub(crate) is_cert: u32,
     pub(crate) comment_offset: usize,
     pub(crate) comment_len: usize,
+    pub(crate) part1_offset: usize,
+    pub(crate) part1_len: usize,
+    pub(crate) part2_offset: usize,
+    pub(crate) part2_len: usize,
+    pub(crate) part3_offset: usize,
+    pub(crate) part3_len: usize,
+    pub(crate) part4_offset: usize,
+    pub(crate) part4_len: usize,
+    pub(crate) part5_offset: usize,
+    pub(crate) part5_len: usize,
+    pub(crate) part6_offset: usize,
+    pub(crate) part6_len: usize,
 }
 
 pub(crate) fn openssh_private2_decode_len(input: *const u8, input_len: usize) -> usize {
@@ -159,6 +177,20 @@ fn parse_private2_plaintext(decrypted: &[u8]) -> Option<OpenSshPrivate2Plaintext
     let mut reader = SshWireReader::new(decrypted);
     let key_type = reader.get_cstring()?;
     let is_cert = is_cert_key_type(key_type);
+    let key_kind;
+    let mut curve_nid = 0;
+    let mut part1_offset = 0usize;
+    let mut part1_len = 0usize;
+    let mut part2_offset = 0usize;
+    let mut part2_len = 0usize;
+    let mut part3_offset = 0usize;
+    let mut part3_len = 0usize;
+    let mut part4_offset = 0usize;
+    let mut part4_len = 0usize;
+    let mut part5_offset = 0usize;
+    let mut part5_len = 0usize;
+    let mut part6_offset = 0usize;
+    let mut part6_len = 0usize;
 
     if is_cert {
         reader.get_string()?;
@@ -166,21 +198,39 @@ fn parse_private2_plaintext(decrypted: &[u8]) -> Option<OpenSshPrivate2Plaintext
 
     match key_type {
         b"ssh-ed25519" | b"ssh-ed25519-cert-v01@openssh.com" => {
-            reader.get_string()?;
-            let secret = reader.get_string()?;
+            let (public_offset, public) = reader.get_string_with_offset()?;
+            let (secret_offset, secret) = reader.get_string_with_offset()?;
             if secret.len() != 64 {
                 return None;
             }
+            key_kind = OSSH_RUST_PRIVATE2_KEY_ED25519;
+            part1_offset = public_offset;
+            part1_len = public.len();
+            part2_offset = secret_offset;
+            part2_len = secret.len();
         }
         b"ssh-rsa" | b"ssh-rsa-cert-v01@openssh.com" => {
             if !is_cert {
-                reader.get_mpint()?;
-                reader.get_mpint()?;
+                let (n_offset, n) = reader.get_mpint_with_offset()?;
+                let (e_offset, e) = reader.get_mpint_with_offset()?;
+                part1_len = n.len();
+                part1_offset = n_offset;
+                part2_len = e.len();
+                part2_offset = e_offset;
             }
-            reader.get_mpint()?;
-            reader.get_mpint()?;
-            reader.get_mpint()?;
-            reader.get_mpint()?;
+            let (d_offset, d) = reader.get_mpint_with_offset()?;
+            let (iqmp_offset, iqmp) = reader.get_mpint_with_offset()?;
+            let (p_offset, p) = reader.get_mpint_with_offset()?;
+            let (q_offset, q) = reader.get_mpint_with_offset()?;
+            key_kind = OSSH_RUST_PRIVATE2_KEY_RSA;
+            part3_offset = d_offset;
+            part3_len = d.len();
+            part4_offset = iqmp_offset;
+            part4_len = iqmp.len();
+            part5_offset = p_offset;
+            part5_len = p.len();
+            part6_offset = q_offset;
+            part6_len = q.len();
         }
         b"ecdsa-sha2-nistp256"
         | b"ecdsa-sha2-nistp384"
@@ -193,9 +243,15 @@ fn parse_private2_plaintext(decrypted: &[u8]) -> Option<OpenSshPrivate2Plaintext
                 if curve_name_for_key_type(key_type)? != curve {
                     return None;
                 }
-                reader.get_string()?;
+                let (public_offset, public) = reader.get_string_with_offset()?;
+                part1_offset = public_offset;
+                part1_len = public.len();
             }
-            reader.get_mpint()?;
+            let (private_offset, private_scalar) = reader.get_mpint_with_offset()?;
+            key_kind = OSSH_RUST_PRIVATE2_KEY_ECDSA;
+            curve_nid = curve_nid_for_key_type(key_type)?;
+            part2_offset = private_offset;
+            part2_len = private_scalar.len();
         }
         _ => return None,
     }
@@ -210,8 +266,23 @@ fn parse_private2_plaintext(decrypted: &[u8]) -> Option<OpenSshPrivate2Plaintext
     }
 
     Some(OpenSshPrivate2PlaintextParse {
+        key_kind,
+        curve_nid,
+        is_cert: u32::from(is_cert),
         comment_offset: comment_data_offset - 4,
         comment_len: comment.len(),
+        part1_offset,
+        part1_len,
+        part2_offset,
+        part2_len,
+        part3_offset,
+        part3_len,
+        part4_offset,
+        part4_len,
+        part5_offset,
+        part5_len,
+        part6_offset,
+        part6_len,
     })
 }
 
@@ -224,6 +295,15 @@ fn curve_name_for_key_type(key_type: &[u8]) -> Option<&'static [u8]> {
         b"ecdsa-sha2-nistp256" | b"ecdsa-sha2-nistp256-cert-v01@openssh.com" => Some(b"nistp256"),
         b"ecdsa-sha2-nistp384" | b"ecdsa-sha2-nistp384-cert-v01@openssh.com" => Some(b"nistp384"),
         b"ecdsa-sha2-nistp521" | b"ecdsa-sha2-nistp521-cert-v01@openssh.com" => Some(b"nistp521"),
+        _ => None,
+    }
+}
+
+fn curve_nid_for_key_type(key_type: &[u8]) -> Option<i32> {
+    match key_type {
+        b"ecdsa-sha2-nistp256" | b"ecdsa-sha2-nistp256-cert-v01@openssh.com" => Some(415),
+        b"ecdsa-sha2-nistp384" | b"ecdsa-sha2-nistp384-cert-v01@openssh.com" => Some(715),
+        b"ecdsa-sha2-nistp521" | b"ecdsa-sha2-nistp521-cert-v01@openssh.com" => Some(716),
         _ => None,
     }
 }
