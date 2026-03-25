@@ -158,6 +158,13 @@ pub struct RustStrdelimParse {
     next_is_null: u32,
 }
 
+#[repr(C)]
+pub struct RustHpdelimParse {
+    next_offset: usize,
+    next_is_null: u32,
+    delim: u8,
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_cert_parse_body(
     input: *const u8,
@@ -373,6 +380,28 @@ pub extern "C" fn ossh_rust_strdelim_parse(
         *out = RustStrdelimParse {
             next_offset: parsed.next_offset,
             next_is_null: parsed.next_is_null,
+        };
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_hpdelim2_parse(
+    input: *mut u8,
+    input_len: usize,
+    out: *mut RustHpdelimParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(parsed) = util::hpdelim2_parse_in_place(input, input_len) else {
+        return -1;
+    };
+    unsafe {
+        *out = RustHpdelimParse {
+            next_offset: parsed.next_offset,
+            next_is_null: parsed.next_is_null,
+            delim: parsed.delim,
         };
     }
     0
