@@ -214,6 +214,23 @@ FIXALGORITHMSCMD= $(SHELL) $(srcdir)/fixalgorithms $(SED) \
 
 all: $(CONFIGFILES) $(MANPAGES) $(TARGETS)
 
+loc:
+	@set -e; \
+	c_files=`git -C "$(srcdir)" ls-files '*.c' '*.h' | sed "s|^|$(srcdir)/|"`; \
+	rust_files=`git -C "$(srcdir)" ls-files '*.rs' | sed "s|^|$(srcdir)/|"`; \
+	c_loc=0; \
+	rust_loc=0; \
+	if test -n "$$c_files"; then \
+		c_loc=`wc -l $$c_files | tail -n 1 | awk '{print $$1}'`; \
+	fi; \
+	if test -n "$$rust_files"; then \
+		rust_loc=`wc -l $$rust_files | tail -n 1 | awk '{print $$1}'`; \
+	fi; \
+	total_loc=`expr $$c_loc + $$rust_loc`; \
+	printf 'C LOC: %s\n' "$$c_loc"; \
+	printf 'Rust LOC: %s\n' "$$rust_loc"; \
+	printf 'Total LOC: %s\n' "$$total_loc"
+
 $(LIBSSH_OBJS): Makefile.in config.h
 $(SSHOBJS): Makefile.in config.h
 $(SSHDOBJS): Makefile.in config.h
