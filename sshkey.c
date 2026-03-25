@@ -3720,6 +3720,7 @@ sshkey_private_to_fileblob(struct sshkey *key, struct sshbuf *blob,
 	case KEY_ECDSA:
 	case KEY_RSA:
 	case KEY_ED25519:
+		break;
 #elif defined(WITH_RUST_CRYPTO)
 	case KEY_ECDSA:
 	case KEY_RSA:
