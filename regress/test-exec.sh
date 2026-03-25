@@ -724,6 +724,8 @@ REGRESS_RUST_CRYPTO=no
 if test -f "$BUILDDIR/config.h" &&
     grep '^#define WITH_RUST_CRYPTO 1' "$BUILDDIR/config.h" >/dev/null 2>&1; then
 	REGRESS_RUST_CRYPTO=yes
+elif "$SSH" -V 2>&1 | grep 'Rust crypto backend' >/dev/null 2>&1; then
+	REGRESS_RUST_CRYPTO=yes
 fi
 
 if ! test -z "$SSH_SK_PROVIDER"; then
