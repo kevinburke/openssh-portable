@@ -42,7 +42,7 @@ use rsa::{
 };
 use util::{read_slice, write_prefix};
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 13;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 14;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -115,8 +115,23 @@ pub struct RustPrivate2HeaderParse {
 
 #[repr(C)]
 pub struct RustPrivate2PlaintextParse {
+    key_kind: u32,
+    curve_nid: c_int,
+    is_cert: u32,
     comment_offset: usize,
     comment_len: usize,
+    part1_offset: usize,
+    part1_len: usize,
+    part2_offset: usize,
+    part2_len: usize,
+    part3_offset: usize,
+    part3_len: usize,
+    part4_offset: usize,
+    part4_len: usize,
+    part5_offset: usize,
+    part5_len: usize,
+    part6_offset: usize,
+    part6_len: usize,
 }
 
 #[unsafe(no_mangle)]
@@ -221,8 +236,23 @@ pub extern "C" fn ossh_rust_private2_parse_plaintext(
     };
     unsafe {
         *out = RustPrivate2PlaintextParse {
+            key_kind: parsed.key_kind,
+            curve_nid: parsed.curve_nid,
+            is_cert: parsed.is_cert,
             comment_offset: parsed.comment_offset,
             comment_len: parsed.comment_len,
+            part1_offset: parsed.part1_offset,
+            part1_len: parsed.part1_len,
+            part2_offset: parsed.part2_offset,
+            part2_len: parsed.part2_len,
+            part3_offset: parsed.part3_offset,
+            part3_len: parsed.part3_len,
+            part4_offset: parsed.part4_offset,
+            part4_len: parsed.part4_len,
+            part5_offset: parsed.part5_offset,
+            part5_len: parsed.part5_len,
+            part6_offset: parsed.part6_offset,
+            part6_len: parsed.part6_len,
         };
     }
     0
