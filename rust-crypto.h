@@ -15,10 +15,11 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 17U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 18U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
+#define OSSH_RUST_PARSE_STATUS_EC_CURVE_MISMATCH 3
 #define OSSH_RUST_PRIVATE2_KDF_NONE 0
 #define OSSH_RUST_PRIVATE2_KDF_BCRYPT 1
 #define OSSH_RUST_PRIVATE2_KEY_UNSUPPORTED 0
@@ -217,7 +218,7 @@ int ossh_rust_ecdh_shared_secret(int curve_id, const uint8_t *secret_key,
     uint8_t *shared_secret, size_t shared_secret_len);
 void *ossh_rust_ecdsa_generate(int curve_nid);
 void *ossh_rust_ecdsa_parse_public_blob(int curve_nid, const uint8_t *blob,
-    size_t blob_len, size_t *consumed_len);
+    size_t blob_len, size_t *consumed_len, int *parse_status);
 void *ossh_rust_ecdsa_from_public(int curve_nid, const uint8_t *public_key,
     size_t public_key_len);
 void *ossh_rust_ecdsa_from_private(int curve_nid, const uint8_t *public_key,

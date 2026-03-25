@@ -22,8 +22,10 @@ use digest::DigestState;
 use ecdsa::{
     ecdsa_copy_public, ecdsa_equal_public, ecdsa_export_private, ecdsa_export_public,
     ecdsa_free, ecdsa_from_private, ecdsa_from_public, ecdsa_generate, ecdsa_curve_nid,
-    ecdsa_parse_private_pem, ecdsa_parse_private_pem_with_passphrase, ecdsa_parse_public_blob, ecdsa_private_pem_len,
-    ecdsa_private_pem_write, ecdsa_sign_prehashed, ecdsa_verify_prehashed,
+    ecdsa_parse_private_pem, ecdsa_parse_private_pem_with_passphrase, ecdsa_parse_public_blob,
+    ecdsa_private_pem_len, ecdsa_private_pem_write, ecdsa_sign_prehashed,
+    ecdsa_verify_prehashed, OSSH_RUST_ECDSA_PARSE_CURVE_MISMATCH,
+    OSSH_RUST_ECDSA_PARSE_INVALID_FORMAT, OSSH_RUST_ECDSA_PARSE_OK,
 };
 use kex::{
     curve25519_public_from_secret, curve25519_shared_secret, ed25519_parse_public_blob,
@@ -43,10 +45,11 @@ use rsa::{
 };
 use util::{argv_split_parse, argv_split_write, read_slice, strdelim_parse_in_place, write_prefix};
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 15;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 18;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
+const OSSH_RUST_PARSE_STATUS_EC_CURVE_MISMATCH: c_int = 3;
 static BACKEND_LABEL: &[u8] = b"Rust crypto backend\0";
 
 fn store_parse_status(status: *mut c_int, value: c_int) {
@@ -777,8 +780,26 @@ pub extern "C" fn ossh_rust_ecdsa_parse_public_blob(
     blob: *const u8,
     blob_len: usize,
     consumed_len: *mut usize,
+    parse_status: *mut c_int,
 ) -> *mut c_void {
-    ecdsa_parse_public_blob(curve_nid, blob, blob_len, consumed_len)
+    match ecdsa_parse_public_blob(curve_nid, blob, blob_len, consumed_len) {
+        Ok(key) => {
+            store_parse_status(parse_status, OSSH_RUST_ECDSA_PARSE_OK);
+            key
+        }
+        Err(status) => {
+            let status = match status {
+                OSSH_RUST_ECDSA_PARSE_OK => OSSH_RUST_PARSE_STATUS_OK,
+                OSSH_RUST_ECDSA_PARSE_CURVE_MISMATCH => {
+                    OSSH_RUST_PARSE_STATUS_EC_CURVE_MISMATCH
+                }
+                OSSH_RUST_ECDSA_PARSE_INVALID_FORMAT => OSSH_RUST_PARSE_STATUS_INVALID_FORMAT,
+                _ => OSSH_RUST_PARSE_STATUS_INVALID_FORMAT,
+            };
+            store_parse_status(parse_status, status);
+            core::ptr::null_mut()
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
