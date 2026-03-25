@@ -935,6 +935,54 @@ colon(char *cp)
 int
 parse_user_host_path(const char *s, char **userp, char **hostp, char **pathp)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_user_host_path_parse parsed;
+	char *user = NULL, *host = NULL, *path = NULL, *host_raw = NULL;
+	int ret = -1;
+
+	if (userp != NULL)
+		*userp = NULL;
+	if (hostp != NULL)
+		*hostp = NULL;
+	if (pathp != NULL)
+		*pathp = NULL;
+
+	if (s == NULL)
+		return -1;
+	if (ossh_rust_parse_user_host_path((const u_char *)s, strlen(s),
+	    &parsed) != 0)
+		goto out;
+	if (parsed.path_len == 0)
+		path = xstrdup(".");
+	else if ((path = strndup(s + parsed.path_offset, parsed.path_len)) == NULL)
+		goto out;
+	if ((host_raw = strndup(s + parsed.host_offset, parsed.host_len)) == NULL)
+		goto out;
+	host = xstrdup(cleanhostname(host_raw));
+	if (parsed.has_user != 0 &&
+	    (user = strndup(s + parsed.user_offset, parsed.user_len)) == NULL)
+		goto out;
+
+	if (userp != NULL) {
+		*userp = user;
+		user = NULL;
+	}
+	if (hostp != NULL) {
+		*hostp = host;
+		host = NULL;
+	}
+	if (pathp != NULL) {
+		*pathp = path;
+		path = NULL;
+	}
+	ret = 0;
+out:
+	free(user);
+	free(host);
+	free(path);
+	free(host_raw);
+	return ret;
+#else
 	char *user = NULL, *host = NULL, *path = NULL;
 	char *sdup, *tmp;
 	int ret = -1;
@@ -990,6 +1038,7 @@ out:
 	free(host);
 	free(path);
 	return ret;
+#endif
 }
 
 /*

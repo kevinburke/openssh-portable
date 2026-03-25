@@ -76,6 +76,21 @@ test_parse(void)
 	free(user); free(host); free(path);
 	TEST_DONE();
 
+	TEST_START("misc_parse_empty_user_host_path");
+	user = host = path = NULL;
+	ASSERT_INT_EQ(parse_user_host_path("@some.host:some/path",
+	    &user, &host, &path), 0);
+	ASSERT_PTR_EQ(user, NULL);
+	ASSERT_STRING_EQ(host, "some.host");
+	ASSERT_STRING_EQ(path, "some/path");
+	free(host); free(path);
+	TEST_DONE();
+
+	TEST_START("misc_parse_user_host_path_rejects_local_path");
+	ASSERT_INT_EQ(parse_user_host_path("some/host:path",
+	    &user, &host, &path), -1);
+	TEST_DONE();
+
 	TEST_START("misc_parse_uri");
 	user = host = path = NULL;
 	ASSERT_INT_EQ(parse_uri("ssh", "ssh://someuser@some.host:22/some/path",
