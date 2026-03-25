@@ -24,6 +24,7 @@ void test_expand(void);
 void test_argv(void);
 void test_strdelim(void);
 void test_hpdelim(void);
+void test_user_host_port(void);
 void test_ptimeout(void);
 void test_xextendf(void);
 void test_misc(void);
@@ -37,6 +38,7 @@ tests(void)
 	test_argv();
 	test_strdelim();
 	test_hpdelim();
+	test_user_host_port();
 	test_ptimeout();
 	test_xextendf();
 	test_misc();

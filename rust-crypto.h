@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 14U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 15U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -124,6 +124,16 @@ struct ossh_rust_hpdelim_parse {
 	uint32_t next_is_null;
 	uint8_t delim;
 };
+struct ossh_rust_user_host_port_parse {
+	size_t user_offset;
+	size_t user_len;
+	size_t host_offset;
+	size_t host_len;
+	size_t port_offset;
+	size_t port_len;
+	uint32_t has_user;
+	uint32_t has_port;
+};
 int ossh_rust_cert_parse_body(const uint8_t *input, size_t input_len,
     struct ossh_rust_cert_body_parse *out);
 size_t ossh_rust_private2_decode_len(const uint8_t *input, size_t input_len);
@@ -146,6 +156,8 @@ int ossh_rust_strdelim_parse(uint8_t *input, size_t input_len,
     int split_equals, struct ossh_rust_strdelim_parse *out);
 int ossh_rust_hpdelim2_parse(uint8_t *input, size_t input_len,
     struct ossh_rust_hpdelim_parse *out);
+int ossh_rust_parse_user_host_port(const uint8_t *input, size_t input_len,
+    struct ossh_rust_user_host_port_parse *out);
 void *ossh_rust_dh_group_new(int group_id);
 int ossh_rust_dh_generate_key(void *group, size_t need_bits);
 size_t ossh_rust_dh_public_len(const void *group);
