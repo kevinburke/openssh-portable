@@ -252,9 +252,14 @@ mod tests {
             Some(vec![b"leamas # gold".to_vec()])
         );
         assert_eq!(split(b"# gold", true), Some(Vec::new()));
+        assert_eq!(split(b"   # gold", true), Some(Vec::new()));
         assert_eq!(
             split(b"\"leamas\"#gold", true),
             Some(vec![b"leamas#gold".to_vec()])
+        );
+        assert_eq!(
+            split(b"\"leamas\" #gold", true),
+            Some(vec![b"leamas".to_vec()])
         );
     }
 
@@ -277,5 +282,6 @@ mod tests {
     #[test]
     fn argv_split_rejects_unterminated_quote() {
         assert_eq!(split(br#""smiley"#, false), None);
+        assert_eq!(split(b"'smiley", false), None);
     }
 }

@@ -535,6 +535,27 @@ mod tests {
     }
 
     #[test]
+    fn parses_public_key_line_without_comment() {
+        let line = b"ssh-ed25519\tAAAAC3NzaC1lZDI1NTE5AAAAIFOG6kY7Rf4UtCFvPwKgo/BztXck2xC4a2WyA34XtIwZ";
+        let parsed = openssh_public_line_parse(line.as_ptr(), line.len()).unwrap();
+
+        assert_eq!(&line[parsed.key_type_offset..parsed.key_type_offset + parsed.key_type_len], b"ssh-ed25519");
+        assert_eq!(parsed.comment_offset, line.len());
+    }
+
+    #[test]
+    fn rejects_public_key_line_without_blob() {
+        let line = b"ssh-ed25519";
+        assert!(openssh_public_line_parse(line.as_ptr(), line.len()).is_none());
+    }
+
+    #[test]
+    fn rejects_public_key_line_with_leading_whitespace() {
+        let line = b" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFOG6kY7Rf4UtCFvPwKgo/BztXck2xC4a2WyA34XtIwZ";
+        assert!(openssh_public_line_parse(line.as_ptr(), line.len()).is_none());
+    }
+
+    #[test]
     fn decodes_unpadded_public_blob() {
         let blob = b"AAAAC3NzaC1lZDI1NTE5AAAAIFOG6kY7Rf4UtCFvPwKgo/BztXck2xC4a2WyA34XtIwZ";
         let decoded_len = openssh_public_blob_decode_len(blob.as_ptr(), blob.len());
