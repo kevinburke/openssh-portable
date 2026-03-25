@@ -1105,6 +1105,7 @@ parse_user_host_port(const char *s, char **userp, char **hostp, int *portp)
 	char *sdup, *cp, *tmp;
 	char *user = NULL, *host = NULL;
 	int port = -1, ret = -1;
+	const char *cleanhost;
 
 	if (userp != NULL)
 		*userp = NULL;
@@ -1127,7 +1128,10 @@ parse_user_host_port(const char *s, char **userp, char **hostp, int *portp)
 	/* Extract mandatory hostname */
 	if ((cp = hpdelim(&tmp)) == NULL || *cp == '\0')
 		goto out;
-	host = xstrdup(cleanhostname(cp));
+	cleanhost = cleanhostname(cp);
+	if (*cleanhost == '\0')
+		goto out;
+	host = xstrdup(cleanhost);
 	/* Convert and verify optional port */
 	if (tmp != NULL) {
 		if (*tmp == '\0')
