@@ -41,7 +41,11 @@ Rust-backed today:
 - `hpdelim()` / `hpdelim2()` host-field splitting used by:
   - config-file `host:port` consumers
   - forwarding / permit-open style host-and-port parsing
-  - `parse_user_host_port()` and similar host target parsing helpers
+- `parse_user_host_port()` target parsing used by:
+  - `user@host`
+  - `host:port`
+  - `user@[host]:port`
+  - similar destination parsing helpers layered above `hpdelim()`
 - RSA and ECDSA private-key loading for:
   - legacy PEM
   - PKCS#8
@@ -159,6 +163,7 @@ replacements through:
 - `regress/unittests/misc/test_argv.c`
 - `regress/unittests/misc/test_strdelim.c`
 - `regress/unittests/misc/test_hpdelim.c`
+- `regress/unittests/misc/test_user_host_port.c`
 
 For the Rust-backed private-key load path, targeted local checks that are
 worth rerunning are:
@@ -179,6 +184,8 @@ For the Rust-backed public text-key path, representative checks are:
 ./ssh-keygen -l -f regress/unittests/sshkey/testdata/ed25519_1.pub
 ./ssh-keygen -l -f regress/unittests/sshkey/testdata/ecdsa_1-cert.pub
 ./ssh-keygen -l -f regress/unittests/sshkey/testdata/rsa_1.pub
+./ssh-keygen -r test -f regress/ed25519_openssh.pub
+./ssh-keygen -r test -f regress/rsa_openssh.pub
 ```
 
 ## Prerequisites
