@@ -30,6 +30,9 @@ const NID_SECP384R1: c_int = 715;
 const NID_SECP521R1: c_int = 716;
 const SSHKEY_PRIVATE_PEM: c_int = 1;
 const SSHKEY_PRIVATE_PKCS8: c_int = 2;
+pub(crate) const OSSH_RUST_ECDSA_PARSE_OK: c_int = 0;
+pub(crate) const OSSH_RUST_ECDSA_PARSE_INVALID_FORMAT: c_int = 1;
+pub(crate) const OSSH_RUST_ECDSA_PARSE_CURVE_MISMATCH: c_int = 3;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EcdsaCurve {
@@ -349,32 +352,35 @@ pub(crate) fn ecdsa_parse_public_blob(
     blob: *const u8,
     blob_len: usize,
     consumed_len: *mut usize,
-) -> *mut c_void {
+) -> Result<*mut c_void, c_int> {
     let curve = match EcdsaCurve::from_nid(curve_nid) {
         Some(curve) => curve,
-        None => return core::ptr::null_mut(),
+        None => return Err(OSSH_RUST_ECDSA_PARSE_INVALID_FORMAT),
     };
     let blob = match read_slice(blob, blob_len) {
         Some(blob) => blob,
-        None => return core::ptr::null_mut(),
+        None => return Err(OSSH_RUST_ECDSA_PARSE_INVALID_FORMAT),
     };
     let mut reader = SshWireReader::new(blob);
     let curve_name = match reader.get_cstring() {
         Some(curve_name) => curve_name,
-        None => return core::ptr::null_mut(),
+        None => return Err(OSSH_RUST_ECDSA_PARSE_INVALID_FORMAT),
     };
     if curve_name != curve.ssh_name() {
-        return core::ptr::null_mut();
+        return Err(OSSH_RUST_ECDSA_PARSE_CURVE_MISMATCH);
     }
     let public_key = match reader.get_string() {
         Some(public_key) => public_key,
-        None => return core::ptr::null_mut(),
+        None => return Err(OSSH_RUST_ECDSA_PARSE_INVALID_FORMAT),
     };
     let key = ecdsa_from_public(curve_nid, slice_ptr(public_key), public_key.len());
-    if !key.is_null() && !consumed_len.is_null() {
+    if key.is_null() {
+        return Err(OSSH_RUST_ECDSA_PARSE_INVALID_FORMAT);
+    }
+    if !consumed_len.is_null() {
         unsafe { *consumed_len = reader.consumed() };
     }
-    key
+    Ok(key)
 }
 
 pub(crate) fn ecdsa_from_public(
