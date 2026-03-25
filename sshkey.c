@@ -3406,6 +3406,7 @@ sshkey_parse_private2(struct sshbuf *blob, int type, const char *passphrase,
 	struct sshkey *k = NULL, *pubkey = NULL;
 #ifdef WITH_RUST_CRYPTO
 	u_char ecdsa_private_key[66];
+	u_char cert_public_key[133];
 	struct ossh_rust_private2_plaintext_parse parsed;
 	const u_char *decrypted_start = NULL;
 	size_t decrypted_len = 0;
@@ -3447,7 +3448,16 @@ sshkey_parse_private2(struct sshbuf *blob, int type, const char *passphrase,
 
 	/* Load the private key and comment */
 #ifdef WITH_RUST_CRYPTO
-	if (parsed_ok && parsed.is_cert == 0) {
+	if (parsed_ok && parsed.is_cert != 0) {
+		if (parsed.cert_offset + parsed.cert_len > decrypted_len) {
+			r = SSH_ERR_INVALID_FORMAT;
+			goto out;
+		}
+		if ((r = sshkey_from_blob(decrypted_start + parsed.cert_offset,
+		    parsed.cert_len, &k)) != 0)
+			goto out;
+	}
+	if (parsed_ok) {
 		switch (parsed.key_kind) {
 		case OSSH_RUST_PRIVATE2_KEY_ED25519: {
 			u_char derived_pk[ED25519_PK_SZ];
@@ -3471,16 +3481,30 @@ sshkey_parse_private2(struct sshbuf *blob, int type, const char *passphrase,
 				r = SSH_ERR_INVALID_FORMAT;
 				goto out;
 			}
-			if ((k = sshkey_new(KEY_ED25519)) == NULL) {
-				r = SSH_ERR_ALLOC_FAIL;
-				goto out;
+			if (parsed.is_cert != 0) {
+				if (k == NULL || k->type != KEY_ED25519_CERT ||
+				    k->ed25519_pk == NULL ||
+				    timingsafe_bcmp(pk, k->ed25519_pk,
+				    ED25519_PK_SZ) != 0) {
+					r = SSH_ERR_INVALID_FORMAT;
+					goto out;
+				}
+				if ((k->ed25519_sk = malloc(ED25519_SK_SZ)) == NULL) {
+					r = SSH_ERR_ALLOC_FAIL;
+					goto out;
+				}
+			} else {
+				if ((k = sshkey_new(KEY_ED25519)) == NULL) {
+					r = SSH_ERR_ALLOC_FAIL;
+					goto out;
+				}
+				if ((k->ed25519_pk = malloc(ED25519_PK_SZ)) == NULL ||
+				    (k->ed25519_sk = malloc(ED25519_SK_SZ)) == NULL) {
+					r = SSH_ERR_ALLOC_FAIL;
+					goto out;
+				}
+				memcpy(k->ed25519_pk, pk, ED25519_PK_SZ);
 			}
-			if ((k->ed25519_pk = malloc(ED25519_PK_SZ)) == NULL ||
-			    (k->ed25519_sk = malloc(ED25519_SK_SZ)) == NULL) {
-				r = SSH_ERR_ALLOC_FAIL;
-				goto out;
-			}
-			memcpy(k->ed25519_pk, pk, ED25519_PK_SZ);
 			memcpy(k->ed25519_sk, sk, ED25519_SK_SZ);
 			explicit_bzero(derived_pk, sizeof(derived_pk));
 			rust_key_ok = 1;
@@ -3524,17 +3548,31 @@ sshkey_parse_private2(struct sshbuf *blob, int type, const char *passphrase,
 			memset(ecdsa_private_key, 0, sizeof(ecdsa_private_key));
 			memcpy(ecdsa_private_key + (private_key_len - parsed.part2_len),
 			    private_key, parsed.part2_len);
-			if ((k = sshkey_new(KEY_ECDSA)) == NULL) {
-				r = SSH_ERR_ALLOC_FAIL;
-				goto out;
+			if (parsed.is_cert != 0) {
+				if (k == NULL || sshkey_type_plain(k->type) != KEY_ECDSA ||
+				    k->ecdsa_nid != pubkey->ecdsa_nid ||
+				    parsed.part1_len > sizeof(cert_public_key) ||
+				    ossh_rust_ecdsa_export_public(k->pkey,
+				    cert_public_key, parsed.part1_len) != 0 ||
+				    timingsafe_bcmp(public_key, cert_public_key,
+				    parsed.part1_len) != 0) {
+					r = SSH_ERR_INVALID_FORMAT;
+					goto out;
+				}
+			} else {
+				if ((k = sshkey_new(KEY_ECDSA)) == NULL) {
+					r = SSH_ERR_ALLOC_FAIL;
+					goto out;
+				}
+				k->ecdsa_nid = pubkey->ecdsa_nid;
 			}
-			k->ecdsa_nid = pubkey->ecdsa_nid;
 			if ((rust_key = ossh_rust_ecdsa_from_private(k->ecdsa_nid,
 			    public_key, parsed.part1_len, ecdsa_private_key,
 			    private_key_len)) == NULL) {
 				r = SSH_ERR_INVALID_FORMAT;
 				goto out;
 			}
+			ossh_rust_ecdsa_free(k->pkey);
 			k->pkey = rust_key;
 			rust_key_ok = 1;
 			break;
@@ -3562,9 +3600,40 @@ sshkey_parse_private2(struct sshbuf *blob, int type, const char *passphrase,
 			rsa_iqmp = decrypted_start + parsed.part4_offset;
 			rsa_p = decrypted_start + parsed.part5_offset;
 			rsa_q = decrypted_start + parsed.part6_offset;
-			if ((k = sshkey_new(KEY_RSA)) == NULL) {
-				r = SSH_ERR_ALLOC_FAIL;
-				goto out;
+			if (parsed.is_cert != 0) {
+				u_char *cert_n = NULL, *cert_e = NULL;
+				size_t cert_n_len = 0, cert_e_len = 0;
+
+				if (k == NULL || sshkey_type_plain(k->type) != KEY_RSA ||
+				    (cert_n_len = ossh_rust_rsa_component_len(k->pkey,
+				    OSSH_RUST_RSA_COMPONENT_N)) != parsed.part1_len ||
+				    (cert_e_len = ossh_rust_rsa_component_len(k->pkey,
+				    OSSH_RUST_RSA_COMPONENT_E)) != parsed.part2_len ||
+				    (cert_n = calloc(1, cert_n_len)) == NULL ||
+				    (cert_e = calloc(1, cert_e_len)) == NULL) {
+					freezero(cert_n, cert_n_len);
+					freezero(cert_e, cert_e_len);
+					r = SSH_ERR_INVALID_FORMAT;
+					goto out;
+				}
+				if (ossh_rust_rsa_export_component(k->pkey,
+				    OSSH_RUST_RSA_COMPONENT_N, cert_n, cert_n_len) != 0 ||
+				    ossh_rust_rsa_export_component(k->pkey,
+				    OSSH_RUST_RSA_COMPONENT_E, cert_e, cert_e_len) != 0 ||
+				    timingsafe_bcmp(cert_n, rsa_n, cert_n_len) != 0 ||
+				    timingsafe_bcmp(cert_e, rsa_e, cert_e_len) != 0) {
+					freezero(cert_n, cert_n_len);
+					freezero(cert_e, cert_e_len);
+					r = SSH_ERR_INVALID_FORMAT;
+					goto out;
+				}
+				freezero(cert_n, cert_n_len);
+				freezero(cert_e, cert_e_len);
+			} else {
+				if ((k = sshkey_new(KEY_RSA)) == NULL) {
+					r = SSH_ERR_ALLOC_FAIL;
+					goto out;
+				}
 			}
 			if ((rust_key = ossh_rust_rsa_from_private(rsa_n,
 			    parsed.part1_len, rsa_e, parsed.part2_len, rsa_d,
@@ -3573,6 +3642,7 @@ sshkey_parse_private2(struct sshbuf *blob, int type, const char *passphrase,
 				r = SSH_ERR_INVALID_FORMAT;
 				goto out;
 			}
+			ossh_rust_rsa_free(k->pkey);
 			k->pkey = rust_key;
 			if ((r = sshkey_check_rsa_length(k, 0)) != 0)
 				goto out;
@@ -3626,6 +3696,7 @@ sshkey_parse_private2(struct sshbuf *blob, int type, const char *passphrase,
 	}
  out:
 #ifdef WITH_RUST_CRYPTO
+	explicit_bzero(cert_public_key, sizeof(cert_public_key));
 	explicit_bzero(ecdsa_private_key, sizeof(ecdsa_private_key));
 #endif
 	free(comment);

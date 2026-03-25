@@ -87,6 +87,8 @@ struct ossh_rust_private2_plaintext_parse {
 	uint32_t key_kind;
 	int curve_nid;
 	uint32_t is_cert;
+	size_t cert_offset;
+	size_t cert_len;
 	size_t comment_offset;
 	size_t comment_len;
 	size_t part1_offset;
