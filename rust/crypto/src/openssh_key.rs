@@ -37,6 +37,8 @@ pub(crate) struct OpenSshPrivate2PlaintextParse {
     pub(crate) key_kind: u32,
     pub(crate) curve_nid: i32,
     pub(crate) is_cert: u32,
+    pub(crate) cert_offset: usize,
+    pub(crate) cert_len: usize,
     pub(crate) comment_offset: usize,
     pub(crate) comment_len: usize,
     pub(crate) part1_offset: usize,
@@ -177,6 +179,8 @@ fn parse_private2_plaintext(decrypted: &[u8]) -> Option<OpenSshPrivate2Plaintext
     let mut reader = SshWireReader::new(decrypted);
     let key_type = reader.get_cstring()?;
     let is_cert = is_cert_key_type(key_type);
+    let mut cert_offset = 0usize;
+    let mut cert_len = 0usize;
     let key_kind;
     let mut curve_nid = 0;
     let mut part1_offset = 0usize;
@@ -193,7 +197,9 @@ fn parse_private2_plaintext(decrypted: &[u8]) -> Option<OpenSshPrivate2Plaintext
     let mut part6_len = 0usize;
 
     if is_cert {
-        reader.get_string()?;
+        let (offset, cert) = reader.get_string_with_offset()?;
+        cert_offset = offset;
+        cert_len = cert.len();
     }
 
     match key_type {
@@ -269,6 +275,8 @@ fn parse_private2_plaintext(decrypted: &[u8]) -> Option<OpenSshPrivate2Plaintext
         key_kind,
         curve_nid,
         is_cert: u32::from(is_cert),
+        cert_offset,
+        cert_len,
         comment_offset: comment_data_offset - 4,
         comment_len: comment.len(),
         part1_offset,
