@@ -1302,10 +1302,18 @@ int
 sshkey_read(struct sshkey *ret, char **cpp)
 {
 	struct sshkey *k;
-	char *cp, *blobcopy;
+	char *cp;
+#ifndef WITH_RUST_CRYPTO
+	char *blobcopy;
+#endif
 	size_t space;
 	int r, type, curve_nid = -1;
 	struct sshbuf *blob;
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_public_line_parse parsed;
+	size_t cp_len, blob_len;
+	u_char *blobp;
+#endif
 
 	if (ret == NULL)
 		return SSH_ERR_INVALID_ARGUMENT;
@@ -1314,23 +1322,52 @@ sshkey_read(struct sshkey *ret, char **cpp)
 
 	/* Decode type */
 	cp = *cpp;
+#ifdef WITH_RUST_CRYPTO
+	cp_len = strlen(cp);
+	if (ossh_rust_public_line_parse((const u_char *)cp, cp_len, &parsed) != 0)
+		return SSH_ERR_INVALID_FORMAT;
+	space = parsed.key_type_len;
+#else
 	space = strcspn(cp, " \t");
 	if (space == strlen(cp))
 		return SSH_ERR_INVALID_FORMAT;
+#endif
 	if ((type = peek_type_nid(cp, space, &curve_nid)) == KEY_UNSPEC)
 		return SSH_ERR_INVALID_FORMAT;
 
 	/* skip whitespace */
+#ifdef WITH_RUST_CRYPTO
+	if (parsed.key_blob_offset >= cp_len)
+		return SSH_ERR_INVALID_FORMAT;
+#else
 	for (cp += space; *cp == ' ' || *cp == '\t'; cp++)
 		;
 	if (*cp == '\0')
 		return SSH_ERR_INVALID_FORMAT;
+#endif
 	if (ret->type != KEY_UNSPEC && ret->type != type)
 		return SSH_ERR_KEY_TYPE_MISMATCH;
 	if ((blob = sshbuf_new()) == NULL)
 		return SSH_ERR_ALLOC_FAIL;
 
 	/* find end of keyblob and decode */
+#ifdef WITH_RUST_CRYPTO
+	if ((blob_len = ossh_rust_public_blob_decode_len(
+	    (const u_char *)cp + parsed.key_blob_offset,
+	    parsed.key_blob_len)) == 0) {
+		sshbuf_free(blob);
+		return SSH_ERR_INVALID_FORMAT;
+	}
+	if ((r = sshbuf_reserve(blob, blob_len, &blobp)) != 0) {
+		sshbuf_free(blob);
+		return r;
+	}
+	if (ossh_rust_public_blob_decode_write((const u_char *)cp +
+	    parsed.key_blob_offset, parsed.key_blob_len, blobp, blob_len) != 0) {
+		sshbuf_free(blob);
+		return SSH_ERR_INVALID_FORMAT;
+	}
+#else
 	space = strcspn(cp, " \t");
 	if ((blobcopy = strndup(cp, space)) == NULL) {
 		sshbuf_free(blob);
@@ -1342,6 +1379,7 @@ sshkey_read(struct sshkey *ret, char **cpp)
 		return r;
 	}
 	free(blobcopy);
+#endif
 	if ((r = sshkey_fromb(blob, &k)) != 0) {
 		sshbuf_free(blob);
 		return r;
@@ -1349,8 +1387,12 @@ sshkey_read(struct sshkey *ret, char **cpp)
 	sshbuf_free(blob);
 
 	/* skip whitespace and leave cp at start of comment */
+#ifdef WITH_RUST_CRYPTO
+	cp += parsed.comment_offset;
+#else
 	for (cp += space; *cp == ' ' || *cp == '\t'; cp++)
 		;
+#endif
 
 	/* ensure type of blob matches type at start of line */
 	if (k->type != type) {
