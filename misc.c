@@ -1129,7 +1129,9 @@ parse_user_host_port(const char *s, char **userp, char **hostp, int *portp)
 		goto out;
 	host = xstrdup(cleanhostname(cp));
 	/* Convert and verify optional port */
-	if (tmp != NULL && *tmp != '\0') {
+	if (tmp != NULL) {
+		if (*tmp == '\0')
+			goto out;
 		if ((port = a2port(tmp)) <= 0)
 			goto out;
 	}
