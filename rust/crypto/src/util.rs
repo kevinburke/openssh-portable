@@ -49,6 +49,17 @@ pub(crate) struct UriParse {
     pub(crate) has_path: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct UserHostPathParse {
+    pub(crate) user_offset: usize,
+    pub(crate) user_len: usize,
+    pub(crate) host_offset: usize,
+    pub(crate) host_len: usize,
+    pub(crate) path_offset: usize,
+    pub(crate) path_len: usize,
+    pub(crate) has_user: u32,
+}
+
 pub(crate) fn read_array<const N: usize>(ptr: *const u8, len: usize) -> Option<[u8; N]> {
     if ptr.is_null() || len != N {
         return None;
@@ -494,6 +505,50 @@ pub(crate) fn parse_uri(input: *const u8, input_len: usize) -> Option<UriParse> 
     })
 }
 
+pub(crate) fn parse_user_host_path(input: *const u8, input_len: usize) -> Option<UserHostPathParse> {
+    let input = read_slice(input, input_len)?;
+    if input.is_empty() || input[0] == b':' {
+        return None;
+    }
+
+    let mut bracketed = input[0] == b'[';
+    let mut path_sep = None;
+    for (i, byte) in input.iter().enumerate() {
+        match *byte {
+            b'@' if input.get(i + 1) == Some(&b'[') => bracketed = true,
+            b']' if input.get(i + 1) == Some(&b':') && bracketed => {
+                path_sep = Some(i + 1);
+                break;
+            }
+            b':' if !bracketed => {
+                path_sep = Some(i);
+                break;
+            }
+            b'/' => return None,
+            _ => {}
+        }
+    }
+    let path_sep = path_sep?;
+
+    let (user_offset, user_len, host_offset) = match input[..path_sep].iter().rposition(|byte| *byte == b'@') {
+        Some(at) => (0, at, at + 1),
+        None => (0, 0, 0),
+    };
+    let host_len = path_sep.checked_sub(host_offset)?;
+    let path_offset = path_sep + 1;
+    let path_len = input.len() - path_offset;
+
+    Some(UserHostPathParse {
+        user_offset,
+        user_len,
+        host_offset,
+        host_len,
+        path_offset,
+        path_len,
+        has_user: u32::from(user_len != 0),
+    })
+}
+
 fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
     let mut argv = Vec::new();
     let mut i = 0usize;
@@ -545,7 +600,8 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 mod tests {
     use super::{
         argv_split_parse, argv_split_write, hpdelim2_parse_in_place, parse_uri,
-        parse_user_host_port, strdelim_parse_in_place, UriParse, UserHostPortParse,
+        parse_user_host_path, parse_user_host_port, strdelim_parse_in_place, UriParse,
+        UserHostPathParse, UserHostPortParse,
     };
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
@@ -786,5 +842,40 @@ mod tests {
         assert_eq!(parse_uri(b"user@".as_ptr(), 5), None);
         assert_eq!(parse_uri(b"host:".as_ptr(), 5), None);
         assert_eq!(parse_uri(b"[]:22".as_ptr(), 5), None);
+    }
+
+    #[test]
+    fn parse_user_host_path_handles_basic_forms() {
+        assert_eq!(
+            parse_user_host_path(b"someuser@some.host:some/path".as_ptr(), 28),
+            Some(UserHostPathParse {
+                user_offset: 0,
+                user_len: 8,
+                host_offset: 9,
+                host_len: 9,
+                path_offset: 19,
+                path_len: 9,
+                has_user: 1,
+            })
+        );
+        assert_eq!(
+            parse_user_host_path(b"someuser@[::1]:some/path".as_ptr(), 24),
+            Some(UserHostPathParse {
+                user_offset: 0,
+                user_len: 8,
+                host_offset: 9,
+                host_len: 5,
+                path_offset: 15,
+                path_len: 9,
+                has_user: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_user_host_path_rejects_bad_forms() {
+        assert_eq!(parse_user_host_path(b"".as_ptr(), 0), None);
+        assert_eq!(parse_user_host_path(b":path".as_ptr(), 5), None);
+        assert_eq!(parse_user_host_path(b"host/path".as_ptr(), 9), None);
     }
 }
