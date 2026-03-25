@@ -3713,12 +3713,15 @@ sshkey_parse_private2(struct sshbuf *blob, int type, const char *passphrase,
 			    sshbuf_len(decrypted))) != 0)
 				goto out;
 		}
-	} else
-#endif
-	if (!rust_key_ok &&
+	} else if (!rust_key_ok &&
 	    ((r = sshbuf_get_cstring(decrypted, &comment, NULL)) != 0 ||
 	    (r = private2_check_padding(decrypted)) != 0))
 		goto out;
+#else
+	if ((r = sshbuf_get_cstring(decrypted, &comment, NULL)) != 0 ||
+	    (r = private2_check_padding(decrypted)) != 0)
+		goto out;
+#endif
 
 	/* Check that the public key in the envelope matches the private key */
 	if (!sshkey_equal_public(pubkey, k)) {
