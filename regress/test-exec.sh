@@ -712,6 +712,12 @@ elif [ -f "${SRC}/misc/sk-dummy/sk-dummy.so" ] ; then
 fi
 export SSH_SK_PROVIDER
 
+REGRESS_RUST_CRYPTO=no
+if test -f "$BUILDDIR/config.h" &&
+    grep '^#define WITH_RUST_CRYPTO 1' "$BUILDDIR/config.h" >/dev/null 2>&1; then
+	REGRESS_RUST_CRYPTO=yes
+fi
+
 if ! test -z "$SSH_SK_PROVIDER"; then
 	EXTRA_AGENT_ARGS='-P/*' # XXX want realpath(1)...
 	echo "SecurityKeyProvider $SSH_SK_PROVIDER" >> $OBJ/ssh_config
@@ -721,7 +727,9 @@ fi
 export EXTRA_AGENT_ARGS
 
 maybe_filter_sk() {
-	if test -z "$SSH_SK_PROVIDER" ; then
+	if test "x$REGRESS_RUST_CRYPTO" = "xyes"; then
+		grep -v ^sk | grep -v ^webauthn
+	elif test -z "$SSH_SK_PROVIDER" ; then
 		grep -v ^sk | grep -v ^webauthn
 	else
 		grep -v ^webauthn
