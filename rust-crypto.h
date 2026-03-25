@@ -119,6 +119,11 @@ struct ossh_rust_strdelim_parse {
 	size_t next_offset;
 	uint32_t next_is_null;
 };
+struct ossh_rust_hpdelim_parse {
+	size_t next_offset;
+	uint32_t next_is_null;
+	uint8_t delim;
+};
 int ossh_rust_cert_parse_body(const uint8_t *input, size_t input_len,
     struct ossh_rust_cert_body_parse *out);
 size_t ossh_rust_private2_decode_len(const uint8_t *input, size_t input_len);
@@ -139,6 +144,8 @@ int ossh_rust_argv_split_write(const uint8_t *input, size_t input_len,
     int terminate_on_comment, uint8_t *out, size_t out_len);
 int ossh_rust_strdelim_parse(uint8_t *input, size_t input_len,
     int split_equals, struct ossh_rust_strdelim_parse *out);
+int ossh_rust_hpdelim2_parse(uint8_t *input, size_t input_len,
+    struct ossh_rust_hpdelim_parse *out);
 void *ossh_rust_dh_group_new(int group_id);
 int ossh_rust_dh_generate_key(void *group, size_t need_bits);
 size_t ossh_rust_dh_public_len(const void *group);
