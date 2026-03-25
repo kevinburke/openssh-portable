@@ -3698,7 +3698,8 @@ sshkey_parse_private2(struct sshbuf *blob, int type, const char *passphrase,
 	    (r = private2_check_padding(decrypted)) != 0))
 		goto out;
 #else
-	if ((r = sshbuf_get_cstring(decrypted, &comment, NULL)) != 0 ||
+	if ((r = sshkey_private_deserialize(decrypted, &k)) != 0 ||
+	    (r = sshbuf_get_cstring(decrypted, &comment, NULL)) != 0 ||
 	    (r = private2_check_padding(decrypted)) != 0)
 		goto out;
 #endif
