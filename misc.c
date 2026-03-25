@@ -1174,6 +1174,81 @@ int
 parse_uri(const char *scheme, const char *uri, char **userp, char **hostp,
     int *portp, char **pathp)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_uri_parse parsed;
+	char *user_raw = NULL, *host_raw = NULL, *port_raw = NULL, *path_raw = NULL;
+	char *user = NULL, *host = NULL, *path = NULL;
+	int port = -1, ret = -1;
+	size_t len;
+
+	len = strlen(scheme);
+	if (strncmp(uri, scheme, len) != 0 || strncmp(uri + len, "://", 3) != 0)
+		return 1;
+	uri += len + 3;
+
+	if (userp != NULL)
+		*userp = NULL;
+	if (hostp != NULL)
+		*hostp = NULL;
+	if (portp != NULL)
+		*portp = -1;
+	if (pathp != NULL)
+		*pathp = NULL;
+
+	if (ossh_rust_parse_uri((const u_char *)uri, strlen(uri), &parsed) != 0)
+		goto out;
+	if ((host_raw = strndup(uri + parsed.host_offset, parsed.host_len)) == NULL)
+		goto out;
+	host = xstrdup(cleanhostname(host_raw));
+	if (!valid_domain(host, 0, NULL))
+		goto out;
+	if (parsed.has_user != 0) {
+		if ((user_raw = strndup(uri + parsed.user_offset,
+		    parsed.user_len)) == NULL)
+			goto out;
+		if ((user = urldecode(user_raw)) == NULL)
+			goto out;
+	}
+	if (parsed.has_port != 0) {
+		if ((port_raw = strndup(uri + parsed.port_offset,
+		    parsed.port_len)) == NULL)
+			goto out;
+		if ((port = a2port(port_raw)) <= 0)
+			goto out;
+	}
+	if (parsed.has_path != 0) {
+		if ((path_raw = strndup(uri + parsed.path_offset,
+		    parsed.path_len)) == NULL)
+			goto out;
+		if ((path = urldecode(path_raw)) == NULL)
+			goto out;
+	}
+
+	if (userp != NULL) {
+		*userp = user;
+		user = NULL;
+	}
+	if (hostp != NULL) {
+		*hostp = host;
+		host = NULL;
+	}
+	if (portp != NULL)
+		*portp = port;
+	if (pathp != NULL) {
+		*pathp = path;
+		path = NULL;
+	}
+	ret = 0;
+ out:
+	free(user_raw);
+	free(host_raw);
+	free(port_raw);
+	free(path_raw);
+	free(user);
+	free(host);
+	free(path);
+	return ret;
+#else
 	char *uridup, *cp, *tmp, ch;
 	char *user = NULL, *host = NULL, *path = NULL;
 	int port = -1, ret = -1;
@@ -1259,6 +1334,7 @@ parse_uri(const char *scheme, const char *uri, char **userp, char **hostp,
 	free(host);
 	free(path);
 	return ret;
+#endif
 }
 
 /* function to assist building execv() arguments */
