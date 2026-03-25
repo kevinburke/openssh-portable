@@ -3,6 +3,12 @@ use core::slice;
 
 pub(crate) const SSHBUF_MAX_BIGNUM: usize = 16_384 / 8;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ArgvSplitParse {
+    pub(crate) argc: usize,
+    pub(crate) packed_len: usize,
+}
+
 pub(crate) fn read_array<const N: usize>(ptr: *const u8, len: usize) -> Option<[u8; N]> {
     if ptr.is_null() || len != N {
         return None;
@@ -120,4 +126,156 @@ pub(crate) fn write_prefix(out: *mut u8, out_len: usize, bytes: &[u8]) -> c_int 
     let out = unsafe { slice::from_raw_parts_mut(out, out_len) };
     out[..bytes.len()].copy_from_slice(bytes);
     0
+}
+
+pub(crate) fn argv_split_parse(
+    input: *const u8,
+    input_len: usize,
+    terminate_on_comment: c_int,
+) -> Option<ArgvSplitParse> {
+    let input = read_slice(input, input_len)?;
+    let argv = parse_argv(input, terminate_on_comment != 0)?;
+    Some(ArgvSplitParse {
+        argc: argv.len(),
+        packed_len: argv.iter().map(|arg| arg.len() + 1).sum(),
+    })
+}
+
+pub(crate) fn argv_split_write(
+    input: *const u8,
+    input_len: usize,
+    terminate_on_comment: c_int,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    let input = match read_slice(input, input_len) {
+        Some(input) => input,
+        None => return -1,
+    };
+    let argv = match parse_argv(input, terminate_on_comment != 0) {
+        Some(argv) => argv,
+        None => return -1,
+    };
+    let packed_len: usize = argv.iter().map(|arg| arg.len() + 1).sum();
+    if out.is_null() || out_len < packed_len {
+        return -1;
+    }
+    let out = unsafe { slice::from_raw_parts_mut(out, out_len) };
+    let mut offset = 0usize;
+    for arg in argv {
+        out[offset..offset + arg.len()].copy_from_slice(&arg);
+        offset += arg.len();
+        out[offset] = 0;
+        offset += 1;
+    }
+    0
+}
+
+fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
+    let mut argv = Vec::new();
+    let mut i = 0usize;
+
+    while i < input.len() {
+        if input[i] == b' ' || input[i] == b'\t' {
+            i += 1;
+            continue;
+        }
+        if terminate_on_comment && input[i] == b'#' {
+            break;
+        }
+
+        let mut quote = 0u8;
+        let mut arg = Vec::new();
+        while i < input.len() {
+            let byte = input[i];
+            if byte == b'\\' {
+                let next = input.get(i + 1).copied();
+                if matches!(next, Some(b'\'') | Some(b'"') | Some(b'\\'))
+                    || (quote == 0 && next == Some(b' '))
+                {
+                    i += 1;
+                    arg.push(input[i]);
+                } else {
+                    arg.push(byte);
+                }
+            } else if quote == 0 && (byte == b' ' || byte == b'\t') {
+                break;
+            } else if quote == 0 && (byte == b'"' || byte == b'\'') {
+                quote = byte;
+            } else if quote != 0 && byte == quote {
+                quote = 0;
+            } else {
+                arg.push(byte);
+            }
+            i += 1;
+        }
+        if i == input.len() && quote != 0 {
+            return None;
+        }
+        argv.push(arg);
+    }
+
+    Some(argv)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{argv_split_parse, argv_split_write};
+
+    fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
+        let parsed = argv_split_parse(input.as_ptr(), input.len(), terminate_on_comment as i32)?;
+        let mut packed = vec![0u8; parsed.packed_len];
+        if argv_split_write(
+            input.as_ptr(),
+            input.len(),
+            terminate_on_comment as i32,
+            packed.as_mut_ptr(),
+            packed.len(),
+        ) != 0
+        {
+            return None;
+        }
+        let mut out = Vec::new();
+        let mut start = 0usize;
+        for _ in 0..parsed.argc {
+            let end = packed[start..].iter().position(|byte| *byte == 0)? + start;
+            out.push(packed[start..end].to_vec());
+            start = end + 1;
+        }
+        Some(out)
+    }
+
+    #[test]
+    fn argv_split_handles_quotes_and_comments() {
+        assert_eq!(
+            split(b"\"leamas # gold\"", true),
+            Some(vec![b"leamas # gold".to_vec()])
+        );
+        assert_eq!(split(b"# gold", true), Some(Vec::new()));
+        assert_eq!(
+            split(b"\"leamas\"#gold", true),
+            Some(vec![b"leamas#gold".to_vec()])
+        );
+    }
+
+    #[test]
+    fn argv_split_handles_escapes() {
+        assert_eq!(
+            split(br#""smiley\ leamas""#, false),
+            Some(vec![br#"smiley\ leamas"#.to_vec()])
+        );
+        assert_eq!(
+            split(br#"smiley\ leamas"#, false),
+            Some(vec![b"smiley leamas".to_vec()])
+        );
+        assert_eq!(
+            split(br#"smiley\'s leamas\'"#, false),
+            Some(vec![b"smiley's".to_vec(), b"leamas'".to_vec()])
+        );
+    }
+
+    #[test]
+    fn argv_split_rejects_unterminated_quote() {
+        assert_eq!(split(br#""smiley"#, false), None);
+    }
 }

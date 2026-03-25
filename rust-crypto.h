@@ -104,6 +104,17 @@ struct ossh_rust_private2_plaintext_parse {
 	size_t part6_offset;
 	size_t part6_len;
 };
+struct ossh_rust_public_line_parse {
+	size_t key_type_offset;
+	size_t key_type_len;
+	size_t key_blob_offset;
+	size_t key_blob_len;
+	size_t comment_offset;
+};
+struct ossh_rust_argv_split_parse {
+	size_t argc;
+	size_t packed_len;
+};
 int ossh_rust_cert_parse_body(const uint8_t *input, size_t input_len,
     struct ossh_rust_cert_body_parse *out);
 size_t ossh_rust_private2_decode_len(const uint8_t *input, size_t input_len);
@@ -113,6 +124,15 @@ int ossh_rust_private2_parse_header(const uint8_t *decoded, size_t decoded_len,
     struct ossh_rust_private2_header_parse *out);
 int ossh_rust_private2_parse_plaintext(const uint8_t *decrypted,
     size_t decrypted_len, struct ossh_rust_private2_plaintext_parse *out);
+int ossh_rust_public_line_parse(const uint8_t *input, size_t input_len,
+    struct ossh_rust_public_line_parse *out);
+size_t ossh_rust_public_blob_decode_len(const uint8_t *input, size_t input_len);
+int ossh_rust_public_blob_decode_write(const uint8_t *input, size_t input_len,
+    uint8_t *out, size_t out_len);
+int ossh_rust_argv_split_parse(const uint8_t *input, size_t input_len,
+    int terminate_on_comment, struct ossh_rust_argv_split_parse *out);
+int ossh_rust_argv_split_write(const uint8_t *input, size_t input_len,
+    int terminate_on_comment, uint8_t *out, size_t out_len);
 void *ossh_rust_dh_group_new(int group_id);
 int ossh_rust_dh_generate_key(void *group, size_t need_bits);
 size_t ossh_rust_dh_public_len(const void *group);

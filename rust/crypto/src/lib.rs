@@ -31,7 +31,8 @@ use kex::{
 };
 use openssh_key::{
     openssh_private2_decode_len, openssh_private2_decode_write, openssh_private2_parse,
-    openssh_private2_parse_plaintext,
+    openssh_private2_parse_plaintext, openssh_public_blob_decode_len,
+    openssh_public_blob_decode_write, openssh_public_line_parse,
 };
 use private_pem::PrivatePemError;
 use rsa::{
@@ -40,9 +41,9 @@ use rsa::{
     rsa_parse_private_pem_with_passphrase, rsa_parse_public_blob,
     rsa_private_pem_len, rsa_private_pem_write, rsa_sign_prehashed, rsa_verify_prehashed,
 };
-use util::{read_slice, write_prefix};
+use util::{argv_split_parse, argv_split_write, read_slice, write_prefix};
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 14;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 15;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -134,6 +135,21 @@ pub struct RustPrivate2PlaintextParse {
     part5_len: usize,
     part6_offset: usize,
     part6_len: usize,
+}
+
+#[repr(C)]
+pub struct RustPublicLineParse {
+    key_type_offset: usize,
+    key_type_len: usize,
+    key_blob_offset: usize,
+    key_blob_len: usize,
+    comment_offset: usize,
+}
+
+#[repr(C)]
+pub struct RustArgvSplitParse {
+    argc: usize,
+    packed_len: usize,
 }
 
 #[unsafe(no_mangle)]
@@ -260,6 +276,78 @@ pub extern "C" fn ossh_rust_private2_parse_plaintext(
         };
     }
     0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_public_line_parse(
+    input: *const u8,
+    input_len: usize,
+    out: *mut RustPublicLineParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(parsed) = openssh_public_line_parse(input, input_len) else {
+        return -1;
+    };
+    unsafe {
+        *out = RustPublicLineParse {
+            key_type_offset: parsed.key_type_offset,
+            key_type_len: parsed.key_type_len,
+            key_blob_offset: parsed.key_blob_offset,
+            key_blob_len: parsed.key_blob_len,
+            comment_offset: parsed.comment_offset,
+        };
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_public_blob_decode_len(input: *const u8, input_len: usize) -> usize {
+    openssh_public_blob_decode_len(input, input_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_public_blob_decode_write(
+    input: *const u8,
+    input_len: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    openssh_public_blob_decode_write(input, input_len, out, out_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_argv_split_parse(
+    input: *const u8,
+    input_len: usize,
+    terminate_on_comment: c_int,
+    out: *mut RustArgvSplitParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(parsed) = argv_split_parse(input, input_len, terminate_on_comment) else {
+        return -1;
+    };
+    unsafe {
+        *out = RustArgvSplitParse {
+            argc: parsed.argc,
+            packed_len: parsed.packed_len,
+        };
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_argv_split_write(
+    input: *const u8,
+    input_len: usize,
+    terminate_on_comment: c_int,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    argv_split_write(input, input_len, terminate_on_comment, out, out_len)
 }
 
 #[unsafe(no_mangle)]
