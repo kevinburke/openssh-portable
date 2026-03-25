@@ -255,27 +255,16 @@ static int
 ssh_ecdsa_deserialize_public(const char *ktype, struct sshbuf *b,
     struct sshkey *key)
 {
-	struct sshbuf *copy = NULL;
-	char *curve = NULL;
 	size_t consumed = 0;
 	void *rust_key = NULL;
-	int r;
+	int r, parse_status = OSSH_RUST_PARSE_STATUS_INVALID_FORMAT;
 
 	if ((key->ecdsa_nid = sshkey_ecdsa_nid_from_name(ktype)) == -1)
 		return SSH_ERR_INVALID_ARGUMENT;
-	if ((copy = sshbuf_fromb(b)) == NULL)
-		return SSH_ERR_ALLOC_FAIL;
-	if ((r = sshbuf_get_cstring(copy, &curve, NULL)) != 0) {
-		r = SSH_ERR_INVALID_FORMAT;
-		goto out;
-	}
-	if (strcmp(curve, sshkey_curve_nid_to_name(key->ecdsa_nid)) != 0) {
-		r = SSH_ERR_EC_CURVE_MISMATCH;
-		goto out;
-	}
 	if ((rust_key = ossh_rust_ecdsa_parse_public_blob(key->ecdsa_nid,
-	    sshbuf_ptr(b), sshbuf_len(b), &consumed)) == NULL) {
-		r = SSH_ERR_KEY_INVALID_EC_VALUE;
+	    sshbuf_ptr(b), sshbuf_len(b), &consumed, &parse_status)) == NULL) {
+		r = parse_status == OSSH_RUST_PARSE_STATUS_EC_CURVE_MISMATCH ?
+		    SSH_ERR_EC_CURVE_MISMATCH : SSH_ERR_KEY_INVALID_EC_VALUE;
 		goto out;
 	}
 	if ((r = sshbuf_consume(b, consumed)) != 0)
@@ -285,8 +274,6 @@ ssh_ecdsa_deserialize_public(const char *ktype, struct sshbuf *b,
 	rust_key = NULL;
 	r = 0;
  out:
-	free(curve);
-	sshbuf_free(copy);
 	ossh_rust_ecdsa_free(rust_key);
 	return r;
 }
