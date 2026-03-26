@@ -6,6 +6,7 @@ Linux container instead of trying to mirror them directly on macOS.
 The two most useful cases for this branch are:
 
 - `openssl-noec`
+- `without-openssl`
 - `rust-crypto`
 
 All examples assume you start from the `openssh-portable/` repo root.
@@ -16,6 +17,13 @@ If you want the shortest path, use the provided Dockerfile and helper script:
 docker build -t openssh-ci-repro -f docker/ci-repro.Dockerfile .
 docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro \
   ./contrib/ci-repro.sh openssl-noec
+```
+
+or:
+
+```sh
+docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro \
+  ./contrib/ci-repro.sh without-openssl
 ```
 
 or:
@@ -148,6 +156,40 @@ make -j1 regress/unittests/sshkey/test_sshkey
 ./regress/unittests/sshkey/test_sshkey -d regress/unittests/sshkey/testdata
 make -j1 regress/unittests/misc/test_misc
 ./regress/unittests/misc/test_misc
+```
+
+## Reproducing `without-openssl`
+
+This is the plain no-libcrypto build, without the Rust backend enabled. It is
+useful for catching shared `sshkey.c` and parser regressions that only appear
+when neither OpenSSL nor Rust crypto is available.
+
+If you are using the helper script, this is just:
+
+```sh
+./contrib/ci-repro.sh without-openssl
+```
+
+Inside the container:
+
+```sh
+cd /tmp/openssh-ci
+./configure \
+  --prefix="$PWD/local" \
+  --without-openssl
+```
+
+To reproduce the exact compile failure on this branch:
+
+```sh
+make -j1 sshkey.o
+```
+
+For a fuller local pass:
+
+```sh
+make -j1 unit
+make -j1 t-exec
 ```
 
 ## Notes
