@@ -42,6 +42,7 @@ else
 	default_jobs=4
 fi
 JOBS="${JOBS:-$default_jobs}"
+TEST_SSH_UNSAFE_PERMISSIONS="${TEST_SSH_UNSAFE_PERMISSIONS:-1}"
 
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
@@ -81,7 +82,8 @@ openssl-noec)
 without-openssl)
 	./configure \
 	  --prefix="$PWD/local" \
-	  --without-openssl
+	  --without-openssl \
+	  --with-privsep-user=root
 	make_targets="${MAKE_TARGETS:-unit t-exec}"
 	;;
 rust-crypto)
@@ -89,6 +91,7 @@ rust-crypto)
 	  --prefix="$PWD/local" \
 	  --without-openssl \
 	  --with-rust-crypto \
+	  --with-privsep-user=root \
 	  --disable-pkcs11 \
 	  --disable-security-key
 	make_targets="${MAKE_TARGETS:-unit t-exec}"
@@ -108,4 +111,5 @@ rust-crypto)
 	;;
 esac
 
-make -j"$JOBS" $make_targets
+make -j"$JOBS" TEST_SSH_UNSAFE_PERMISSIONS="$TEST_SSH_UNSAFE_PERMISSIONS" \
+	$make_targets
