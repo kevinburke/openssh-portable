@@ -921,6 +921,16 @@ hostkeys_foreach_file(const char *path, FILE *f, hostkeys_foreach_fn *callback,
 			memcpy(ktype, lineinfo.rawkey, l);
 			ktype[l] = '\0';
 			lineinfo.keytype = sshkey_type_from_name(ktype);
+#if !defined(OPENSSL_HAS_ECC) && !defined(WITH_RUST_CRYPTO)
+			if (lineinfo.keytype == KEY_ECDSA ||
+			    lineinfo.keytype == KEY_ECDSA_CERT)
+				lineinfo.keytype = KEY_UNSPEC;
+#endif
+#if !defined(WITH_OPENSSL) && !defined(WITH_RUST_CRYPTO)
+			if (lineinfo.keytype == KEY_RSA ||
+			    lineinfo.keytype == KEY_RSA_CERT)
+				lineinfo.keytype = KEY_UNSPEC;
+#endif
 
 			/*
 			 * Assume legacy RSA1 if the first component is a short
