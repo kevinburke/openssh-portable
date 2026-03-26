@@ -1434,6 +1434,10 @@ sshkey_read(struct sshkey *ret, char **cpp)
 #endif
 	if ((type = peek_type_nid(cp, space, &curve_nid)) == KEY_UNSPEC)
 		return SSH_ERR_INVALID_FORMAT;
+#if !defined(OPENSSL_HAS_ECC) && !defined(WITH_RUST_CRYPTO)
+	if (key_type_is_ecdsa_variant(type))
+		return SSH_ERR_INVALID_FORMAT;
+#endif
 
 	/* skip whitespace */
 #ifdef WITH_RUST_CRYPTO
