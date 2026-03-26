@@ -278,10 +278,58 @@ key_type_is_ecdsa_variant(int type)
 	return 0;
 }
 
+static int
+peek_ecdsa_type_nid(const char *name, size_t len, int *nid)
+{
+	if (len == strlen("ecdsa-sha2-nistp256") &&
+	    memcmp(name, "ecdsa-sha2-nistp256", len) == 0) {
+		*nid = NID_X9_62_prime256v1;
+		return KEY_ECDSA;
+	}
+	if (len == strlen("ecdsa-sha2-nistp384") &&
+	    memcmp(name, "ecdsa-sha2-nistp384", len) == 0) {
+		*nid = NID_secp384r1;
+		return KEY_ECDSA;
+	}
+#if defined(OPENSSL_HAS_NISTP521) || defined(WITH_RUST_CRYPTO)
+	if (len == strlen("ecdsa-sha2-nistp521") &&
+	    memcmp(name, "ecdsa-sha2-nistp521", len) == 0) {
+		*nid = NID_secp521r1;
+		return KEY_ECDSA;
+	}
+#endif
+	if (len == strlen("ecdsa-sha2-nistp256-cert-v01@openssh.com") &&
+	    memcmp(name, "ecdsa-sha2-nistp256-cert-v01@openssh.com",
+	    len) == 0) {
+		*nid = NID_X9_62_prime256v1;
+		return KEY_ECDSA_CERT;
+	}
+	if (len == strlen("ecdsa-sha2-nistp384-cert-v01@openssh.com") &&
+	    memcmp(name, "ecdsa-sha2-nistp384-cert-v01@openssh.com",
+	    len) == 0) {
+		*nid = NID_secp384r1;
+		return KEY_ECDSA_CERT;
+	}
+#if defined(OPENSSL_HAS_NISTP521) || defined(WITH_RUST_CRYPTO)
+	if (len == strlen("ecdsa-sha2-nistp521-cert-v01@openssh.com") &&
+	    memcmp(name, "ecdsa-sha2-nistp521-cert-v01@openssh.com",
+	    len) == 0) {
+		*nid = NID_secp521r1;
+		return KEY_ECDSA_CERT;
+	}
+#endif
+	return KEY_UNSPEC;
+}
+
 int
 sshkey_ecdsa_nid_from_name(const char *name)
 {
 	int i;
+	int nid = -1, type;
+
+	type = peek_ecdsa_type_nid(name, strlen(name), &nid);
+	if (key_type_is_ecdsa_variant(type))
+		return nid;
 
 	for (i = 0; keyimpls[i] != NULL; i++) {
 		if (!key_type_is_ecdsa_variant(keyimpls[i]->type))
@@ -1298,6 +1346,9 @@ peek_type_nid(const char *s, size_t l, int *nid)
 {
 	const struct sshkey_impl *impl;
 	int i;
+
+	if ((i = peek_ecdsa_type_nid(s, l, nid)) != KEY_UNSPEC)
+		return i;
 
 	for (i = 0; keyimpls[i] != NULL; i++) {
 		impl = keyimpls[i];
