@@ -57,6 +57,16 @@
 # endif
 #endif /* WITH_OPENSSL */
 
+#ifndef NID_X9_62_prime256v1
+#define NID_X9_62_prime256v1 415
+#endif
+#ifndef NID_secp384r1
+#define NID_secp384r1 715
+#endif
+#ifndef NID_secp521r1
+#define NID_secp521r1 716
+#endif
+
 #define SSH_RSA_MINIMUM_MODULUS_SIZE	1024
 #define SSH_KEY_MAX_SIGN_DATA_SIZE	(1 << 20)
 
