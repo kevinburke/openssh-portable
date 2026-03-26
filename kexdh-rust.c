@@ -38,6 +38,10 @@ rust_dh_group_id_from_kex_type(u_int kex_type)
 	case KEX_DH_GRP14_SHA1:
 	case KEX_DH_GRP14_SHA256:
 		return OSSH_RUST_DH_GROUP14;
+	case KEX_DH_GRP16_SHA512:
+		return OSSH_RUST_DH_GROUP16;
+	case KEX_DH_GRP18_SHA512:
+		return OSSH_RUST_DH_GROUP18;
 	default:
 		return -1;
 	}
@@ -151,7 +155,7 @@ kex_dh_enc(struct kex *kex, const struct sshbuf *client_blob,
 {
 	struct sshbuf *server_blob = NULL, *shared_secret = NULL;
 	u_char *public_key = NULL;
-	size_t public_key_len;
+	size_t public_key_len = 0;
 	int r;
 
 	*server_blobp = NULL;
