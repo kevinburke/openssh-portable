@@ -36,6 +36,14 @@ docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro \
 The helper script creates a throwaway worktree, configures the requested CI
 shape, and runs the matching build/test commands.
 
+For container-only repro convenience, the helper also:
+
+- sets `TEST_SSH_UNSAFE_PERMISSIONS=1`
+- configures `--with-privsep-user=root` for `without-openssl` and `rust-crypto`
+
+That keeps `t-exec` working in a minimal Docker image without needing to add
+an `sshd` account or change `/tmp` permissions by hand.
+
 ## Container Setup
 
 Start an Ubuntu 24.04 container with the repo bind-mounted at `/src`:
