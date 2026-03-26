@@ -47,6 +47,7 @@ TEST_SSH_UNSAFE_PERMISSIONS="${TEST_SSH_UNSAFE_PERMISSIONS:-1}"
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
 workdir="${WORKDIR:-/tmp/openssh-ci-$config}"
+privsep_dir="$workdir/empty"
 
 cleanup() {
 	if [ "${KEEP_WORKTREE:-0}" = "1" ]; then
@@ -66,6 +67,7 @@ fi
 
 git -C "$repo_root" worktree add --detach "$workdir" HEAD
 cd "$workdir"
+mkdir -p "$privsep_dir"
 
 autoreconf -fi
 
@@ -83,7 +85,8 @@ without-openssl)
 	./configure \
 	  --prefix="$PWD/local" \
 	  --without-openssl \
-	  --with-privsep-user=root
+	  --with-privsep-user=root \
+	  --with-privsep-path="$privsep_dir"
 	make_targets="${MAKE_TARGETS:-unit t-exec}"
 	;;
 rust-crypto)
@@ -92,6 +95,7 @@ rust-crypto)
 	  --without-openssl \
 	  --with-rust-crypto \
 	  --with-privsep-user=root \
+	  --with-privsep-path="$privsep_dir" \
 	  --disable-pkcs11 \
 	  --disable-security-key
 	make_targets="${MAKE_TARGETS:-unit t-exec}"
