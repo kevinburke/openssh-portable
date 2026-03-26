@@ -8,6 +8,7 @@ usage: contrib/ci-repro.sh <config>
 
 Supported configs:
   openssl-noec
+  without-openssl
   rust-crypto
 
 Environment:
@@ -26,7 +27,7 @@ fi
 config="$1"
 
 case "$config" in
-openssl-noec|rust-crypto)
+openssl-noec|without-openssl|rust-crypto)
 	;;
 *)
 	echo "unsupported config: $config" >&2
@@ -76,6 +77,12 @@ openssl-noec)
 	  --with-rpath=-Wl,-rpath, \
 	  --disable-security-key
 	make_targets="${MAKE_TARGETS:-unit}"
+	;;
+without-openssl)
+	./configure \
+	  --prefix="$PWD/local" \
+	  --without-openssl
+	make_targets="${MAKE_TARGETS:-unit t-exec}"
 	;;
 rust-crypto)
 	./configure \
