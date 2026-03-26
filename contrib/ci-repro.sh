@@ -19,6 +19,33 @@ Environment:
 EOF
 }
 
+run_make_targets() {
+	unit_first=""
+	rest=""
+
+	for target in "$@"; do
+		if [ "$target" = "unit" ]; then
+			unit_first=1
+		else
+			rest="$rest $target"
+		fi
+	done
+
+	if [ -n "$unit_first" ]; then
+		printf '==> running make unit\n'
+		make -j"$JOBS" \
+		    TEST_SSH_UNSAFE_PERMISSIONS="$TEST_SSH_UNSAFE_PERMISSIONS" \
+		    unit
+	fi
+	if [ -n "$rest" ]; then
+		printf '==> running make%s\n' "$rest"
+		# shellcheck disable=SC2086
+		make -j"$JOBS" \
+		    TEST_SSH_UNSAFE_PERMISSIONS="$TEST_SSH_UNSAFE_PERMISSIONS" \
+		    $rest
+	fi
+}
+
 if [ $# -ne 1 ]; then
 	usage >&2
 	exit 1
@@ -115,5 +142,5 @@ rust-crypto)
 	;;
 esac
 
-make -j"$JOBS" TEST_SSH_UNSAFE_PERMISSIONS="$TEST_SSH_UNSAFE_PERMISSIONS" \
-	$make_targets
+# shellcheck disable=SC2086
+run_make_targets $make_targets

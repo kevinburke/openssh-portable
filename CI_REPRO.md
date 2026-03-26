@@ -41,6 +41,8 @@ For container-only repro convenience, the helper also:
 - sets `TEST_SSH_UNSAFE_PERMISSIONS=1`
 - configures `--with-privsep-user=root` for `without-openssl` and `rust-crypto`
 - configures `--with-privsep-path` to a throwaway directory inside the worktree
+- runs `make unit` first as a separate step whenever `MAKE_TARGETS` includes
+  `unit`, so it exits before `t-exec` if the fast unit gate fails
 
 That keeps `t-exec` working in a minimal Docker image without needing to add
 an `sshd` account, create `/var/empty`, or change `/tmp` permissions by hand.
