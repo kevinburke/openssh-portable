@@ -40,9 +40,10 @@ For container-only repro convenience, the helper also:
 
 - sets `TEST_SSH_UNSAFE_PERMISSIONS=1`
 - configures `--with-privsep-user=root` for `without-openssl` and `rust-crypto`
+- configures `--with-privsep-path` to a throwaway directory inside the worktree
 
 That keeps `t-exec` working in a minimal Docker image without needing to add
-an `sshd` account or change `/tmp` permissions by hand.
+an `sshd` account, create `/var/empty`, or change `/tmp` permissions by hand.
 
 ## Container Setup
 
