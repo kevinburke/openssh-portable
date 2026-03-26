@@ -1303,12 +1303,14 @@ sshkey_read(struct sshkey *ret, char **cpp)
 {
 	struct sshkey *k;
 	char *cp;
+	char *blob_ktype = NULL;
 #ifndef WITH_RUST_CRYPTO
 	char *blobcopy;
 #endif
 	size_t space;
 	int r, type, curve_nid = -1;
 	struct sshbuf *blob;
+	struct sshbuf *blob_copy = NULL;
 #ifdef WITH_RUST_CRYPTO
 	struct ossh_rust_public_line_parse parsed;
 	size_t cp_len, blob_len;
@@ -1380,8 +1382,31 @@ sshkey_read(struct sshkey *ret, char **cpp)
 	}
 	free(blobcopy);
 #endif
+	if (key_type_is_ecdsa_variant(type)) {
+		if ((blob_copy = sshbuf_fromb(blob)) == NULL) {
+			sshbuf_free(blob);
+			return SSH_ERR_ALLOC_FAIL;
+		}
+		if ((r = sshbuf_get_cstring(blob_copy, &blob_ktype, NULL)) != 0) {
+			sshbuf_free(blob_copy);
+			sshbuf_free(blob);
+			return SSH_ERR_INVALID_FORMAT;
+		}
+		if (sshkey_ecdsa_nid_from_name(blob_ktype) != curve_nid) {
+			sshbuf_free(blob_copy);
+			sshbuf_free(blob);
+			free(blob_ktype);
+			return SSH_ERR_EC_CURVE_MISMATCH;
+		}
+		sshbuf_free(blob_copy);
+		blob_copy = NULL;
+		free(blob_ktype);
+		blob_ktype = NULL;
+	}
 	if ((r = sshkey_fromb(blob, &k)) != 0) {
 		sshbuf_free(blob);
+		free(blob_ktype);
+		sshbuf_free(blob_copy);
 		return r;
 	}
 	sshbuf_free(blob);
