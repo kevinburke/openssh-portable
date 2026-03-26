@@ -57,6 +57,9 @@
 #include "myproposal.h"
 #include "digest.h"
 #include "version.h"
+#ifdef WITH_RUST_CRYPTO
+#include "rust-crypto.h"
+#endif
 
 /* Format of the configuration file:
 
@@ -3222,8 +3225,33 @@ struct fwdarg {
 static int
 parse_fwd_field(char **p, struct fwdarg *fwd)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_forward_field_parse parsed;
+	char *old;
+	size_t len;
+#else
 	char *ep, *cp = *p;
 	int ispath = 0;
+#endif
+
+	if (p == NULL || *p == NULL)
+		return -1;
+
+#ifdef WITH_RUST_CRYPTO
+	if (**p == '\0') {
+		*p = NULL;
+		return -1;	/* end of string */
+	}
+
+	old = *p;
+	len = strlen(*p) + 1;
+	if (ossh_rust_parse_forward_field((u_char *)*p, len, &parsed) != 0)
+		return -1;
+	fwd->arg = old + parsed.arg_offset;
+	fwd->ispath = parsed.ispath != 0;
+	*p = old + parsed.next_offset;
+	return 0;
+#else
 
 	if (*cp == '\0') {
 		*p = NULL;
@@ -3273,6 +3301,7 @@ done:
 	fwd->ispath = ispath;
 	*p = cp;
 	return 0;
+#endif
 }
 
 /*

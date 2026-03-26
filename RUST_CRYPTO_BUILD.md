@@ -53,6 +53,10 @@ Rust-backed today:
 - `parse_uri()` parsing used by:
   - `ssh://[user@]host[:port][/path]`
   - similar `scp://` / `sftp://` style URI entry points
+- `parse_forward()` field tokenization used by:
+  - `LocalForward`, `RemoteForward`, and `DynamicForward`
+  - `-L`, `-R`, and `-D` forwarding specifications
+  - bracketed literal forwarding fields and escaped forwarding tokens
 - RSA and ECDSA private-key loading for:
   - legacy PEM
   - PKCS#8
@@ -175,6 +179,16 @@ replacements through:
 - `regress/unittests/misc/test_hpdelim.c`
 - `regress/unittests/misc/test_user_host_port.c`
 - `regress/unittests/misc/test_parse.c`
+
+For the Rust-backed forwarding parser path, representative local checks are:
+
+```sh
+./ssh -G localhost -F /dev/null -L '[host:name]:8080:dest:80' >/dev/null
+./ssh -G localhost -F /dev/null -L '[host]x:8080:dest:80'
+```
+
+The first should succeed. The second should fail with `Bad local forwarding
+specification`.
 
 For the Rust-backed private-key load path, targeted local checks that are
 worth rerunning are:
