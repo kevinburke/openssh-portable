@@ -85,6 +85,8 @@
 static int sshkey_from_blob_internal(struct sshbuf *buf,
     struct sshkey **keyp, int allow_cert);
 static int peek_ecdsa_type_nid(const char *name, size_t len, int *nid);
+static int sshkey_ecdsa_deserialize_public_noec(const char *ktype,
+    struct sshbuf *b, struct sshkey *key);
 
 /* Supported key types */
 extern const struct sshkey_impl sshkey_ed25519_impl;
@@ -216,11 +218,16 @@ sshkey_ssh_name_from_type_nid(int type, int nid)
 int
 sshkey_type_is_cert(int type)
 {
-	const struct sshkey_impl *impl;
-
-	if ((impl = sshkey_impl_from_type(type)) == NULL)
+	switch (type) {
+	case KEY_RSA_CERT:
+	case KEY_ECDSA_CERT:
+	case KEY_ECDSA_SK_CERT:
+	case KEY_ED25519_CERT:
+	case KEY_ED25519_SK_CERT:
+		return 1;
+	default:
 		return 0;
-	return impl->cert;
+	}
 }
 
 const char *
@@ -462,6 +469,8 @@ sshkey_type_is_valid_ca(int type)
 {
 	const struct sshkey_impl *impl;
 
+	if (type == KEY_ECDSA)
+		return 1;
 	if ((impl = sshkey_impl_from_type(type)) == NULL)
 		return 0;
 	/* All non-certificate types may act as CAs */
@@ -761,8 +770,11 @@ sshkey_new(int type)
 	const struct sshkey_impl *impl = NULL;
 
 	if (type != KEY_UNSPEC &&
-	    (impl = sshkey_impl_from_type(type)) == NULL)
-		return NULL;
+	    (impl = sshkey_impl_from_type(type)) == NULL) {
+		if (!(key_type_is_ecdsa_variant(type) &&
+		    sshkey_type_plain(type) == KEY_ECDSA))
+			return NULL;
+	}
 
 	/* All non-certificate types may act as CAs */
 	if ((k = calloc(1, sizeof(*k))) == NULL)
@@ -783,6 +795,35 @@ sshkey_new(int type)
 	}
 
 	return k;
+}
+
+static int
+sshkey_ecdsa_deserialize_public_noec(const char *ktype, struct sshbuf *b,
+    struct sshkey *key)
+{
+	int r;
+	const u_char *point;
+	size_t point_len;
+	char *curve = NULL;
+
+	if ((key->ecdsa_nid = sshkey_ecdsa_nid_from_name(ktype)) == -1)
+		return SSH_ERR_INVALID_ARGUMENT;
+	if ((r = sshbuf_get_cstring(b, &curve, NULL)) != 0)
+		goto out;
+	if (key->ecdsa_nid != sshkey_curve_name_to_nid(curve)) {
+		r = SSH_ERR_EC_CURVE_MISMATCH;
+		goto out;
+	}
+	if ((r = sshbuf_get_string_direct(b, &point, &point_len)) != 0)
+		goto out;
+	if (point_len == 0) {
+		r = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+	r = 0;
+ out:
+	free(curve);
+	return r;
 }
 
 /* Frees common FIDO fields */
@@ -2209,7 +2250,9 @@ sshkey_from_blob_internal(struct sshbuf *b, struct sshkey **keyp,
 		ret = SSH_ERR_KEY_CERT_INVALID_SIGN_KEY;
 		goto out;
 	}
-	if ((impl = sshkey_impl_from_type(type)) == NULL) {
+	impl = sshkey_impl_from_type(type);
+	if (impl == NULL && !(key_type_is_ecdsa_variant(type) &&
+	    sshkey_type_plain(type) == KEY_ECDSA)) {
 		ret = SSH_ERR_KEY_TYPE_UNKNOWN;
 		goto out;
 	}
@@ -2224,7 +2267,11 @@ sshkey_from_blob_internal(struct sshbuf *b, struct sshkey **keyp,
 			goto out;
 		}
 	}
-	if ((ret = impl->funcs->deserialize_public(ktype, b, key)) != 0)
+	if (impl != NULL)
+		ret = impl->funcs->deserialize_public(ktype, b, key);
+	else
+		ret = sshkey_ecdsa_deserialize_public_noec(ktype, b, key);
+	if (ret != 0)
 		goto out;
 
 	/* Parse certificate potion */
