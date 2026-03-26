@@ -553,6 +553,7 @@ sshkey_tests(void)
 	}
 	TEST_DONE();
 
+#if defined(OPENSSL_HAS_ECC) || defined(WITH_RUST_CRYPTO)
 	TEST_START("read public line ECDSA curve mismatch");
 	{
 		char *line = load_public_text_line("ecdsa_1.pub");
@@ -583,6 +584,7 @@ sshkey_tests(void)
 		k1 = NULL;
 	}
 	TEST_DONE();
+#endif /* OPENSSL_HAS_ECC || WITH_RUST_CRYPTO */
 
 	TEST_START("certify key");
 	ASSERT_INT_EQ(sshkey_load_public(test_data_file("ed25519_1.pub"),
