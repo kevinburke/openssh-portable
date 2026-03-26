@@ -640,7 +640,6 @@ sshkey_pkey_digest_verify(EVP_PKEY *pkey, int hash_alg, const u_char *data,
 #endif /* WITH_OPENSSL */
 
 /* XXX: these are really begging for a table-driven approach */
-#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 int
 sshkey_curve_name_to_nid(const char *name)
 {
@@ -723,7 +722,6 @@ sshkey_ec_nid_to_hash_alg(int nid)
 	else
 		return SSH_DIGEST_SHA512;
 }
-#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 
 static void
 cert_free(struct sshkey_cert *cert)
