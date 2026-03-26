@@ -249,7 +249,7 @@ fi
 
 if [ "${INSTALL_HARDENED_MALLOC}" = "yes" ]; then
     (cd ${HOME} &&
-     git clone https://github.com/GrapheneOS/hardened_malloc.git &&
+     git clone --depth 1 https://github.com/GrapheneOS/hardened_malloc.git &&
      cd ${HOME}/hardened_malloc &&
      make CC=clang-19 && sudo cp out/libhardened_malloc.so /usr/lib/)
 fi
@@ -262,9 +262,9 @@ fi
 if [ ! -z "${INSTALL_LIBRESSL}" ]; then
     if [ "${INSTALL_LIBRESSL}" = "master" ]; then
 	(mkdir -p ${HOME}/libressl && cd ${HOME}/libressl &&
-	 git clone https://github.com/libressl-portable/portable.git &&
+	 git clone --depth 1 --branch "${INSTALL_LIBRESSL}" \
+	     https://github.com/libressl-portable/portable.git &&
 	 cd ${HOME}/libressl/portable &&
-	 git checkout ${INSTALL_LIBRESSL} &&
 	 sh update.sh && sh autogen.sh &&
 	 ./configure --prefix=/opt/libressl &&
 	 make && sudo make install)
@@ -279,7 +279,8 @@ if [ ! -z "${INSTALL_LIBRESSL}" ]; then
 fi
 
 if [ ! -z "${INSTALL_BORINGSSL}" ]; then
-    (cd ${HOME} && git clone https://boringssl.googlesource.com/boringssl &&
+    (cd ${HOME} &&
+     git clone --depth 1 https://boringssl.googlesource.com/boringssl &&
      cd ${HOME}/boringssl && mkdir build && cd build &&
      cmake -GNinja  -DCMAKE_POSITION_INDEPENDENT_CODE=ON .. && ninja &&
      mkdir -p /opt/boringssl/lib &&
@@ -297,7 +298,7 @@ if [ ! -z "${INSTALL_AWSLC}" ]; then
 fi
 
 if [ ! -z "${INSTALL_ZLIB}" ]; then
-    (cd ${HOME} && git clone https://github.com/madler/zlib.git &&
+    (cd ${HOME} && git clone --depth 1 https://github.com/madler/zlib.git &&
      cd ${HOME}/zlib && ./configure && make &&
      sudo make install prefix=/opt/zlib)
 fi
