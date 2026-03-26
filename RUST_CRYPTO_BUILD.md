@@ -65,6 +65,9 @@ Rust-backed today:
 - Curve25519/X25519 key exchange helpers
 - NIST ECDH key exchange helpers
   (`ecdh-sha2-nistp256`, `ecdh-sha2-nistp384`, `ecdh-sha2-nistp521`)
+- classic fixed-group DH key exchange helpers
+  (`diffie-hellman-group14-sha1`, `diffie-hellman-group14-sha256`,
+  `diffie-hellman-group16-sha512`, `diffie-hellman-group18-sha512`)
 - the X25519 portion of the hybrid
   `sntrup761x25519-sha512` and `mlkem768x25519-sha256` KEX paths
 - AES-CTR transport cipher (`aes128-ctr`, `aes192-ctr`, `aes256-ctr`)
@@ -79,7 +82,7 @@ Still on the existing C path today:
 - MD5 and SHA1 digest support
 - SNTRUP761 KEM code
 - MLKEM768 KEM code
-- classic finite-field DH / DH-GEX
+- DH-GEX
 - PKCS#11 and security-key code paths
 - SK / FIDO private-key deserialization inside decrypted
   `openssh-key-v1` private sections
@@ -189,6 +192,18 @@ For the Rust-backed forwarding parser path, representative local checks are:
 
 The first should succeed. The second should fail with `Bad local forwarding
 specification`.
+
+For the Rust-backed fixed-group DH path, representative local checks are:
+
+```sh
+./ssh -Q kex | rg 'diffie-hellman-group(14|16|18)'
+make -j1 regress/unittests/kex/test_kex
+./regress/unittests/kex/test_kex
+```
+
+In this Codex environment, real outbound handshake checks for these DH groups
+are blocked by local sandbox networking, so `ssh -Q kex` plus `test_kex`
+are the practical local validation signals for this slice.
 
 For the Rust-backed private-key load path, targeted local checks that are
 worth rerunning are:
