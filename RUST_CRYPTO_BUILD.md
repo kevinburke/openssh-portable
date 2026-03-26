@@ -125,6 +125,9 @@ Today it runs:
 
 That gives both Rust-native coverage and OpenSSH integration coverage in CI.
 
+For reproducing `rust-crypto`, `openssl-noec`, and similar CI jobs locally in
+Docker, see [CI_REPRO.md](CI_REPRO.md).
+
 ## Test commands
 
 The main local test commands for the current branch are:
