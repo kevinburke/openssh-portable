@@ -1626,9 +1626,9 @@ sshkey_cert_type(const struct sshkey *k)
 int
 sshkey_check_rsa_length(const struct sshkey *k, int min_size)
 {
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	int nbits;
 
-#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	if (k == NULL ||
 	    (k->type != KEY_RSA && k->type != KEY_RSA_CERT))
 		return 0;
