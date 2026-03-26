@@ -530,6 +530,9 @@ sshkey_tests(void)
 	}
 	TEST_DONE();
 
+/* Pure without-openssl builds only support one public key type (Ed25519),
+ * so there is no second supported type available for a mismatch check. */
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	TEST_START("read public line type mismatch");
 	{
 		char *line = load_public_text_line("ed25519_1.pub");
@@ -552,6 +555,7 @@ sshkey_tests(void)
 		k1 = NULL;
 	}
 	TEST_DONE();
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 
 #if defined(OPENSSL_HAS_ECC) || defined(WITH_RUST_CRYPTO)
 	TEST_START("read public line ECDSA curve mismatch");
