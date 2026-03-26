@@ -84,6 +84,7 @@
 
 static int sshkey_from_blob_internal(struct sshbuf *buf,
     struct sshkey **keyp, int allow_cert);
+static int peek_ecdsa_type_nid(const char *name, size_t len, int *nid);
 
 /* Supported key types */
 extern const struct sshkey_impl sshkey_ed25519_impl;
@@ -227,7 +228,12 @@ static int
 type_from_name(const char *name, int allow_short)
 {
 	int i;
+	int nid = -1, type;
 	const struct sshkey_impl *impl;
+
+	type = peek_ecdsa_type_nid(name, strlen(name), &nid);
+	if (type != KEY_UNSPEC)
+		return type;
 
 	for (i = 0; keyimpls[i] != NULL; i++) {
 		impl = keyimpls[i];
