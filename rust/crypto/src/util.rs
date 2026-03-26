@@ -60,6 +60,13 @@ pub(crate) struct UserHostPathParse {
     pub(crate) has_user: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ForwardFieldParse {
+    pub(crate) arg_offset: usize,
+    pub(crate) next_offset: usize,
+    pub(crate) ispath: u32,
+}
+
 pub(crate) fn read_array<const N: usize>(ptr: *const u8, len: usize) -> Option<[u8; N]> {
     if ptr.is_null() || len != N {
         return None;
@@ -335,6 +342,76 @@ pub(crate) fn hpdelim2_parse_in_place(input: *mut u8, input_len: usize) -> Optio
     }
 }
 
+pub(crate) fn parse_forward_field_in_place(
+    input: *mut u8,
+    input_len: usize,
+) -> Option<ForwardFieldParse> {
+    let input = read_slice_mut(input, input_len)?;
+    if input.is_empty() || input[0] == 0 {
+        return None;
+    }
+
+    if input[0] == b'[' {
+        let nul = input.iter().position(|byte| *byte == 0)?;
+        let close = input[..nul].iter().position(|byte| *byte == b']')?;
+        let ispath = u32::from(input[1..close].contains(&b'/'));
+        if input.get(close + 1).copied()? != 0 && input.get(close + 1).copied()? != b':' {
+            return None;
+        }
+        input[close] = 0;
+        let next_offset = if input.get(close + 1).copied()? == b':' {
+            input[close + 1] = 0;
+            close + 2
+        } else {
+            close + 1
+        };
+        return Some(ForwardFieldParse {
+            arg_offset: 1,
+            next_offset,
+            ispath,
+        });
+    }
+
+    let mut ispath = 0u32;
+    let mut i = 0usize;
+    while i < input.len() {
+        match input[i] {
+            0 => {
+                return Some(ForwardFieldParse {
+                    arg_offset: 0,
+                    next_offset: i,
+                    ispath,
+                });
+            }
+            b'\\' => {
+                let nul = input[i..].iter().position(|byte| *byte == 0).map(|off| i + off)?;
+                input.copy_within(i + 1..=nul, i);
+                if input[i] == 0 {
+                    return None;
+                }
+                i += 1;
+            }
+            b'/' => {
+                ispath = 1;
+                i += 1;
+            }
+            b':' => {
+                input[i] = 0;
+                return Some(ForwardFieldParse {
+                    arg_offset: 0,
+                    next_offset: i + 1,
+                    ispath,
+                });
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    None
+}
+
 pub(crate) fn parse_user_host_port(input: *const u8, input_len: usize) -> Option<UserHostPortParse> {
     let input = read_slice(input, input_len)?;
     if input.is_empty() {
@@ -599,8 +676,8 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 #[cfg(test)]
 mod tests {
     use super::{
-        argv_split_parse, argv_split_write, hpdelim2_parse_in_place, parse_uri,
-        parse_user_host_path, parse_user_host_port, strdelim_parse_in_place, UriParse,
+        argv_split_parse, argv_split_write, hpdelim2_parse_in_place, parse_forward_field_in_place,
+        parse_uri, parse_user_host_path, parse_user_host_port, strdelim_parse_in_place, UriParse,
         UserHostPathParse, UserHostPortParse,
     };
 
@@ -744,6 +821,65 @@ mod tests {
     #[test]
     fn hpdelim_rejects_unclosed_bracket() {
         assert_eq!(hpdelim_next(b"[::1:1234"), None);
+    }
+
+    fn parse_fwd_field(input: &[u8]) -> Option<(Vec<u8>, Option<Vec<u8>>, u32)> {
+        let mut buf = input.to_vec();
+        buf.push(0);
+        let parsed = parse_forward_field_in_place(buf.as_mut_ptr(), buf.len())?;
+        let token_start = parsed.arg_offset;
+        let token_end = buf[token_start..]
+            .iter()
+            .position(|byte| *byte == 0)
+            .map(|off| token_start + off)?;
+        let token = buf[token_start..token_end].to_vec();
+        let rest = if parsed.next_offset >= buf.len() || buf[parsed.next_offset] == 0 {
+            None
+        } else {
+            let rest_end = buf[parsed.next_offset..]
+                .iter()
+                .position(|byte| *byte == 0)
+                .map(|off| parsed.next_offset + off)?;
+            Some(buf[parsed.next_offset..rest_end].to_vec())
+        };
+        Some((token, rest, parsed.ispath))
+    }
+
+    #[test]
+    fn parse_forward_field_handles_basic_forms() {
+        assert_eq!(
+            parse_fwd_field(b"8080:host:80"),
+            Some((b"8080".to_vec(), Some(b"host:80".to_vec()), 0))
+        );
+        assert_eq!(
+            parse_fwd_field(b"/tmp/a.sock:host:80"),
+            Some((b"/tmp/a.sock".to_vec(), Some(b"host:80".to_vec()), 1))
+        );
+        assert_eq!(
+            parse_fwd_field(b"[host:name]:80"),
+            Some((b"host:name".to_vec(), Some(b"80".to_vec()), 0))
+        );
+        assert_eq!(
+            parse_fwd_field(b"host\\:name:80"),
+            Some((b"host:name".to_vec(), Some(b"80".to_vec()), 0))
+        );
+        assert_eq!(
+            parse_fwd_field(br#"host\/path:80"#),
+            Some((br#"host/path"#.to_vec(), Some(b"80".to_vec()), 0))
+        );
+        assert_eq!(
+            parse_fwd_field(b"host"),
+            Some((b"host".to_vec(), None, 0))
+        );
+    }
+
+    #[test]
+    fn parse_forward_field_rejects_bad_forms() {
+        assert_eq!(parse_fwd_field(b""), None);
+        assert_eq!(parse_fwd_field(b"["), None);
+        assert_eq!(parse_fwd_field(b"[host"), None);
+        assert_eq!(parse_fwd_field(b"[host]x"), None);
+        assert_eq!(parse_fwd_field(br#"host\"#), None);
     }
 
     #[test]

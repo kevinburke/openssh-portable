@@ -43,9 +43,12 @@ use rsa::{
     rsa_parse_private_pem_with_passphrase, rsa_parse_public_blob,
     rsa_private_pem_len, rsa_private_pem_write, rsa_sign_prehashed, rsa_verify_prehashed,
 };
-use util::{argv_split_parse, argv_split_write, read_slice, strdelim_parse_in_place, write_prefix};
+use util::{
+    argv_split_parse, argv_split_write, parse_forward_field_in_place, read_slice,
+    strdelim_parse_in_place, write_prefix,
+};
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 18;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 19;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -166,6 +169,13 @@ pub struct RustHpdelimParse {
     next_offset: usize,
     next_is_null: u32,
     delim: u8,
+}
+
+#[repr(C)]
+pub struct RustForwardFieldParse {
+    arg_offset: usize,
+    next_offset: usize,
+    ispath: u32,
 }
 
 #[repr(C)]
@@ -443,6 +453,28 @@ pub extern "C" fn ossh_rust_hpdelim2_parse(
             next_offset: parsed.next_offset,
             next_is_null: parsed.next_is_null,
             delim: parsed.delim,
+        };
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_parse_forward_field(
+    input: *mut u8,
+    input_len: usize,
+    out: *mut RustForwardFieldParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(parsed) = parse_forward_field_in_place(input, input_len) else {
+        return -1;
+    };
+    unsafe {
+        *out = RustForwardFieldParse {
+            arg_offset: parsed.arg_offset,
+            next_offset: parsed.next_offset,
+            ispath: parsed.ispath,
         };
     }
     0
