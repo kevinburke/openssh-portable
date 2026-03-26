@@ -10,6 +10,24 @@ The two most useful cases for this branch are:
 
 All examples assume you start from the `openssh-portable/` repo root.
 
+If you want the shortest path, use the provided Dockerfile and helper script:
+
+```sh
+docker build -t openssh-ci-repro -f docker/ci-repro.Dockerfile .
+docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro \
+  ./contrib/ci-repro.sh openssl-noec
+```
+
+or:
+
+```sh
+docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro \
+  ./contrib/ci-repro.sh rust-crypto
+```
+
+The helper script creates a throwaway worktree, configures the requested CI
+shape, and runs the matching build/test commands.
+
 ## Container Setup
 
 Start an Ubuntu 24.04 container with the repo bind-mounted at `/src`:
@@ -55,6 +73,12 @@ autoreconf -fi
 This CI job builds OpenSSL `OpenSSL_1_1_1k` with `no-ec`, installs it under
 `/opt/openssl`, then runs the normal OpenSSH build against that libcrypto.
 
+If you are using the helper script, this is just:
+
+```sh
+./contrib/ci-repro.sh openssl-noec
+```
+
 Inside the container:
 
 ```sh
@@ -85,6 +109,12 @@ make -j1 unit
 The Rust CI leg does not need custom OpenSSL. It builds in
 `--without-openssl --with-rust-crypto` mode and runs both Rust-native and
 OpenSSH integration checks.
+
+If you are using the helper script, this is just:
+
+```sh
+./contrib/ci-repro.sh rust-crypto
+```
 
 Inside the container:
 
