@@ -10,6 +10,7 @@ set -e
 
 bincompat_test=""
 dryrun=""
+install_prefix=""
 while [ "$1" = "-a" ] || [ "$1" = "-n" ]; do
 	if [ "$1" = "-a" ]; then
 		abi_compat_test=y
@@ -29,6 +30,10 @@ if [ -z "${ver}" ] || [ -z "${destdir}" ]; then
 fi
 
 set -x
+
+if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+	install_prefix="sudo"
+fi
 
 if [ ! -d ${HOME}/openssl ]; then
 	cd ${HOME}
@@ -72,4 +77,4 @@ make clean >/dev/null 2>&1 || true
 ${dryrun} ./config no-threads shared ${opts} --prefix=${destdir} \
     -Wl,-rpath,${destdir}/lib64
 ${dryrun} make -j4
-${dryrun} sudo make install_sw
+${dryrun} ${install_prefix} make install_sw
