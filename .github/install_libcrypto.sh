@@ -23,6 +23,7 @@ done
 ver="$1"
 destdir="$2"
 opts="$3"
+srcdir=""
 
 if [ -z "${ver}" ] || [ -z "${destdir}" ]; then
 	echo tag/branch and destdir required
@@ -34,14 +35,6 @@ set -x
 if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
 	install_prefix="sudo"
 fi
-
-if [ ! -d ${HOME}/openssl ]; then
-	cd ${HOME}
-	git clone https://github.com/openssl/openssl.git
-	cd ${HOME}/openssl
-	git fetch --all
-fi
-cd ${HOME}/openssl
 
 if [ "${abi_compat_test}" = "y" ]; then
 	echo selecting ABI test release/branch for ${ver}
@@ -72,7 +65,14 @@ if [ "${abi_compat_test}" = "y" ]; then
 	esac
 fi
 
-git checkout ${ver}
+srcdir="${HOME}/openssl-${ver}"
+if [ ! -d "${srcdir}" ]; then
+	cd "${HOME}"
+	git clone --depth 1 --branch "${ver}" \
+	    https://github.com/openssl/openssl.git "${srcdir}"
+fi
+cd "${srcdir}"
+
 make clean >/dev/null 2>&1 || true
 ${dryrun} ./config no-threads shared ${opts} --prefix=${destdir} \
     -Wl,-rpath,${destdir}/lib64
