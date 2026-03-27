@@ -48,12 +48,12 @@ use rsa::{
     rsa_private_pem_len, rsa_private_pem_write, rsa_sign_prehashed, rsa_verify_prehashed,
 };
 use util::{
-    argv_split_parse, argv_split_write, parse_forward_field_in_place, parse_forward_in_place,
-    parse_hostfile_line, parse_jump, read_slice, strdelim_parse_in_place, validate_permit,
-    write_prefix,
+    argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
+    parse_forward_field_in_place, parse_forward_in_place, parse_hostfile_line, parse_jump,
+    read_slice, strdelim_parse_in_place, validate_permit, write_prefix,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 26;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 27;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -624,6 +624,28 @@ pub extern "C" fn ossh_rust_parse_hostfile_line(
         };
     }
     0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_host_hash(
+    host: *const u8,
+    host_len: usize,
+    name_from_hostfile: *const u8,
+    src_len: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    host_hash_write(host, host_len, name_from_hostfile, src_len, out, out_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_match_hashed_host(
+    host: *const u8,
+    host_len: usize,
+    names: *const u8,
+    names_len: usize,
+) -> c_int {
+    match_hashed_host(host, host_len, names, names_len)
 }
 
 #[unsafe(no_mangle)]
