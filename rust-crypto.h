@@ -164,6 +164,19 @@ struct ossh_rust_jump_parse {
 	uint32_t first_is_uri;
 	uint32_t has_extra;
 };
+struct ossh_rust_hostfile_line_parse {
+	uint32_t kind;
+	uint32_t marker;
+	size_t hosts_offset;
+	size_t hosts_len;
+	size_t rawkey_offset;
+	size_t keytype_offset;
+	size_t keytype_len;
+};
+#define OSSH_RUST_HOSTFILE_LINE_COMMENT 1
+#define OSSH_RUST_HOSTFILE_LINE_ENTRY 2
+#define OSSH_RUST_HOSTFILE_LINE_INVALID_MARKER 3
+#define OSSH_RUST_HOSTFILE_LINE_INVALID_ENTRY 4
 struct ossh_rust_user_host_port_parse {
 	size_t user_offset;
 	size_t user_len;
@@ -224,6 +237,8 @@ int ossh_rust_parse_forward(uint8_t *input, size_t input_len, int dynamicfwd,
     int remotefwd, struct ossh_rust_forward_parse *out);
 int ossh_rust_parse_jump(const uint8_t *input, size_t input_len,
     struct ossh_rust_jump_parse *out);
+int ossh_rust_parse_hostfile_line(const uint8_t *input, size_t input_len,
+    struct ossh_rust_hostfile_line_parse *out);
 int ossh_rust_parse_user_host_port(const uint8_t *input, size_t input_len,
     struct ossh_rust_user_host_port_parse *out);
 int ossh_rust_parse_uri(const uint8_t *input, size_t input_len,

@@ -49,10 +49,11 @@ use rsa::{
 };
 use util::{
     argv_split_parse, argv_split_write, parse_forward_field_in_place, parse_forward_in_place,
-    parse_jump, read_slice, strdelim_parse_in_place, validate_permit, write_prefix,
+    parse_hostfile_line, parse_jump, read_slice, strdelim_parse_in_place, validate_permit,
+    write_prefix,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 25;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 26;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -216,6 +217,17 @@ pub struct RustJumpParse {
     is_none: u32,
     first_is_uri: u32,
     has_extra: u32,
+}
+
+#[repr(C)]
+pub struct RustHostfileLineParse {
+    kind: u32,
+    marker: u32,
+    hosts_offset: usize,
+    hosts_len: usize,
+    rawkey_offset: usize,
+    keytype_offset: usize,
+    keytype_len: usize,
 }
 
 #[repr(C)]
@@ -583,6 +595,32 @@ pub extern "C" fn ossh_rust_parse_jump(
             is_none: parsed.is_none,
             first_is_uri: parsed.first_is_uri,
             has_extra: parsed.has_extra,
+        };
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_parse_hostfile_line(
+    input: *const u8,
+    input_len: usize,
+    out: *mut RustHostfileLineParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(parsed) = parse_hostfile_line(input, input_len) else {
+        return -1;
+    };
+    unsafe {
+        *out = RustHostfileLineParse {
+            kind: parsed.kind,
+            marker: parsed.marker,
+            hosts_offset: parsed.hosts_offset,
+            hosts_len: parsed.hosts_len,
+            rawkey_offset: parsed.rawkey_offset,
+            keytype_offset: parsed.keytype_offset,
+            keytype_len: parsed.keytype_len,
         };
     }
     0
