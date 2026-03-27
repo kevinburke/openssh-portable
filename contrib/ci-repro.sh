@@ -106,7 +106,9 @@ if [ -e "$workdir" ]; then
 	rm -rf "$workdir"
 fi
 
-git -C "$repo_root" worktree add --detach "$workdir" HEAD
+git -C "$repo_root" worktree prune >/dev/null 2>&1 || true
+
+git -C "$repo_root" worktree add --force --detach "$workdir" HEAD
 cd "$workdir"
 mkdir -p "$privsep_dir"
 
