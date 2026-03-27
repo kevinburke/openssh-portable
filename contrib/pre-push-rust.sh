@@ -13,9 +13,8 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 if ! docker image inspect openssh-ci-repro >/dev/null 2>&1; then
-	echo "missing Docker image: openssh-ci-repro" >&2
-	echo "build it with: docker build -t openssh-ci-repro -f docker/ci-repro.Dockerfile ." >&2
-	exit 1
+	echo "==> building missing Docker image openssh-ci-repro"
+	docker build -t openssh-ci-repro -f docker/ci-repro.Dockerfile .
 fi
 
 echo "==> cargo test"
