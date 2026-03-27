@@ -297,7 +297,6 @@ static int
 input_kex_dh_gex_group(int type, uint32_t seq, struct ssh *ssh)
 {
 	struct kex *kex = ssh->kex;
-	struct sshbuf *incoming = ssh_packet_get_input(ssh);
 	const u_char *p = NULL, *g = NULL;
 	u_char *client_pub = NULL;
 	size_t p_len = 0, g_len = 0, client_pub_len = 0;
@@ -306,8 +305,8 @@ input_kex_dh_gex_group(int type, uint32_t seq, struct ssh *ssh)
 	debug("SSH2_MSG_KEX_DH_GEX_GROUP received");
 	ssh_dispatch_set(ssh, SSH2_MSG_KEX_DH_GEX_GROUP, &kex_protocol_error);
 
-	if ((r = sshbuf_get_bignum2_bytes_direct(incoming, &p, &p_len)) != 0 ||
-	    (r = sshbuf_get_bignum2_bytes_direct(incoming, &g, &g_len)) != 0 ||
+	if ((r = sshpkt_get_bignum2_bytes_direct(ssh, &p, &p_len)) != 0 ||
+	    (r = sshpkt_get_bignum2_bytes_direct(ssh, &g, &g_len)) != 0 ||
 	    (r = sshpkt_get_end(ssh)) != 0)
 		goto out;
 	if ((bits = rust_mpint_bits(p, p_len)) < 0 ||
@@ -346,7 +345,6 @@ static int
 input_kex_dh_gex_reply(int type, uint32_t seq, struct ssh *ssh)
 {
 	struct kex *kex = ssh->kex;
-	struct sshbuf *incoming = ssh_packet_get_input(ssh);
 	struct sshbuf *shared_secret = NULL;
 	struct sshbuf *tmp = NULL, *server_host_key_blob = NULL;
 	struct sshkey *server_host_key = NULL;
@@ -370,7 +368,7 @@ input_kex_dh_gex_reply(int type, uint32_t seq, struct ssh *ssh)
 	if ((r = sshkey_fromb(tmp, &server_host_key)) != 0 ||
 	    (r = kex_verify_host_key(ssh, server_host_key)) != 0)
 		goto out;
-	if ((r = sshbuf_get_bignum2_bytes_direct(incoming, &dh_server_pub,
+	if ((r = sshpkt_get_bignum2_bytes_direct(ssh, &dh_server_pub,
 	    &dh_server_pub_len)) != 0 ||
 	    (r = sshpkt_get_string(ssh, &signature, &slen)) != 0 ||
 	    (r = sshpkt_get_end(ssh)) != 0)
@@ -494,7 +492,6 @@ static int
 input_kex_dh_gex_init(int type, uint32_t seq, struct ssh *ssh)
 {
 	struct kex *kex = ssh->kex;
-	struct sshbuf *incoming = ssh_packet_get_input(ssh);
 	struct sshbuf *shared_secret = NULL;
 	struct sshbuf *server_host_key_blob = NULL;
 	struct sshkey *server_host_public = NULL, *server_host_private = NULL;
@@ -512,7 +509,7 @@ input_kex_dh_gex_init(int type, uint32_t seq, struct ssh *ssh)
 	if ((r = kex_load_hostkey(ssh, &server_host_private,
 	    &server_host_public)) != 0)
 		goto out;
-	if ((r = sshbuf_get_bignum2_bytes_direct(incoming, &dh_client_pub,
+	if ((r = sshpkt_get_bignum2_bytes_direct(ssh, &dh_client_pub,
 	    &dh_client_pub_len)) != 0 ||
 	    (r = sshpkt_get_end(ssh)) != 0)
 		goto out;
