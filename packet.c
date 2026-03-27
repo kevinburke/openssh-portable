@@ -2797,6 +2797,14 @@ sshpkt_getb_froms(struct ssh *ssh, struct sshbuf **valp)
 	return sshbuf_froms(ssh->state->incoming_packet, valp);
 }
 
+int
+sshpkt_get_bignum2_bytes_direct(struct ssh *ssh, const u_char **valp,
+    size_t *lenp)
+{
+	return sshbuf_get_bignum2_bytes_direct(ssh->state->incoming_packet,
+	    valp, lenp);
+}
+
 #ifdef WITH_OPENSSL
 #ifdef OPENSSL_HAS_ECC
 int
@@ -3103,4 +3111,3 @@ connection_info_message(struct ssh *ssh)
 	free(comp_info);
 	return ret;
 }
-
