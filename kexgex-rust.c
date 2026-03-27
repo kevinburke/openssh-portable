@@ -57,13 +57,30 @@ rust_dh_estimate(int bits)
 }
 
 static int
-rust_dh_group_id_from_gex_max(u_int max)
+rust_dh_group_id_from_gex_request(u_int min, u_int wantbits, u_int max)
 {
-	if (max < 3072)
-		return OSSH_RUST_DH_GROUP14;
-	if (max < 6144)
-		return OSSH_RUST_DH_GROUP16;
-	return OSSH_RUST_DH_GROUP18;
+	struct {
+		u_int bits;
+		int group_id;
+	} groups[] = {
+		{ 2048, OSSH_RUST_DH_GROUP14 },
+		{ 4096, OSSH_RUST_DH_GROUP16 },
+		{ 8192, OSSH_RUST_DH_GROUP18 },
+	};
+	u_int best = 0;
+	size_t i;
+	int best_group_id = -1;
+
+	for (i = 0; i < sizeof(groups) / sizeof(groups[0]); i++) {
+		if (groups[i].bits < min || groups[i].bits > max)
+			continue;
+		if ((groups[i].bits > wantbits && groups[i].bits < best) ||
+		    (groups[i].bits > best && best < wantbits)) {
+			best = groups[i].bits;
+			best_group_id = groups[i].group_id;
+		}
+	}
+	return best_group_id;
 }
 
 static int
@@ -459,7 +476,11 @@ input_kex_dh_gex_request(int type, uint32_t seq, struct ssh *ssh)
 	}
 
 	rust_dh_cleanup(kex);
-	group_id = rust_dh_group_id_from_gex_max(max);
+	group_id = rust_dh_group_id_from_gex_request(min, nbits, max);
+	if (group_id == -1) {
+		r = SSH_ERR_DH_GEX_OUT_OF_RANGE;
+		goto out;
+	}
 	if ((kex->dh = ossh_rust_dh_group_new(group_id)) == NULL) {
 		r = SSH_ERR_ALLOC_FAIL;
 		goto out;
