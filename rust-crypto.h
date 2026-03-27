@@ -239,6 +239,11 @@ int ossh_rust_parse_jump(const uint8_t *input, size_t input_len,
     struct ossh_rust_jump_parse *out);
 int ossh_rust_parse_hostfile_line(const uint8_t *input, size_t input_len,
     struct ossh_rust_hostfile_line_parse *out);
+int ossh_rust_host_hash(const uint8_t *host, size_t host_len,
+    const uint8_t *name_from_hostfile, size_t src_len, uint8_t *out,
+    size_t out_len);
+int ossh_rust_match_hashed_host(const uint8_t *host, size_t host_len,
+    const uint8_t *names, size_t names_len);
 int ossh_rust_parse_user_host_port(const uint8_t *input, size_t input_len,
     struct ossh_rust_user_host_port_parse *out);
 int ossh_rust_parse_uri(const uint8_t *input, size_t input_len,
