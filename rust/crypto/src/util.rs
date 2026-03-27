@@ -105,6 +105,25 @@ pub(crate) struct JumpParse {
     pub(crate) has_extra: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct HostfileLineParse {
+    pub(crate) kind: u32,
+    pub(crate) marker: u32,
+    pub(crate) hosts_offset: usize,
+    pub(crate) hosts_len: usize,
+    pub(crate) rawkey_offset: usize,
+    pub(crate) keytype_offset: usize,
+    pub(crate) keytype_len: usize,
+}
+
+const HOSTFILE_LINE_KIND_COMMENT: u32 = 1;
+const HOSTFILE_LINE_KIND_ENTRY: u32 = 2;
+const HOSTFILE_LINE_KIND_INVALID_MARKER: u32 = 3;
+const HOSTFILE_LINE_KIND_INVALID_ENTRY: u32 = 4;
+const HOSTFILE_MARKER_NONE: u32 = 1;
+const HOSTFILE_MARKER_REVOKE: u32 = 2;
+const HOSTFILE_MARKER_CA: u32 = 3;
+
 fn parse_permit_port_token(input: &[u8]) -> bool {
     if input == b"*" {
         return true;
@@ -237,6 +256,127 @@ pub(crate) fn parse_absolute_time(input: *const u8, input_len: usize) -> Option<
     }
 
     u64::try_from(tt).ok()
+}
+
+pub(crate) fn parse_hostfile_line(input: *const u8, input_len: usize) -> Option<HostfileLineParse> {
+    let input = read_slice(input, input_len)?;
+    let mut pos = 0usize;
+
+    while matches!(input.get(pos), Some(b' ' | b'\t')) {
+        pos += 1;
+    }
+    if pos >= input.len() || input[pos] == b'#' {
+        return Some(HostfileLineParse {
+            kind: HOSTFILE_LINE_KIND_COMMENT,
+            marker: HOSTFILE_MARKER_NONE,
+            hosts_offset: 0,
+            hosts_len: 0,
+            rawkey_offset: 0,
+            keytype_offset: 0,
+            keytype_len: 0,
+        });
+    }
+
+    let mut marker = HOSTFILE_MARKER_NONE;
+    while input.get(pos) == Some(&b'@') {
+        if marker != HOSTFILE_MARKER_NONE {
+            return Some(HostfileLineParse {
+                kind: HOSTFILE_LINE_KIND_INVALID_MARKER,
+                marker: 0,
+                hosts_offset: 0,
+                hosts_len: 0,
+                rawkey_offset: 0,
+                keytype_offset: 0,
+                keytype_len: 0,
+            });
+        }
+        let marker_end = input[pos..]
+            .iter()
+            .position(|byte| matches!(*byte, b' ' | b'\t'))
+            .map(|off| pos + off)
+            .unwrap_or(input.len());
+        marker = match &input[pos..marker_end] {
+            b"@cert-authority" => HOSTFILE_MARKER_CA,
+            b"@revoked" => HOSTFILE_MARKER_REVOKE,
+            _ => {
+                return Some(HostfileLineParse {
+                    kind: HOSTFILE_LINE_KIND_INVALID_MARKER,
+                    marker: 0,
+                    hosts_offset: 0,
+                    hosts_len: 0,
+                    rawkey_offset: 0,
+                    keytype_offset: 0,
+                    keytype_len: 0,
+                });
+            }
+        };
+        pos = marker_end;
+        while matches!(input.get(pos), Some(b' ' | b'\t')) {
+            pos += 1;
+        }
+        if pos >= input.len() {
+            return None;
+        }
+    }
+
+    let hosts_offset = pos;
+    let hosts_end = input[pos..]
+        .iter()
+        .position(|byte| matches!(*byte, b' ' | b'\t'))
+        .map(|off| pos + off)?;
+    if hosts_end == hosts_offset {
+        return None;
+    }
+    pos = hosts_end;
+    while matches!(input.get(pos), Some(b' ' | b'\t')) {
+        pos += 1;
+    }
+    if pos >= input.len() || input[pos] == b'#' {
+        return Some(HostfileLineParse {
+            kind: HOSTFILE_LINE_KIND_INVALID_ENTRY,
+            marker,
+            hosts_offset,
+            hosts_len: hosts_end - hosts_offset,
+            rawkey_offset: 0,
+            keytype_offset: 0,
+            keytype_len: 0,
+        });
+    }
+
+    let rawkey_offset = pos;
+    let keytype_offset = pos;
+    let keytype_end = input[pos..]
+        .iter()
+        .position(|byte| matches!(*byte, b' ' | b'\t'))
+        .map(|off| pos + off)?;
+    if keytype_end == keytype_offset {
+        return None;
+    }
+    pos = keytype_end;
+    while matches!(input.get(pos), Some(b' ' | b'\t')) {
+        pos += 1;
+    }
+    if pos >= input.len() || input[pos] == b'#' {
+        return Some(HostfileLineParse {
+            kind: HOSTFILE_LINE_KIND_INVALID_ENTRY,
+            marker,
+            hosts_offset,
+            hosts_len: hosts_end - hosts_offset,
+            rawkey_offset,
+            keytype_offset,
+            keytype_len: keytype_end - keytype_offset,
+        });
+    }
+
+    Some(HostfileLineParse {
+        kind: HOSTFILE_LINE_KIND_ENTRY,
+        marker,
+        hosts_offset,
+        hosts_len: hosts_end - hosts_offset,
+        rawkey_offset,
+        keytype_offset,
+        keytype_len: keytype_end - keytype_offset,
+    })
 }
 
 pub(crate) fn read_array<const N: usize>(ptr: *const u8, len: usize) -> Option<[u8; N]> {
@@ -1202,10 +1342,10 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 mod tests {
     use super::{
         argv_split_parse, argv_split_write, hpdelim2_parse_in_place, parse_forward_field_in_place,
-        parse_absolute_time, parse_forward_in_place, parse_jump, parse_uri,
+        parse_absolute_time, parse_forward_in_place, parse_hostfile_line, parse_jump, parse_uri,
         parse_user_host_path, parse_user_host_port, strdelim_parse_in_place,
-        validate_permit, ForwardParse, JumpParse, UriParse, UserHostPathParse,
-        UserHostPortParse,
+        validate_permit, ForwardParse, HostfileLineParse, JumpParse, UriParse,
+        UserHostPathParse, UserHostPortParse,
     };
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
@@ -1717,6 +1857,92 @@ mod tests {
         ] {
             assert_eq!(parse_absolute_time(bad.as_ptr(), bad.len()), None);
         }
+    }
+
+    #[test]
+    fn parse_hostfile_line_handles_basic_forms() {
+        let revoked = b"@revoked host.example ssh-ed25519 AAAAC3Nza comment";
+        assert_eq!(
+            parse_hostfile_line(revoked.as_ptr(), revoked.len()),
+            Some(HostfileLineParse {
+                kind: 2,
+                marker: 2,
+                hosts_offset: 9,
+                hosts_len: 12,
+                rawkey_offset: 22,
+                keytype_offset: 22,
+                keytype_len: 11,
+            })
+        );
+        let invalid_marker = b"@bad host key";
+        assert_eq!(
+            parse_hostfile_line(invalid_marker.as_ptr(), invalid_marker.len()),
+            Some(HostfileLineParse {
+                kind: 3,
+                marker: 0,
+                hosts_offset: 0,
+                hosts_len: 0,
+                rawkey_offset: 0,
+                keytype_offset: 0,
+                keytype_len: 0,
+            })
+        );
+        let comment = b"   # comment";
+        assert_eq!(
+            parse_hostfile_line(comment.as_ptr(), comment.len()),
+            Some(HostfileLineParse {
+                kind: 1,
+                marker: 1,
+                hosts_offset: 0,
+                hosts_len: 0,
+                rawkey_offset: 0,
+                keytype_offset: 0,
+                keytype_len: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_hostfile_line_rejects_bad_forms() {
+        let double_marker = b"@revoked @cert-authority host key";
+        assert_eq!(
+            parse_hostfile_line(double_marker.as_ptr(), double_marker.len()),
+            Some(HostfileLineParse {
+                kind: 3,
+                marker: 0,
+                hosts_offset: 0,
+                hosts_len: 0,
+                rawkey_offset: 0,
+                keytype_offset: 0,
+                keytype_len: 0,
+            })
+        );
+        let no_key = b"host.example   ";
+        assert_eq!(
+            parse_hostfile_line(no_key.as_ptr(), no_key.len()),
+            Some(HostfileLineParse {
+                kind: 4,
+                marker: 1,
+                hosts_offset: 0,
+                hosts_len: 12,
+                rawkey_offset: 0,
+                keytype_offset: 0,
+                keytype_len: 0,
+            })
+        );
+        let no_blob = b"host.example ssh-ed25519 ";
+        assert_eq!(
+            parse_hostfile_line(no_blob.as_ptr(), no_blob.len()),
+            Some(HostfileLineParse {
+                kind: 4,
+                marker: 1,
+                hosts_offset: 0,
+                hosts_len: 12,
+                rawkey_offset: 13,
+                keytype_offset: 13,
+                keytype_len: 11,
+            })
+        );
     }
 
     #[test]
