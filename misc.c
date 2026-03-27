@@ -2841,6 +2841,11 @@ atoi_err(const char *nptr, int *val)
 int
 parse_absolute_time(const char *s, uint64_t *tp)
 {
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_parse_absolute_time((const u_char *)s, strlen(s), tp) == 0)
+		return 0;
+	return SSH_ERR_INVALID_FORMAT;
+#else
 	struct tm tm;
 	time_t tt;
 	char buf[32], *fmt;
@@ -2897,6 +2902,7 @@ parse_absolute_time(const char *s, uint64_t *tp)
 	/* success */
 	*tp = (uint64_t)tt;
 	return 0;
+#endif
 }
 
 void

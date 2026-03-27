@@ -1,5 +1,6 @@
 use core::ffi::c_int;
 use core::slice;
+use core::mem;
 use std::ffi::CString;
 
 pub(crate) const SSHBUF_MAX_BIGNUM: usize = 16_384 / 8;
@@ -143,6 +144,99 @@ pub(crate) fn validate_permit(input: *const u8, input_len: usize, allow_bare_por
         return false;
     }
     parse_permit_port_token(port)
+}
+
+fn parse_decimal_component(input: &[u8]) -> Option<i32> {
+    if input.is_empty() || !input.iter().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let mut out = 0i32;
+    for byte in input {
+        out = out.checked_mul(10)?.checked_add(i32::from(byte - b'0'))?;
+    }
+    Some(out)
+}
+
+pub(crate) fn parse_absolute_time(input: *const u8, input_len: usize) -> Option<u64> {
+    let input = read_slice(input, input_len)?;
+    let (digits, is_utc) = if input.len() > 1 && input[input.len() - 1..].eq_ignore_ascii_case(b"Z") {
+        (&input[..input.len() - 1], true)
+    } else if input.len() > 3 && input[input.len() - 3..].eq_ignore_ascii_case(b"UTC") {
+        (&input[..input.len() - 3], true)
+    } else {
+        (input, false)
+    };
+
+    let (year, month, day, hour, minute, second) = match digits.len() {
+        8 => (
+            parse_decimal_component(&digits[0..4])?,
+            parse_decimal_component(&digits[4..6])?,
+            parse_decimal_component(&digits[6..8])?,
+            0,
+            0,
+            0,
+        ),
+        12 => (
+            parse_decimal_component(&digits[0..4])?,
+            parse_decimal_component(&digits[4..6])?,
+            parse_decimal_component(&digits[6..8])?,
+            parse_decimal_component(&digits[8..10])?,
+            parse_decimal_component(&digits[10..12])?,
+            0,
+        ),
+        14 => (
+            parse_decimal_component(&digits[0..4])?,
+            parse_decimal_component(&digits[4..6])?,
+            parse_decimal_component(&digits[6..8])?,
+            parse_decimal_component(&digits[8..10])?,
+            parse_decimal_component(&digits[10..12])?,
+            parse_decimal_component(&digits[12..14])?,
+        ),
+        _ => return None,
+    };
+
+    let mut tm = unsafe { mem::zeroed::<libc::tm>() };
+    tm.tm_year = year.checked_sub(1900)?;
+    tm.tm_mon = month.checked_sub(1)?;
+    tm.tm_mday = day;
+    tm.tm_hour = hour;
+    tm.tm_min = minute;
+    tm.tm_sec = second;
+    tm.tm_isdst = -1;
+
+    let tt = unsafe {
+        if is_utc {
+            libc::timegm(&mut tm)
+        } else {
+            libc::mktime(&mut tm)
+        }
+    };
+    if tt < 0 {
+        return None;
+    }
+
+    let mut verify = unsafe { mem::zeroed::<libc::tm>() };
+    let verify_ptr = unsafe {
+        if is_utc {
+            libc::gmtime_r(&tt, &mut verify)
+        } else {
+            libc::localtime_r(&tt, &mut verify)
+        }
+    };
+    if verify_ptr.is_null() {
+        return None;
+    }
+    if verify.tm_year != year - 1900
+        || verify.tm_mon != month - 1
+        || verify.tm_mday != day
+        || verify.tm_hour != hour
+        || verify.tm_min != minute
+        || verify.tm_sec != second
+    {
+        return None;
+    }
+
+    u64::try_from(tt).ok()
 }
 
 pub(crate) fn read_array<const N: usize>(ptr: *const u8, len: usize) -> Option<[u8; N]> {
@@ -1108,9 +1202,10 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 mod tests {
     use super::{
         argv_split_parse, argv_split_write, hpdelim2_parse_in_place, parse_forward_field_in_place,
-        parse_forward_in_place, parse_jump, parse_uri, parse_user_host_path,
-        parse_user_host_port, strdelim_parse_in_place, validate_permit, ForwardParse,
-        JumpParse, UriParse, UserHostPathParse, UserHostPortParse,
+        parse_absolute_time, parse_forward_in_place, parse_jump, parse_uri,
+        parse_user_host_path, parse_user_host_port, strdelim_parse_in_place,
+        validate_permit, ForwardParse, JumpParse, UriParse, UserHostPathParse,
+        UserHostPortParse,
     };
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
@@ -1574,6 +1669,54 @@ mod tests {
         assert!(!validate_permit(b"[host]x:22".as_ptr(), 10, 0));
         assert!(!validate_permit(b"host:0".as_ptr(), 6, 0));
         assert!(!validate_permit(b"foo/bar".as_ptr(), 7, 0));
+    }
+
+    #[test]
+    fn parse_absolute_time_handles_basic_forms() {
+        assert_eq!(
+            parse_absolute_time(b"20000101Z".as_ptr(), b"20000101Z".len()),
+            Some(946684800)
+        );
+        assert_eq!(
+            parse_absolute_time(b"200001011223UTC".as_ptr(), b"200001011223UTC".len()),
+            Some(946729380)
+        );
+        assert_eq!(
+            parse_absolute_time(
+                b"20000101122345UTC".as_ptr(),
+                b"20000101122345UTC".len()
+            ),
+            Some(946729425)
+        );
+        assert!(parse_absolute_time(b"20000101".as_ptr(), b"20000101".len()).is_some());
+        assert!(parse_absolute_time(b"200001011223".as_ptr(), b"200001011223".len()).is_some());
+        assert!(
+            parse_absolute_time(b"20000101122345".as_ptr(), b"20000101122345".len()).is_some()
+        );
+    }
+
+    #[test]
+    fn parse_absolute_time_rejects_bad_forms() {
+        for bad in [
+            b"20001301".as_slice(),
+            b"20000001".as_slice(),
+            b"2".as_slice(),
+            b"2000".as_slice(),
+            b"20000".as_slice(),
+            b"200001".as_slice(),
+            b"2000010".as_slice(),
+            b"200001010".as_slice(),
+            b"20000199".as_slice(),
+            b"200001019900".as_slice(),
+            b"200001010099".as_slice(),
+            b"20000101000099".as_slice(),
+            b"20000101ZZ".as_slice(),
+            b"20000101PDT".as_slice(),
+            b"20000101U".as_slice(),
+            b"20000101UTCUTC".as_slice(),
+        ] {
+            assert_eq!(parse_absolute_time(bad.as_ptr(), bad.len()), None);
+        }
     }
 
     #[test]
