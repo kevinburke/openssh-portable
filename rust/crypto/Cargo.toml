@@ -18,6 +18,8 @@ cbc = { version = "0.1.2", default-features = false, features = ["block-padding"
 des = { version = "0.8.1", default-features = false }
 # Releases: https://crates.io/crates/ed25519-dalek
 ed25519-dalek = { version = "2.1.1", default-features = false }
+# Releases: https://crates.io/crates/libc
+libc = { version = "0.2.183", default-features = false }
 # Releases: https://crates.io/crates/md-5
 md-5 = { version = "0.10.6", default-features = false }
 # Releases: https://crates.io/crates/p256
