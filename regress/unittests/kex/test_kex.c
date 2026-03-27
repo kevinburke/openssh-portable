@@ -167,6 +167,15 @@ do_kex_with_key(char *kex, char *cipher, char *mac,
 	server2->kex->kex[KEX_ECDH_SHA2] = kex_gen_server;
 #endif /* OPENSSL_HAS_ECC */
 #endif /* WITH_OPENSSL */
+#if defined(WITH_RUST_CRYPTO) && !defined(WITH_OPENSSL)
+	server2->kex->kex[KEX_DH_GRP14_SHA1] = kex_gen_server;
+	server2->kex->kex[KEX_DH_GRP14_SHA256] = kex_gen_server;
+	server2->kex->kex[KEX_DH_GRP16_SHA512] = kex_gen_server;
+	server2->kex->kex[KEX_DH_GRP18_SHA512] = kex_gen_server;
+	server2->kex->kex[KEX_DH_GEX_SHA1] = kexgex_server;
+	server2->kex->kex[KEX_DH_GEX_SHA256] = kexgex_server;
+	server2->kex->kex[KEX_ECDH_SHA2] = kex_gen_server;
+#endif /* WITH_RUST_CRYPTO && !WITH_OPENSSL */
 	server2->kex->kex[KEX_C25519_SHA256] = kex_gen_server;
 	server2->kex->kex[KEX_KEM_SNTRUP761X25519_SHA512] = kex_gen_server;
 	server2->kex->kex[KEX_KEM_MLKEM768X25519_SHA256] = kex_gen_server;
@@ -252,4 +261,21 @@ kex_tests(void)
 	do_kex("sntrup761x25519-sha512");
 # endif /* USE_SNTRUP761X25519 */
 #endif /* WITH_OPENSSL */
+#if defined(WITH_RUST_CRYPTO) && !defined(WITH_OPENSSL)
+	do_kex("ecdh-sha2-nistp256");
+	do_kex("ecdh-sha2-nistp384");
+	do_kex("ecdh-sha2-nistp521");
+	do_kex("diffie-hellman-group-exchange-sha256");
+	do_kex("diffie-hellman-group-exchange-sha1");
+	do_kex("diffie-hellman-group14-sha1");
+	do_kex("diffie-hellman-group14-sha256");
+	do_kex("diffie-hellman-group16-sha512");
+	do_kex("diffie-hellman-group18-sha512");
+# ifdef USE_MLKEM768X25519
+	do_kex("mlkem768x25519-sha256");
+# endif /* USE_MLKEM768X25519 */
+# ifdef USE_SNTRUP761X25519
+	do_kex("sntrup761x25519-sha512");
+# endif /* USE_SNTRUP761X25519 */
+#endif /* WITH_RUST_CRYPTO && !WITH_OPENSSL */
 }

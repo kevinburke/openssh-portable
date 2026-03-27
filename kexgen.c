@@ -114,6 +114,8 @@ kex_gen_client(struct ssh *ssh)
 	#ifdef WITH_RUST_CRYPTO
 	case KEX_DH_GRP14_SHA1:
 	case KEX_DH_GRP14_SHA256:
+	case KEX_DH_GRP16_SHA512:
+	case KEX_DH_GRP18_SHA512:
 		r = kex_dh_keypair(kex);
 		break;
 	#endif /* WITH_RUST_CRYPTO */
@@ -196,6 +198,8 @@ input_kex_gen_reply(int type, uint32_t seq, struct ssh *ssh)
 	#ifdef WITH_RUST_CRYPTO
 	case KEX_DH_GRP14_SHA1:
 	case KEX_DH_GRP14_SHA256:
+	case KEX_DH_GRP16_SHA512:
+	case KEX_DH_GRP18_SHA512:
 		r = kex_dh_dec(kex, server_blob, &shared_secret);
 		break;
 	#endif /* WITH_RUST_CRYPTO */
@@ -326,6 +330,8 @@ input_kex_gen_init(int type, uint32_t seq, struct ssh *ssh)
 	#ifdef WITH_RUST_CRYPTO
 	case KEX_DH_GRP14_SHA1:
 	case KEX_DH_GRP14_SHA256:
+	case KEX_DH_GRP16_SHA512:
+	case KEX_DH_GRP18_SHA512:
 		r = kex_dh_enc(kex, client_pubkey, &server_pubkey,
 		    &shared_secret);
 		break;
