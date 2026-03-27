@@ -53,10 +53,11 @@ Rust-backed today:
 - `parse_uri()` parsing used by:
   - `ssh://[user@]host[:port][/path]`
   - similar `scp://` / `sftp://` style URI entry points
-- `parse_forward()` field tokenization used by:
+- `parse_forward()` forwarding-spec parsing used by:
   - `LocalForward`, `RemoteForward`, and `DynamicForward`
   - `-L`, `-R`, and `-D` forwarding specifications
-  - bracketed literal forwarding fields and escaped forwarding tokens
+  - bracketed literal forwarding fields, escaped forwarding tokens, and
+    forwarding-shape validation
 - RSA and ECDSA private-key loading for:
   - legacy PEM
   - PKCS#8
