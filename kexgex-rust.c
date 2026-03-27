@@ -421,6 +421,20 @@ input_kex_dh_gex_reply(int type, uint32_t seq, struct ssh *ssh)
 	if ((r = kex_derive_keys(ssh, hash, hashlen, shared_secret)) != 0 ||
 	    (r = kex_send_newkeys(ssh)) != 0)
 		goto out;
+	if ((kex->flags & KEX_INITIAL) != 0) {
+		if (kex->initial_hostkey != NULL || kex->initial_sig != NULL) {
+			r = SSH_ERR_INTERNAL_ERROR;
+			goto out;
+		}
+		if ((kex->initial_sig = sshbuf_new()) == NULL) {
+			r = SSH_ERR_ALLOC_FAIL;
+			goto out;
+		}
+		if ((r = sshbuf_put(kex->initial_sig, signature, slen)) != 0)
+			goto out;
+		kex->initial_hostkey = server_host_key;
+		server_host_key = NULL;
+	}
 	r = 0;
  out:
 	explicit_bzero(hash, sizeof(hash));
