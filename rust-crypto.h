@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 19U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 20U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -195,9 +195,17 @@ int ossh_rust_parse_uri(const uint8_t *input, size_t input_len,
 int ossh_rust_parse_user_host_path(const uint8_t *input, size_t input_len,
     struct ossh_rust_user_host_path_parse *out);
 void *ossh_rust_dh_group_new(int group_id);
+void *ossh_rust_dh_group_from_params(const uint8_t *generator,
+    size_t generator_len, const uint8_t *modulus, size_t modulus_len);
 int ossh_rust_dh_generate_key(void *group, size_t need_bits);
 size_t ossh_rust_dh_public_len(const void *group);
 int ossh_rust_dh_export_public(const void *group, uint8_t *out, size_t out_len);
+size_t ossh_rust_dh_modulus_len(const void *group);
+int ossh_rust_dh_export_modulus(const void *group, uint8_t *out,
+    size_t out_len);
+size_t ossh_rust_dh_generator_len(const void *group);
+int ossh_rust_dh_export_generator(const void *group, uint8_t *out,
+    size_t out_len);
 int ossh_rust_dh_shared_secret(const void *group, const uint8_t *peer_public,
     size_t peer_public_len, uint8_t *out, size_t out_len);
 void ossh_rust_dh_free(void *group);

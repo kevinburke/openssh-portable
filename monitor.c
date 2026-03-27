@@ -1892,6 +1892,10 @@ monitor_apply_keystate(struct ssh *ssh, struct monitor *pmonitor)
 	#ifdef WITH_RUST_CRYPTO
 	kex->kex[KEX_DH_GRP14_SHA1] = kex_gen_server;
 	kex->kex[KEX_DH_GRP14_SHA256] = kex_gen_server;
+	kex->kex[KEX_DH_GRP16_SHA512] = kex_gen_server;
+	kex->kex[KEX_DH_GRP18_SHA512] = kex_gen_server;
+	kex->kex[KEX_DH_GEX_SHA1] = kexgex_server;
+	kex->kex[KEX_DH_GEX_SHA256] = kexgex_server;
 	#endif /* WITH_RUST_CRYPTO */
 	#if defined(WITH_OPENSSL) && defined(OPENSSL_HAS_ECC) || defined(WITH_RUST_CRYPTO)
 	kex->kex[KEX_ECDH_SHA2] = kex_gen_server;
