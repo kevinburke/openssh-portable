@@ -3507,15 +3507,13 @@ parse_jump(const char *s, Options *o, int strict, int active)
 {
 	char *orig = NULL, *sdup = NULL, *cp;
 	char *tmp_user = NULL, *tmp_host = NULL, *host = NULL, *user = NULL;
-	int r, ret = -1, tmp_port = -1, port = -1, first = 1;
-
-	if (strcasecmp(s, "none") == 0) {
-		if (active && o->jump_host == NULL) {
-			o->jump_host = xstrdup("none");
-			o->jump_port = 0;
-		}
-		return 0;
-	}
+	int r, ret = -1, tmp_port = -1, port = -1;
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_jump_parse parsed;
+	char *token = NULL;
+#else
+	int first = 1;
+#endif
 
 	orig = xstrdup(s);
 	if ((cp = strchr(orig, '#')) != NULL)
@@ -3523,7 +3521,71 @@ parse_jump(const char *s, Options *o, int strict, int active)
 	rtrim(orig);
 
 	active &= o->proxy_command == NULL && o->jump_host == NULL;
+
+	if (strcasecmp(orig, "none") == 0) {
+		if (active) {
+			o->jump_host = xstrdup("none");
+			o->jump_port = 0;
+		}
+		ret = 0;
+		goto out;
+	}
+
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_parse_jump((const u_char *)orig, strlen(orig), &parsed) != 0)
+		goto out;
+	if (strict) {
+		sdup = xstrdup(orig);
+		do {
+			/* Work backwards through string */
+			if ((cp = strrchr(sdup, ',')) == NULL)
+				cp = sdup; /* last */
+			else
+				*cp++ = '\0';
+
+			r = parse_ssh_uri(cp, &tmp_user, &tmp_host, &tmp_port);
+			if (r == -1 || (r == 1 && parse_user_host_port(cp,
+			    &tmp_user, &tmp_host, &tmp_port) != 0))
+				goto out; /* error already logged */
+			if (!ssh_valid_hostname(tmp_host)) {
+				error_f("invalid hostname \"%s\"", tmp_host);
+				goto out;
+			}
+			if (tmp_user != NULL && !ssh_valid_ruser(tmp_user)) {
+				error_f("invalid username \"%s\"", tmp_user);
+				goto out;
+			}
+			free(tmp_user);
+			free(tmp_host);
+			tmp_user = tmp_host = NULL;
+			tmp_port = -1;
+		} while (cp != sdup);
+		free(sdup);
+		sdup = NULL;
+	}
+	if (active) {
+		if ((token = strndup(orig + parsed.first_offset,
+		    parsed.first_len)) == NULL)
+			goto out;
+		if (parsed.first_is_uri != 0)
+			r = parse_ssh_uri(token, &user, &host, &port);
+		else
+			r = parse_user_host_port(token, &user, &host, &port);
+		if (r != 0)
+			goto out;
+		o->jump_user = user;
+		o->jump_host = host;
+		o->jump_port = port;
+		o->proxy_command = xstrdup("none");
+		user = host = NULL;
+		if (parsed.has_extra != 0 &&
+		    (o->jump_extra = strndup(orig, parsed.extra_len)) == NULL)
+			goto out;
+	}
+	ret = 0;
+#else
 	sdup = xstrdup(orig);
+	first = active;
 	do {
 		/* Work backwards through string */
 		if ((cp = strrchr(sdup, ',')) == NULL)
@@ -3571,6 +3633,7 @@ parse_jump(const char *s, Options *o, int strict, int active)
 		}
 	}
 	ret = 0;
+#endif
  out:
 	free(orig);
 	free(sdup);
@@ -3578,6 +3641,9 @@ parse_jump(const char *s, Options *o, int strict, int active)
 	free(tmp_host);
 	free(user);
 	free(host);
+#ifdef WITH_RUST_CRYPTO
+	free(token);
+#endif
 	return ret;
 }
 
