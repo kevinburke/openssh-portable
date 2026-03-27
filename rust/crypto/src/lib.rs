@@ -17,7 +17,11 @@ use cipher::{
     aesctr_crypt, aesctr_free, aesctr_get_iv, aesctr_init, aesctr_set_iv,
     chachapoly_crypt, chachapoly_free, chachapoly_get_length, chachapoly_new,
 };
-use dh::{dh_export_public, dh_free, dh_generate_key, dh_group_new, dh_public_len, dh_shared_secret};
+use dh::{
+    dh_export_generator, dh_export_modulus, dh_export_public, dh_free, dh_generate_key,
+    dh_generator_len, dh_group_from_params, dh_group_new, dh_modulus_len, dh_public_len,
+    dh_shared_secret,
+};
 use digest::DigestState;
 use ecdsa::{
     ecdsa_copy_public, ecdsa_equal_public, ecdsa_export_private, ecdsa_export_public,
@@ -48,7 +52,7 @@ use util::{
     strdelim_parse_in_place, write_prefix,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 19;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 20;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -569,6 +573,16 @@ pub extern "C" fn ossh_rust_dh_group_new(group_id: c_int) -> *mut c_void {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_dh_group_from_params(
+    generator: *const u8,
+    generator_len: usize,
+    modulus: *const u8,
+    modulus_len: usize,
+) -> *mut c_void {
+    dh_group_from_params(generator, generator_len, modulus, modulus_len)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_dh_generate_key(group: *mut c_void, need_bits: usize) -> c_int {
     dh_generate_key(group, need_bits)
 }
@@ -585,6 +599,34 @@ pub extern "C" fn ossh_rust_dh_export_public(
     out_len: usize,
 ) -> c_int {
     dh_export_public(group, out, out_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_dh_modulus_len(group: *const c_void) -> usize {
+    dh_modulus_len(group)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_dh_export_modulus(
+    group: *const c_void,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    dh_export_modulus(group, out, out_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_dh_generator_len(group: *const c_void) -> usize {
+    dh_generator_len(group)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_dh_export_generator(
+    group: *const c_void,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    dh_export_generator(group, out, out_len)
 }
 
 #[unsafe(no_mangle)]

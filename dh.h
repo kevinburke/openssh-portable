@@ -26,6 +26,13 @@
 #ifndef DH_H
 #define DH_H
 
+/*
+ * Max value from RFC4419.
+ * Min value from RFC8270.
+ */
+#define DH_GRP_MIN	2048
+#define DH_GRP_MAX	8192
+
 #ifdef WITH_OPENSSL
 
 struct dhgroup {
@@ -48,13 +55,6 @@ int	 dh_pub_is_valid(const DH *, const BIGNUM *);
 
 u_int	 dh_estimate(int);
 void	 dh_set_moduli_file(const char *);
-
-/*
- * Max value from RFC4419.
- * Min value from RFC8270.
- */
-#define DH_GRP_MIN	2048
-#define DH_GRP_MAX	8192
 
 /*
  * Values for "type" field of moduli(5)

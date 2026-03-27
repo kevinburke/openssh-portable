@@ -4,6 +4,8 @@ use core::slice;
 use num_bigint_dig::BigUint;
 use rand_core::{OsRng, RngCore};
 
+use crate::util::read_slice;
+
 pub(crate) const OSSH_RUST_DH_GROUP14: c_int = 14;
 pub(crate) const OSSH_RUST_DH_GROUP16: c_int = 16;
 pub(crate) const OSSH_RUST_DH_GROUP18: c_int = 18;
@@ -102,16 +104,29 @@ struct RustDhGroup {
 }
 
 impl RustDhGroup {
-    fn from_modulus_hex(modulus_hex: &str) -> Option<Self> {
-        let modulus = decode_hex_biguint(modulus_hex)?;
+    fn from_parts(generator: BigUint, modulus: BigUint) -> Option<Self> {
         let modulus_len = modulus.to_bytes_be().len();
+        if modulus_len == 0 || generator <= BigUint::from(1u8) || generator >= modulus {
+            return None;
+        }
         Some(Self {
             modulus,
-            generator: BigUint::from(2u8),
+            generator,
             private_key: None,
             public_key: None,
             modulus_len,
         })
+    }
+
+    fn from_modulus_hex(modulus_hex: &str) -> Option<Self> {
+        let modulus = decode_hex_biguint(modulus_hex)?;
+        Self::from_parts(BigUint::from(2u8), modulus)
+    }
+
+    fn from_params(generator: &[u8], modulus: &[u8]) -> Option<Self> {
+        let generator = BigUint::from_bytes_be(generator);
+        let modulus = BigUint::from_bytes_be(modulus);
+        Self::from_parts(generator, modulus)
     }
 
     fn new(group_id: c_int) -> Option<Self> {
@@ -185,6 +200,26 @@ impl RustDhGroup {
         }
         write_biguint_padded(&shared_secret, out)
     }
+
+    fn export_modulus(&self, out: &mut [u8]) -> Result<(), ()> {
+        if out.len() != self.modulus_len {
+            return Err(());
+        }
+        write_biguint_padded(&self.modulus, out)
+    }
+
+    fn generator_len(&self) -> usize {
+        self.generator.to_bytes_be().len()
+    }
+
+    fn export_generator(&self, out: &mut [u8]) -> Result<(), ()> {
+        let encoded = self.generator.to_bytes_be();
+        if encoded.len() != out.len() {
+            return Err(());
+        }
+        out.copy_from_slice(&encoded);
+        Ok(())
+    }
 }
 
 fn decode_hex_biguint(hex: &str) -> Option<BigUint> {
@@ -254,6 +289,24 @@ pub(crate) fn dh_group_new(group_id: c_int) -> *mut c_void {
     }
 }
 
+pub(crate) fn dh_group_from_params(
+    generator: *const u8,
+    generator_len: usize,
+    modulus: *const u8,
+    modulus_len: usize,
+) -> *mut c_void {
+    let Some(generator) = read_slice(generator, generator_len) else {
+        return core::ptr::null_mut();
+    };
+    let Some(modulus) = read_slice(modulus, modulus_len) else {
+        return core::ptr::null_mut();
+    };
+    match RustDhGroup::from_params(generator, modulus) {
+        Some(group) => Box::into_raw(Box::new(group)).cast(),
+        None => core::ptr::null_mut(),
+    }
+}
+
 pub(crate) fn dh_generate_key(group: *mut c_void, need_bits: usize) -> c_int {
     if group.is_null() {
         return -1;
@@ -271,6 +324,46 @@ pub(crate) fn dh_public_len(group: *const c_void) -> usize {
     }
     let group = unsafe { &*group.cast::<RustDhGroup>() };
     group.modulus_len
+}
+
+pub(crate) fn dh_modulus_len(group: *const c_void) -> usize {
+    if group.is_null() {
+        return 0;
+    }
+    let group = unsafe { &*group.cast::<RustDhGroup>() };
+    group.modulus_len
+}
+
+pub(crate) fn dh_export_modulus(group: *const c_void, out: *mut u8, out_len: usize) -> c_int {
+    if group.is_null() || out.is_null() {
+        return -1;
+    }
+    let group = unsafe { &*group.cast::<RustDhGroup>() };
+    let out = unsafe { slice::from_raw_parts_mut(out, out_len) };
+    match group.export_modulus(out) {
+        Ok(()) => 0,
+        Err(()) => -1,
+    }
+}
+
+pub(crate) fn dh_generator_len(group: *const c_void) -> usize {
+    if group.is_null() {
+        return 0;
+    }
+    let group = unsafe { &*group.cast::<RustDhGroup>() };
+    group.generator_len()
+}
+
+pub(crate) fn dh_export_generator(group: *const c_void, out: *mut u8, out_len: usize) -> c_int {
+    if group.is_null() || out.is_null() {
+        return -1;
+    }
+    let group = unsafe { &*group.cast::<RustDhGroup>() };
+    let out = unsafe { slice::from_raw_parts_mut(out, out_len) };
+    match group.export_generator(out) {
+        Ok(()) => 0,
+        Err(()) => -1,
+    }
 }
 
 pub(crate) fn dh_export_public(group: *const c_void, out: *mut u8, out_len: usize) -> c_int {
@@ -319,8 +412,9 @@ mod tests {
     use core::ffi::c_int;
 
     use super::{
-        dh_export_public, dh_free, dh_generate_key, dh_group_new, dh_public_len, dh_shared_secret,
-        OSSH_RUST_DH_GROUP14, OSSH_RUST_DH_GROUP16, OSSH_RUST_DH_GROUP18,
+        dh_export_generator, dh_export_modulus, dh_export_public, dh_free, dh_generate_key,
+        dh_generator_len, dh_group_from_params, dh_group_new, dh_modulus_len, dh_public_len,
+        dh_shared_secret, OSSH_RUST_DH_GROUP14, OSSH_RUST_DH_GROUP16, OSSH_RUST_DH_GROUP18,
     };
 
     fn dh_roundtrip(group_id: c_int) {
@@ -394,5 +488,30 @@ mod tests {
     #[test]
     fn group18_roundtrip() {
         dh_roundtrip(OSSH_RUST_DH_GROUP18);
+    }
+
+    #[test]
+    fn construct_group_from_params() {
+        let group = dh_group_new(OSSH_RUST_DH_GROUP14);
+        assert!(!group.is_null());
+
+        let mut modulus = vec![0u8; dh_modulus_len(group)];
+        let mut generator = vec![0u8; dh_generator_len(group)];
+        assert_eq!(0, dh_export_modulus(group, modulus.as_mut_ptr(), modulus.len()));
+        assert_eq!(
+            0,
+            dh_export_generator(group, generator.as_mut_ptr(), generator.len())
+        );
+        dh_free(group);
+
+        let parsed = dh_group_from_params(
+            generator.as_ptr(),
+            generator.len(),
+            modulus.as_ptr(),
+            modulus.len(),
+        );
+        assert!(!parsed.is_null());
+        assert_eq!(0, dh_generate_key(parsed, 32));
+        dh_free(parsed);
     }
 }
