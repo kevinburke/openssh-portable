@@ -129,10 +129,20 @@ The Rust CI leg does not need custom OpenSSL. It builds in
 `--without-openssl --with-rust-crypto` mode and runs both Rust-native and
 OpenSSH integration checks.
 
+The Docker repro image installs current stable Rust with `rustup` instead of
+using the distro `cargo`, so it stays compatible with the crate set used by
+the branch.
+
 If you are using the helper script, this is just:
 
 ```sh
 ./contrib/ci-repro.sh rust-crypto
+```
+
+For the fastest feedback loop, run only the unit leg first:
+
+```sh
+env MAKE_TARGETS=unit ./contrib/ci-repro.sh rust-crypto
 ```
 
 Inside the container:
