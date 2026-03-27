@@ -24,6 +24,12 @@ Rust-backed today:
   - `.pub` and `-cert.pub` files
   - `authorized_keys` / `known_hosts` style key lines after host/option fields
   - `sshsig` key-file consumers and similar text-key entry points
+- `known_hosts` / hostfile line-prefix parsing through
+  `hostkeys_foreach()` / `hostkeys_foreach_file()`:
+  - `@cert-authority` / `@revoked` marker parsing
+  - host-list token extraction
+  - no-parse key-type token extraction
+  - structured invalid-line classification during hostfile iteration
 - OpenSSH `openssh-key-v1` armor and header parsing
 - OpenSSH `openssh-key-v1` decrypted private-section parsing for Ed25519,
   RSA, and ECDSA keys:
@@ -204,6 +210,10 @@ replacements through:
 - `regress/unittests/misc/test_user_host_port.c`
 - `regress/unittests/misc/test_parse.c`
 - `regress/unittests/misc/test_convtime.c`
+
+It also exercises the Rust-backed hostfile parser path through:
+
+- `regress/unittests/hostkeys/test_iterate.c`
 
 For the Rust-backed forwarding parser path, representative local checks are:
 
