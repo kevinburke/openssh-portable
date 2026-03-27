@@ -204,6 +204,8 @@ pub struct RustForwardParse {
     has_connect_host_socks: u32,
     has_connect_port: u32,
     has_connect_path: u32,
+    listen_port_value: i32,
+    connect_port_value: i32,
 }
 
 #[repr(C)]
@@ -554,6 +556,8 @@ pub extern "C" fn ossh_rust_parse_forward(
             has_connect_host_socks: parsed.has_connect_host_socks,
             has_connect_port: parsed.has_connect_port,
             has_connect_path: parsed.has_connect_path,
+            listen_port_value: parsed.listen_port_value,
+            connect_port_value: parsed.connect_port_value,
         };
     }
     0

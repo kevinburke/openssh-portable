@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 22U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 23U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -153,6 +153,8 @@ struct ossh_rust_forward_parse {
 	uint32_t has_connect_host_socks;
 	uint32_t has_connect_port;
 	uint32_t has_connect_path;
+	int32_t listen_port_value;
+	int32_t connect_port_value;
 };
 struct ossh_rust_jump_parse {
 	size_t first_offset;

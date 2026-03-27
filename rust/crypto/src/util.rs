@@ -1,5 +1,6 @@
 use core::ffi::c_int;
 use core::slice;
+use std::ffi::CString;
 
 pub(crate) const SSHBUF_MAX_BIGNUM: usize = 16_384 / 8;
 
@@ -89,6 +90,8 @@ pub(crate) struct ForwardParse {
     pub(crate) has_connect_host_socks: u32,
     pub(crate) has_connect_port: u32,
     pub(crate) has_connect_path: u32,
+    pub(crate) listen_port_value: i32,
+    pub(crate) connect_port_value: i32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -464,6 +467,24 @@ fn assign_forward_token(
     *present = 1;
 }
 
+fn parse_port_token(input: &[u8]) -> Option<i32> {
+    if input.is_empty() {
+        return None;
+    }
+    if input.iter().all(|byte| byte.is_ascii_digit()) {
+        let port = core::str::from_utf8(input).ok()?.parse::<u16>().ok()?;
+        return Some(i32::from(port));
+    }
+    let service = CString::new(input).ok()?;
+    let proto = CString::new("tcp").ok()?;
+    let entry = unsafe { libc::getservbyname(service.as_ptr(), proto.as_ptr()) };
+    if entry.is_null() {
+        return None;
+    }
+    let port = unsafe { u16::from_be((*entry).s_port as u16) };
+    Some(i32::from(port))
+}
+
 pub(crate) fn parse_forward_in_place(
     input: *mut u8,
     input_len: usize,
@@ -523,6 +544,8 @@ pub(crate) fn parse_forward_in_place(
         has_connect_host_socks: 0,
         has_connect_port: 0,
         has_connect_path: 0,
+        listen_port_value: 0,
+        connect_port_value: 0,
     };
 
     match count {
@@ -684,6 +707,24 @@ pub(crate) fn parse_forward_in_place(
         && out.has_connect_path == 0
         && out.has_listen_path == 0
     {
+        return None;
+    }
+
+    if out.has_listen_port != 0 {
+        out.listen_port_value =
+            parse_port_token(&input[out.listen_port_offset..out.listen_port_offset + out.listen_port_len])?;
+        if _remotefwd == 0 && out.listen_port_value == 0 {
+            return None;
+        }
+    }
+    if out.has_connect_port != 0 {
+        out.connect_port_value = parse_port_token(
+            &input[out.connect_port_offset..out.connect_port_offset + out.connect_port_len],
+        )?;
+        if out.connect_port_value <= 0 {
+            return None;
+        }
+    } else if out.has_connect_path == 0 && out.has_connect_host_socks == 0 {
         return None;
     }
 
@@ -1263,6 +1304,8 @@ mod tests {
                 has_connect_host_socks: 0,
                 has_connect_port: 1,
                 has_connect_path: 0,
+                listen_port_value: 8080,
+                connect_port_value: 80,
             })
         );
         assert_eq!(
@@ -1288,6 +1331,8 @@ mod tests {
                 has_connect_host_socks: 1,
                 has_connect_port: 0,
                 has_connect_path: 0,
+                listen_port_value: 8080,
+                connect_port_value: 0,
             })
         );
         assert_eq!(
@@ -1313,6 +1358,8 @@ mod tests {
                 has_connect_host_socks: 0,
                 has_connect_port: 0,
                 has_connect_path: 1,
+                listen_port_value: 0,
+                connect_port_value: 0,
             })
         );
     }
@@ -1322,6 +1369,8 @@ mod tests {
         assert_eq!(parse_forward_spec(b"[host]x:8080:dest:80", false), None);
         assert_eq!(parse_forward_spec(b"localhost:8080", false), None);
         assert_eq!(parse_forward_spec(b"8080:dest:80", true), None);
+        assert_eq!(parse_forward_spec(b"0:dest:80", false), None);
+        assert_eq!(parse_forward_spec(b"8080:dest:0", false), None);
     }
 
     #[test]
