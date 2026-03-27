@@ -91,6 +91,16 @@ pub(crate) struct ForwardParse {
     pub(crate) has_connect_path: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct JumpParse {
+    pub(crate) first_offset: usize,
+    pub(crate) first_len: usize,
+    pub(crate) extra_len: usize,
+    pub(crate) is_none: u32,
+    pub(crate) first_is_uri: u32,
+    pub(crate) has_extra: u32,
+}
+
 pub(crate) fn read_array<const N: usize>(ptr: *const u8, len: usize) -> Option<[u8; N]> {
     if ptr.is_null() || len != N {
         return None;
@@ -680,6 +690,77 @@ pub(crate) fn parse_forward_in_place(
     Some(out)
 }
 
+fn parse_jump_token(token: &[u8]) -> Option<bool> {
+    if token.is_empty() {
+        return None;
+    }
+    if let Some(rest) = token.strip_prefix(b"ssh://") {
+        let parsed = parse_uri(rest.as_ptr(), rest.len())?;
+        if parsed.has_path != 0 {
+            return None;
+        }
+        return Some(true);
+    }
+    parse_user_host_port(token.as_ptr(), token.len())?;
+    Some(false)
+}
+
+pub(crate) fn parse_jump(input: *const u8, input_len: usize) -> Option<JumpParse> {
+    let input = read_slice(input, input_len)?;
+    if input.is_empty() {
+        return None;
+    }
+    if input.eq_ignore_ascii_case(b"none") {
+        return Some(JumpParse {
+            first_offset: 0,
+            first_len: 0,
+            extra_len: 0,
+            is_none: 1,
+            first_is_uri: 0,
+            has_extra: 0,
+        });
+    }
+
+    let mut end = input.len();
+    let mut first_offset = 0usize;
+    let mut first_len = 0usize;
+    let mut first_is_uri = 0u32;
+    let mut extra_len = 0usize;
+    let mut saw_first = false;
+
+    loop {
+        let start = input[..end]
+            .iter()
+            .rposition(|byte| *byte == b',')
+            .map(|pos| pos + 1)
+            .unwrap_or(0);
+        let token = &input[start..end];
+        let is_uri = parse_jump_token(token)?;
+        if !saw_first {
+            first_offset = start;
+            first_len = token.len();
+            first_is_uri = u32::from(is_uri);
+            if start != 0 {
+                extra_len = start - 1;
+            }
+            saw_first = true;
+        }
+        if start == 0 {
+            break;
+        }
+        end = start - 1;
+    }
+
+    Some(JumpParse {
+        first_offset,
+        first_len,
+        extra_len,
+        is_none: 0,
+        first_is_uri,
+        has_extra: u32::from(extra_len != 0),
+    })
+}
+
 pub(crate) fn parse_user_host_port(input: *const u8, input_len: usize) -> Option<UserHostPortParse> {
     let input = read_slice(input, input_len)?;
     if input.is_empty() {
@@ -945,8 +1026,9 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 mod tests {
     use super::{
         argv_split_parse, argv_split_write, hpdelim2_parse_in_place, parse_forward_field_in_place,
-        parse_forward_in_place, parse_uri, parse_user_host_path, parse_user_host_port,
-        strdelim_parse_in_place, ForwardParse, UriParse, UserHostPathParse, UserHostPortParse,
+        parse_forward_in_place, parse_jump, parse_uri, parse_user_host_path,
+        parse_user_host_port, strdelim_parse_in_place, ForwardParse, JumpParse, UriParse,
+        UserHostPathParse, UserHostPortParse,
     };
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
@@ -1240,6 +1322,50 @@ mod tests {
         assert_eq!(parse_forward_spec(b"[host]x:8080:dest:80", false), None);
         assert_eq!(parse_forward_spec(b"localhost:8080", false), None);
         assert_eq!(parse_forward_spec(b"8080:dest:80", true), None);
+    }
+
+    #[test]
+    fn parse_jump_handles_basic_forms() {
+        assert_eq!(
+            parse_jump(b"jumpa,ssh://user@jumpb:2200".as_ptr(), 27),
+            Some(JumpParse {
+                first_offset: 6,
+                first_len: 21,
+                extra_len: 5,
+                is_none: 0,
+                first_is_uri: 1,
+                has_extra: 1,
+            })
+        );
+        assert_eq!(
+            parse_jump(b"jumpb:2200".as_ptr(), 10),
+            Some(JumpParse {
+                first_offset: 0,
+                first_len: 10,
+                extra_len: 0,
+                is_none: 0,
+                first_is_uri: 0,
+                has_extra: 0,
+            })
+        );
+        assert_eq!(
+            parse_jump(b"NoNe".as_ptr(), 4),
+            Some(JumpParse {
+                first_offset: 0,
+                first_len: 0,
+                extra_len: 0,
+                is_none: 1,
+                first_is_uri: 0,
+                has_extra: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_jump_rejects_bad_forms() {
+        assert_eq!(parse_jump(b"".as_ptr(), 0), None);
+        assert_eq!(parse_jump(b"jumpa,,jumpb".as_ptr(), 12), None);
+        assert_eq!(parse_jump(b"ssh://user@jump/path".as_ptr(), 20), None);
     }
 
     #[test]
