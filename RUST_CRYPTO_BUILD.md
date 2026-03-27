@@ -213,6 +213,27 @@ For the Rust-backed ProxyJump parser path, representative local checks are:
 
 The first should succeed. The second should fail with `Invalid -J argument`.
 
+For comparative performance measurements between the default/OpenSSL build and
+the Rust crypto build, use:
+
+```sh
+./contrib/bench-rust-crypto.sh
+```
+
+That helper creates throwaway worktrees for both configurations and runs the
+existing in-tree unit benchmarks for:
+
+- `regress/unittests/sshkey/test_sshkey`
+- `regress/unittests/kex/test_kex`
+
+It reports benchmark throughput plus wall/user/sys time and max RSS when
+available from `/usr/bin/time`. For a broader set including RSA/ECDSA/NIST ECDH
+and group14, run:
+
+```sh
+./contrib/bench-rust-crypto.sh full
+```
+
 For the Rust-backed fixed-group DH path, representative local checks are:
 
 ```sh
