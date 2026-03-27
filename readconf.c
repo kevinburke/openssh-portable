@@ -3223,6 +3223,7 @@ struct fwdarg {
 	int ispath;
 };
 
+#ifndef WITH_RUST_CRYPTO
 /*
  * parse_fwd_field
  * parses the next field in a port forwarding specification.
@@ -3233,33 +3234,11 @@ struct fwdarg {
 static int
 parse_fwd_field(char **p, struct fwdarg *fwd)
 {
-#ifdef WITH_RUST_CRYPTO
-	struct ossh_rust_forward_field_parse parsed;
-	char *old;
-	size_t len;
-#else
 	char *ep, *cp = *p;
 	int ispath = 0;
-#endif
 
 	if (p == NULL || *p == NULL)
 		return -1;
-
-#ifdef WITH_RUST_CRYPTO
-	if (**p == '\0') {
-		*p = NULL;
-		return -1;	/* end of string */
-	}
-
-	old = *p;
-	len = strlen(*p) + 1;
-	if (ossh_rust_parse_forward_field((u_char *)*p, len, &parsed) != 0)
-		return -1;
-	fwd->arg = old + parsed.arg_offset;
-	fwd->ispath = parsed.ispath != 0;
-	*p = old + parsed.next_offset;
-	return 0;
-#else
 
 	if (*cp == '\0') {
 		*p = NULL;
@@ -3309,8 +3288,8 @@ done:
 	fwd->ispath = ispath;
 	*p = cp;
 	return 0;
-#endif
 }
+#endif
 
 /*
  * parse_forward
@@ -3325,12 +3304,18 @@ done:
 int
 parse_forward(struct Forward *fwd, const char *fwdspec, int dynamicfwd, int remotefwd)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_forward_parse parsed;
+#else
 	struct fwdarg fwdargs[4];
+#endif
 	char *p, *cp;
 	int i, err;
 
 	memset(fwd, 0, sizeof(*fwd));
+#ifndef WITH_RUST_CRYPTO
 	memset(fwdargs, 0, sizeof(fwdargs));
+#endif
 
 	/*
 	 * We expand environment variables before checking if we think they're
@@ -3345,6 +3330,30 @@ parse_forward(struct Forward *fwd, const char *fwdspec, int dynamicfwd, int remo
 	while (isspace((u_char)*cp))
 		cp++;
 
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_parse_forward((u_char *)cp, strlen(cp) + 1,
+	    dynamicfwd, remotefwd, &parsed) != 0) {
+		i = 0;
+	} else {
+		i = parsed.field_count;
+		if (parsed.has_listen_host != 0)
+			fwd->listen_host = xstrdup(cp + parsed.listen_host_offset);
+		if (parsed.has_listen_path != 0) {
+			fwd->listen_path = xstrdup(cp + parsed.listen_path_offset);
+			fwd->listen_port = PORT_STREAMLOCAL;
+		} else if (parsed.has_listen_port != 0)
+			fwd->listen_port = a2port(cp + parsed.listen_port_offset);
+		if (parsed.has_connect_host_socks != 0)
+			fwd->connect_host = xstrdup("socks");
+		else if (parsed.has_connect_host != 0)
+			fwd->connect_host = xstrdup(cp + parsed.connect_host_offset);
+		if (parsed.has_connect_path != 0) {
+			fwd->connect_path = xstrdup(cp + parsed.connect_path_offset);
+			fwd->connect_port = PORT_STREAMLOCAL;
+		} else if (parsed.has_connect_port != 0)
+			fwd->connect_port = a2port(cp + parsed.connect_port_offset);
+	}
+#else
 	for (i = 0; i < 4; ++i) {
 		if (parse_fwd_field(&cp, &fwdargs[i]) != 0)
 			break;
@@ -3413,6 +3422,7 @@ parse_forward(struct Forward *fwd, const char *fwdspec, int dynamicfwd, int remo
 	default:
 		i = 0; /* failure */
 	}
+#endif
 
 	free(p);
 

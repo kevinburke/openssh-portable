@@ -785,13 +785,15 @@ UNITTESTS_TEST_MISC_OBJS=\
 	regress/unittests/misc/test_user_host_port.o \
 	regress/unittests/misc/test_ptimeout.o \
 	regress/unittests/misc/test_xextendf.o \
-	regress/unittests/misc/test_misc.o
+	regress/unittests/misc/test_misc.o \
+	readconf.o
 
 regress/unittests/misc/test_misc$(EXEEXT): \
     ${UNITTESTS_TEST_MISC_OBJS} \
     regress/unittests/test_helper/libtest_helper.a libssh.a \
     $(RUST_CRYPTO_BUILD_DEPS)
 	$(LD) -o $@ $(LDFLAGS) $(UNITTESTS_TEST_MISC_OBJS) \
+	    ssh-pkcs11-client.o ssh-sk-client.o \
 	    regress/unittests/test_helper/libtest_helper.a \
 	    -lssh -lopenbsd-compat -lssh -lopenbsd-compat \
 	    $(RUST_CRYPTO_LINK_LIB) $(TESTLIBS)
