@@ -232,4 +232,19 @@ test_parse(void)
 		free_jump_options(&o);
 	}
 	TEST_DONE();
+
+	TEST_START("misc_valid_permit_basic");
+	ASSERT_INT_EQ(valid_permit("dest.example:80", 0), 0);
+	ASSERT_INT_EQ(valid_permit("[host:name]:smtp", 0), 0);
+	ASSERT_INT_EQ(valid_permit("*:*", 0), 0);
+	ASSERT_INT_EQ(valid_permit("8080", 1), 0);
+	TEST_DONE();
+
+	TEST_START("misc_valid_permit_rejects_bad_forms");
+	ASSERT_INT_EQ(valid_permit("dest.example", 0), -1);
+	ASSERT_INT_EQ(valid_permit("host:", 0), -1);
+	ASSERT_INT_EQ(valid_permit("[]:22", 0), -1);
+	ASSERT_INT_EQ(valid_permit("[host]x:22", 0), -1);
+	ASSERT_INT_EQ(valid_permit("host:0", 0), -1);
+	TEST_DONE();
 }

@@ -253,7 +253,7 @@ static int
 handle_permit(const char **optsp, int allow_bare_port,
     char ***permitsp, size_t *npermitsp, const char **errstrp)
 {
-	char *opt, *tmp, *cp, *host, **permits = *permitsp;
+	char *opt, *tmp, **permits = *permitsp;
 	size_t npermits = *npermitsp;
 	const char *errstr = "unknown error";
 
@@ -282,27 +282,12 @@ handle_permit(const char **optsp, int allow_bare_port,
 		*errstrp = "memory allocation failed";
 		return -1;
 	}
-	cp = tmp;
-	/* validate syntax before recording it. */
-	host = hpdelim2(&cp, NULL);
-	if (host == NULL || strlen(host) >= NI_MAXHOST) {
+	if (valid_permit(opt, allow_bare_port) != 0) {
 		free(tmp);
 		free(opt);
-		*errstrp = "invalid permission hostname";
+		*errstrp = "invalid permission directive";
 		return -1;
 	}
-	/*
-	 * don't want to use permitopen_port to avoid
-	 * dependency on channels.[ch] here.
-	 */
-	if (cp == NULL ||
-	    (strcmp(cp, "*") != 0 && a2port(cp) <= 0)) {
-		free(tmp);
-		free(opt);
-		*errstrp = "invalid permission port";
-		return -1;
-	}
-	/* XXX - add streamlocal support */
 	free(tmp);
 	/* Record it */
 	if ((permits = recallocarray(permits, npermits, npermits + 1,
