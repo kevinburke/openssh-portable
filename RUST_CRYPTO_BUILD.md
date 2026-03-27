@@ -27,6 +27,7 @@ Rust-backed today:
 - OpenSSH `openssh-key-v1` armor and header parsing
 - OpenSSH `openssh-key-v1` decrypted private-section parsing for Ed25519,
   RSA, and ECDSA keys:
+  - structural validation of the decrypted payload before shared deserialize
   - key-material decode
   - cert-prefixed private-key body handling
   - embedded comment extraction
