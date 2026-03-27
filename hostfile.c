@@ -62,6 +62,9 @@
 #include "digest.h"
 #include "hmac.h"
 #include "sshbuf.h"
+#ifdef WITH_RUST_CRYPTO
+#include "rust-crypto.h"
+#endif
 
 /* XXX hmac is too easy to dictionary attack; use bcrypt? */
 
@@ -175,41 +178,6 @@ hostfile_read_key(char **cpp, u_int *bitsp, struct sshkey *ret)
 	if (bitsp != NULL)
 		*bitsp = sshkey_size(ret);
 	return 1;
-}
-
-static HostkeyMarker
-check_markers(char **cpp)
-{
-	char marker[32], *sp, *cp = *cpp;
-	int ret = MRK_NONE;
-
-	while (*cp == '@') {
-		/* Only one marker is allowed */
-		if (ret != MRK_NONE)
-			return MRK_ERROR;
-		/* Markers are terminated by whitespace */
-		if ((sp = strchr(cp, ' ')) == NULL &&
-		    (sp = strchr(cp, '\t')) == NULL)
-			return MRK_ERROR;
-		/* Extract marker for comparison */
-		if (sp <= cp + 1 || sp >= cp + sizeof(marker))
-			return MRK_ERROR;
-		memcpy(marker, cp, sp - cp);
-		marker[sp - cp] = '\0';
-		if (strcmp(marker, CA_MARKER) == 0)
-			ret = MRK_CA;
-		else if (strcmp(marker, REVOKE_MARKER) == 0)
-			ret = MRK_REVOKE;
-		else
-			return MRK_ERROR;
-
-		/* Skip past marker and any whitespace that follows it */
-		cp = sp;
-		for (; *cp == ' ' || *cp == '\t'; cp++)
-			;
-	}
-	*cpp = cp;
-	return ret;
 }
 
 struct hostkeys *
@@ -798,6 +766,9 @@ hostkeys_foreach_file(const char *path, FILE *f, hostkeys_foreach_fn *callback,
 	int s, r = 0;
 	struct hostkey_foreach_line lineinfo;
 	size_t linesize = 0, l;
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_hostfile_line_parse parsed;
+#endif
 
 	memset(&lineinfo, 0, sizeof(lineinfo));
 	if (host == NULL && (options & HKF_WANT_MATCH) != 0)
@@ -818,6 +789,33 @@ hostkeys_foreach_file(const char *path, FILE *f, hostkeys_foreach_fn *callback,
 		lineinfo.keytype = KEY_UNSPEC;
 		lineinfo.note = note;
 
+#ifdef WITH_RUST_CRYPTO
+		if (ossh_rust_parse_hostfile_line((const u_char *)line,
+		    strlen(line), &parsed) != 0) {
+			if ((options & HKF_WANT_MATCH) == 0)
+				goto bad;
+			continue;
+		}
+		if (parsed.kind == OSSH_RUST_HOSTFILE_LINE_INVALID_MARKER) {
+			lineinfo.marker = MRK_ERROR;
+			if ((options & HKF_WANT_MATCH) == 0)
+				goto bad;
+			continue;
+		}
+		if (parsed.kind == OSSH_RUST_HOSTFILE_LINE_COMMENT) {
+			if ((options & HKF_WANT_MATCH) == 0) {
+				lineinfo.status = HKF_STATUS_COMMENT;
+				if ((r = callback(&lineinfo, ctx)) != 0)
+					break;
+			}
+			continue;
+		}
+		lineinfo.marker = parsed.marker;
+		cp = line + parsed.hosts_offset;
+		cp2 = cp + parsed.hosts_len;
+		lineinfo.hosts = cp;
+		*cp2++ = '\0';
+#else
 		/* Skip any leading whitespace, comments and empty lines. */
 		for (cp = line; *cp == ' ' || *cp == '\t'; cp++)
 			;
@@ -848,6 +846,7 @@ hostkeys_foreach_file(const char *path, FILE *f, hostkeys_foreach_fn *callback,
 		}
 		lineinfo.hosts = cp;
 		*cp2++ = '\0';
+#endif
 
 		/* Check if the host name matches. */
 		if (host != NULL) {
@@ -886,6 +885,11 @@ hostkeys_foreach_file(const char *path, FILE *f, hostkeys_foreach_fn *callback,
 				continue;
 		}
 
+#ifdef WITH_RUST_CRYPTO
+		if (parsed.kind == OSSH_RUST_HOSTFILE_LINE_INVALID_ENTRY)
+			goto bad;
+		lineinfo.rawkey = cp = line + parsed.rawkey_offset;
+#else
 		/* Got a match.  Skip host name and any following whitespace */
 		for (; *cp2 == ' ' || *cp2 == '\t'; cp2++)
 			;
@@ -895,6 +899,7 @@ hostkeys_foreach_file(const char *path, FILE *f, hostkeys_foreach_fn *callback,
 			goto bad;
 		}
 		lineinfo.rawkey = cp = cp2;
+#endif
 
 		if ((options & HKF_WANT_PARSE_KEY) != 0) {
 			/*
@@ -914,6 +919,14 @@ hostkeys_foreach_file(const char *path, FILE *f, hostkeys_foreach_fn *callback,
 			lineinfo.comment = cp;
 		} else {
 			/* Extract and parse key type */
+#ifdef WITH_RUST_CRYPTO
+			l = parsed.keytype_len;
+			if (l <= 1 || l >= sizeof(ktype))
+				goto bad;
+			memcpy(ktype, line + parsed.keytype_offset, l);
+			ktype[l] = '\0';
+			lineinfo.keytype = sshkey_type_from_name(ktype);
+#else
 			l = strcspn(lineinfo.rawkey, " \t");
 			if (l <= 1 || l >= sizeof(ktype) ||
 			    lineinfo.rawkey[l] == '\0')
@@ -921,6 +934,7 @@ hostkeys_foreach_file(const char *path, FILE *f, hostkeys_foreach_fn *callback,
 			memcpy(ktype, lineinfo.rawkey, l);
 			ktype[l] = '\0';
 			lineinfo.keytype = sshkey_type_from_name(ktype);
+#endif
 #if !defined(OPENSSL_HAS_ECC) && !defined(WITH_RUST_CRYPTO)
 			if (lineinfo.keytype == KEY_ECDSA ||
 			    lineinfo.keytype == KEY_ECDSA_CERT)
@@ -945,6 +959,7 @@ hostkeys_foreach_file(const char *path, FILE *f, hostkeys_foreach_fn *callback,
 			 * the key type. This won't catch all corruption, but
 			 * it does catch trivial truncation.
 			 */
+#ifndef WITH_RUST_CRYPTO
 			cp2 += l; /* Skip past key type */
 			for (; *cp2 == ' ' || *cp2 == '\t'; cp2++)
 				;
@@ -953,6 +968,7 @@ hostkeys_foreach_file(const char *path, FILE *f, hostkeys_foreach_fn *callback,
 				    path, linenum);
 				lineinfo.keytype = KEY_UNSPEC;
 			}
+#endif
 			if (lineinfo.keytype == KEY_UNSPEC) {
  bad:
 				sshkey_free(lineinfo.key);
