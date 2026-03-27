@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 20U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 22U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -154,6 +154,14 @@ struct ossh_rust_forward_parse {
 	uint32_t has_connect_port;
 	uint32_t has_connect_path;
 };
+struct ossh_rust_jump_parse {
+	size_t first_offset;
+	size_t first_len;
+	size_t extra_len;
+	uint32_t is_none;
+	uint32_t first_is_uri;
+	uint32_t has_extra;
+};
 struct ossh_rust_user_host_port_parse {
 	size_t user_offset;
 	size_t user_len;
@@ -212,6 +220,8 @@ int ossh_rust_parse_forward_field(uint8_t *input, size_t input_len,
     struct ossh_rust_forward_field_parse *out);
 int ossh_rust_parse_forward(uint8_t *input, size_t input_len, int dynamicfwd,
     int remotefwd, struct ossh_rust_forward_parse *out);
+int ossh_rust_parse_jump(const uint8_t *input, size_t input_len,
+    struct ossh_rust_jump_parse *out);
 int ossh_rust_parse_user_host_port(const uint8_t *input, size_t input_len,
     struct ossh_rust_user_host_port_parse *out);
 int ossh_rust_parse_uri(const uint8_t *input, size_t input_len,

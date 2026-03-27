@@ -32,6 +32,16 @@ free_forward(struct Forward *fwd)
 	memset(fwd, 0, sizeof(*fwd));
 }
 
+static void
+free_jump_options(Options *o)
+{
+	free(o->proxy_command);
+	free(o->jump_user);
+	free(o->jump_host);
+	free(o->jump_extra);
+	memset(o, 0, sizeof(*o));
+}
+
 void
 test_parse(void)
 {
@@ -184,6 +194,42 @@ test_parse(void)
 		ASSERT_INT_EQ(parse_forward(&fwd,
 		    "[host]x:8080:dest.example:80", 0, 0), 0);
 		free_forward(&fwd);
+	}
+	TEST_DONE();
+
+	TEST_START("readconf_parse_jump_chain");
+	{
+		Options o;
+		memset(&o, 0, sizeof(o));
+		ASSERT_INT_EQ(parse_jump("jumpa,ssh://user@jumpb:2200", &o, 1), 0);
+		ASSERT_STRING_EQ(o.jump_user, "user");
+		ASSERT_STRING_EQ(o.jump_host, "jumpb");
+		ASSERT_INT_EQ(o.jump_port, 2200);
+		ASSERT_STRING_EQ(o.jump_extra, "jumpa");
+		ASSERT_STRING_EQ(o.proxy_command, "none");
+		free_jump_options(&o);
+	}
+	TEST_DONE();
+
+	TEST_START("readconf_parse_jump_none");
+	{
+		Options o;
+		memset(&o, 0, sizeof(o));
+		ASSERT_INT_EQ(parse_jump("NoNe", &o, 1), 0);
+		ASSERT_STRING_EQ(o.jump_host, "none");
+		ASSERT_INT_EQ(o.jump_port, 0);
+		ASSERT_PTR_EQ(o.jump_user, NULL);
+		ASSERT_PTR_EQ(o.jump_extra, NULL);
+		free_jump_options(&o);
+	}
+	TEST_DONE();
+
+	TEST_START("readconf_parse_jump_rejects_bad_chain");
+	{
+		Options o;
+		memset(&o, 0, sizeof(o));
+		ASSERT_INT_EQ(parse_jump("jumpa,,jumpb", &o, 1), -1);
+		free_jump_options(&o);
 	}
 	TEST_DONE();
 }

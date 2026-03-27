@@ -49,10 +49,10 @@ use rsa::{
 };
 use util::{
     argv_split_parse, argv_split_write, parse_forward_field_in_place, parse_forward_in_place,
-    read_slice, strdelim_parse_in_place, write_prefix,
+    parse_jump, read_slice, strdelim_parse_in_place, write_prefix,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 21;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 22;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -204,6 +204,16 @@ pub struct RustForwardParse {
     has_connect_host_socks: u32,
     has_connect_port: u32,
     has_connect_path: u32,
+}
+
+#[repr(C)]
+pub struct RustJumpParse {
+    first_offset: usize,
+    first_len: usize,
+    extra_len: usize,
+    is_none: u32,
+    first_is_uri: u32,
+    has_extra: u32,
 }
 
 #[repr(C)]
@@ -544,6 +554,31 @@ pub extern "C" fn ossh_rust_parse_forward(
             has_connect_host_socks: parsed.has_connect_host_socks,
             has_connect_port: parsed.has_connect_port,
             has_connect_path: parsed.has_connect_path,
+        };
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_parse_jump(
+    input: *const u8,
+    input_len: usize,
+    out: *mut RustJumpParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(parsed) = parse_jump(input, input_len) else {
+        return -1;
+    };
+    unsafe {
+        *out = RustJumpParse {
+            first_offset: parsed.first_offset,
+            first_len: parsed.first_len,
+            extra_len: parsed.extra_len,
+            is_none: parsed.is_none,
+            first_is_uri: parsed.first_is_uri,
+            has_extra: parsed.has_extra,
         };
     }
     0
