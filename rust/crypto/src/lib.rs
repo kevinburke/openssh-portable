@@ -48,11 +48,11 @@ use rsa::{
     rsa_private_pem_len, rsa_private_pem_write, rsa_sign_prehashed, rsa_verify_prehashed,
 };
 use util::{
-    argv_split_parse, argv_split_write, parse_forward_field_in_place, read_slice,
-    strdelim_parse_in_place, write_prefix,
+    argv_split_parse, argv_split_write, parse_forward_field_in_place, parse_forward_in_place,
+    read_slice, strdelim_parse_in_place, write_prefix,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 20;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 21;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -180,6 +180,30 @@ pub struct RustForwardFieldParse {
     arg_offset: usize,
     next_offset: usize,
     ispath: u32,
+}
+
+#[repr(C)]
+pub struct RustForwardParse {
+    field_count: u32,
+    listen_host_offset: usize,
+    listen_host_len: usize,
+    listen_port_offset: usize,
+    listen_port_len: usize,
+    listen_path_offset: usize,
+    listen_path_len: usize,
+    connect_host_offset: usize,
+    connect_host_len: usize,
+    connect_port_offset: usize,
+    connect_port_len: usize,
+    connect_path_offset: usize,
+    connect_path_len: usize,
+    has_listen_host: u32,
+    has_listen_port: u32,
+    has_listen_path: u32,
+    has_connect_host: u32,
+    has_connect_host_socks: u32,
+    has_connect_port: u32,
+    has_connect_path: u32,
 }
 
 #[repr(C)]
@@ -479,6 +503,47 @@ pub extern "C" fn ossh_rust_parse_forward_field(
             arg_offset: parsed.arg_offset,
             next_offset: parsed.next_offset,
             ispath: parsed.ispath,
+        };
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_parse_forward(
+    input: *mut u8,
+    input_len: usize,
+    dynamicfwd: c_int,
+    remotefwd: c_int,
+    out: *mut RustForwardParse,
+) -> c_int {
+    let Some(parsed) = parse_forward_in_place(input, input_len, dynamicfwd, remotefwd) else {
+        return -1;
+    };
+    if out.is_null() {
+        return -1;
+    }
+    unsafe {
+        *out = RustForwardParse {
+            field_count: parsed.field_count,
+            listen_host_offset: parsed.listen_host_offset,
+            listen_host_len: parsed.listen_host_len,
+            listen_port_offset: parsed.listen_port_offset,
+            listen_port_len: parsed.listen_port_len,
+            listen_path_offset: parsed.listen_path_offset,
+            listen_path_len: parsed.listen_path_len,
+            connect_host_offset: parsed.connect_host_offset,
+            connect_host_len: parsed.connect_host_len,
+            connect_port_offset: parsed.connect_port_offset,
+            connect_port_len: parsed.connect_port_len,
+            connect_path_offset: parsed.connect_path_offset,
+            connect_path_len: parsed.connect_path_len,
+            has_listen_host: parsed.has_listen_host,
+            has_listen_port: parsed.has_listen_port,
+            has_listen_path: parsed.has_listen_path,
+            has_connect_host: parsed.has_connect_host,
+            has_connect_host_socks: parsed.has_connect_host_socks,
+            has_connect_port: parsed.has_connect_port,
+            has_connect_path: parsed.has_connect_path,
         };
     }
     0
