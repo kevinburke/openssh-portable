@@ -3334,7 +3334,7 @@ parse_forward(struct Forward *fwd, const char *fwdspec, int dynamicfwd, int remo
 			fwd->listen_path = xstrdup(cp + parsed.listen_path_offset);
 			fwd->listen_port = PORT_STREAMLOCAL;
 		} else if (parsed.has_listen_port != 0)
-			fwd->listen_port = a2port(cp + parsed.listen_port_offset);
+			fwd->listen_port = parsed.listen_port_value;
 		if (parsed.has_connect_host_socks != 0)
 			fwd->connect_host = xstrdup("socks");
 		else if (parsed.has_connect_host != 0)
@@ -3343,7 +3343,7 @@ parse_forward(struct Forward *fwd, const char *fwdspec, int dynamicfwd, int remo
 			fwd->connect_path = xstrdup(cp + parsed.connect_path_offset);
 			fwd->connect_port = PORT_STREAMLOCAL;
 		} else if (parsed.has_connect_port != 0)
-			fwd->connect_port = a2port(cp + parsed.connect_port_offset);
+			fwd->connect_port = parsed.connect_port_value;
 	}
 #else
 	for (i = 0; i < 4; ++i) {
