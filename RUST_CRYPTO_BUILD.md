@@ -58,6 +58,7 @@ Rust-backed today:
   - `-L`, `-R`, and `-D` forwarding specifications
   - bracketed literal forwarding fields, escaped forwarding tokens, and
     forwarding-shape validation
+  - numeric and service-name port resolution for forwarding endpoints
 - `parse_jump()` ProxyJump parsing used by:
   - `ProxyJump`
   - `-J`
