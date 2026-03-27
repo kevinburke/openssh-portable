@@ -80,6 +80,7 @@ RUST_CRYPTO_SK_DUMMY_OBJS=@RUST_CRYPTO_SK_DUMMY_OBJS@
 RUST_CRYPTO_MANIFEST=$(srcdir)/rust/crypto/Cargo.toml
 RUST_CRYPTO_TARGET_DIR=$(BUILDDIR)/rust/crypto-target
 RUST_CRYPTO_LIB=$(RUST_CRYPTO_TARGET_DIR)/release/librust_crypto.a
+RUST_CRYPTO_SRCS=$(wildcard $(srcdir)/rust/crypto/src/*.rs)
 
 .SUFFIXES: .lo
 
@@ -252,7 +253,7 @@ libssh.a: $(LIBSSH_OBJS)
 
 rust-crypto-build: $(RUST_CRYPTO_LIB)
 
-$(RUST_CRYPTO_LIB): $(srcdir)/rust-crypto.h $(srcdir)/rust/crypto/Cargo.toml $(srcdir)/rust/crypto/src/lib.rs
+$(RUST_CRYPTO_LIB): $(srcdir)/rust-crypto.h $(srcdir)/rust/crypto/Cargo.toml $(RUST_CRYPTO_SRCS)
 	CARGO_TARGET_DIR="$(RUST_CRYPTO_TARGET_DIR)" $(CARGO) build --manifest-path "$(RUST_CRYPTO_MANIFEST)" --release
 
 ssh$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHOBJS) $(RUST_CRYPTO_BUILD_DEPS)
