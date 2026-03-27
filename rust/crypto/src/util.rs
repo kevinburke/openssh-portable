@@ -104,6 +104,47 @@ pub(crate) struct JumpParse {
     pub(crate) has_extra: u32,
 }
 
+fn parse_permit_port_token(input: &[u8]) -> bool {
+    if input == b"*" {
+        return true;
+    }
+    match parse_port_token(input) {
+        Some(port) => port > 0,
+        None => false,
+    }
+}
+
+pub(crate) fn validate_permit(input: *const u8, input_len: usize, allow_bare_port: c_int) -> bool {
+    let input = match read_slice(input, input_len) {
+        Some(input) if !input.is_empty() => input,
+        _ => return false,
+    };
+
+    if allow_bare_port != 0 && !input.contains(&b':') {
+        return parse_permit_port_token(input);
+    }
+
+    let (host, port) = if input.first() == Some(&b'[') {
+        let Some(close) = input.iter().position(|byte| *byte == b']') else {
+            return false;
+        };
+        if close <= 1 || input.get(close + 1) != Some(&b':') {
+            return false;
+        }
+        (&input[1..close], &input[close + 2..])
+    } else {
+        let Some(colon) = input.iter().position(|byte| *byte == b':') else {
+            return false;
+        };
+        (&input[..colon], &input[colon + 1..])
+    };
+
+    if host.is_empty() || host.len() >= libc::NI_MAXHOST as usize {
+        return false;
+    }
+    parse_permit_port_token(port)
+}
+
 pub(crate) fn read_array<const N: usize>(ptr: *const u8, len: usize) -> Option<[u8; N]> {
     if ptr.is_null() || len != N {
         return None;
@@ -1068,8 +1109,8 @@ mod tests {
     use super::{
         argv_split_parse, argv_split_write, hpdelim2_parse_in_place, parse_forward_field_in_place,
         parse_forward_in_place, parse_jump, parse_uri, parse_user_host_path,
-        parse_user_host_port, strdelim_parse_in_place, ForwardParse, JumpParse, UriParse,
-        UserHostPathParse, UserHostPortParse,
+        parse_user_host_port, strdelim_parse_in_place, validate_permit, ForwardParse,
+        JumpParse, UriParse, UserHostPathParse, UserHostPortParse,
     };
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
@@ -1513,6 +1554,26 @@ mod tests {
         assert_eq!(parse_uri(b"user@".as_ptr(), 5), None);
         assert_eq!(parse_uri(b"host:".as_ptr(), 5), None);
         assert_eq!(parse_uri(b"[]:22".as_ptr(), 5), None);
+    }
+
+    #[test]
+    fn validate_permit_handles_basic_forms() {
+        assert!(validate_permit(b"dest.example:80".as_ptr(), 15, 0));
+        assert!(validate_permit(b"[host:name]:smtp".as_ptr(), 16, 0));
+        assert!(validate_permit(b"*:*".as_ptr(), 3, 0));
+        assert!(validate_permit(b"8080".as_ptr(), 4, 1));
+        assert!(validate_permit(b"*".as_ptr(), 1, 1));
+    }
+
+    #[test]
+    fn validate_permit_rejects_bad_forms() {
+        assert!(!validate_permit(b"".as_ptr(), 0, 0));
+        assert!(!validate_permit(b"dest.example".as_ptr(), 12, 0));
+        assert!(!validate_permit(b"host:".as_ptr(), 5, 0));
+        assert!(!validate_permit(b"[]:22".as_ptr(), 5, 0));
+        assert!(!validate_permit(b"[host]x:22".as_ptr(), 10, 0));
+        assert!(!validate_permit(b"host:0".as_ptr(), 6, 0));
+        assert!(!validate_permit(b"foo/bar".as_ptr(), 7, 0));
     }
 
     #[test]
