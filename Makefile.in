@@ -231,6 +231,9 @@ loc:
 	printf 'Rust LOC: %s\n' "$$rust_loc"; \
 	printf 'Total LOC: %s\n' "$$total_loc"
 
+prepush-rust:
+	@./contrib/pre-push-rust.sh
+
 $(LIBSSH_OBJS): Makefile.in config.h
 $(SSHOBJS): Makefile.in config.h
 $(SSHDOBJS): Makefile.in config.h
