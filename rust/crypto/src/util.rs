@@ -67,6 +67,30 @@ pub(crate) struct ForwardFieldParse {
     pub(crate) ispath: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ForwardParse {
+    pub(crate) field_count: u32,
+    pub(crate) listen_host_offset: usize,
+    pub(crate) listen_host_len: usize,
+    pub(crate) listen_port_offset: usize,
+    pub(crate) listen_port_len: usize,
+    pub(crate) listen_path_offset: usize,
+    pub(crate) listen_path_len: usize,
+    pub(crate) connect_host_offset: usize,
+    pub(crate) connect_host_len: usize,
+    pub(crate) connect_port_offset: usize,
+    pub(crate) connect_port_len: usize,
+    pub(crate) connect_path_offset: usize,
+    pub(crate) connect_path_len: usize,
+    pub(crate) has_listen_host: u32,
+    pub(crate) has_listen_port: u32,
+    pub(crate) has_listen_path: u32,
+    pub(crate) has_connect_host: u32,
+    pub(crate) has_connect_host_socks: u32,
+    pub(crate) has_connect_port: u32,
+    pub(crate) has_connect_path: u32,
+}
+
 pub(crate) fn read_array<const N: usize>(ptr: *const u8, len: usize) -> Option<[u8; N]> {
     if ptr.is_null() || len != N {
         return None;
@@ -412,6 +436,250 @@ pub(crate) fn parse_forward_field_in_place(
     None
 }
 
+#[derive(Clone, Copy, Default)]
+struct ForwardToken {
+    offset: usize,
+    len: usize,
+    ispath: u32,
+}
+
+fn assign_forward_token(
+    token: ForwardToken,
+    offset: &mut usize,
+    len: &mut usize,
+    present: &mut u32,
+) {
+    *offset = token.offset;
+    *len = token.len;
+    *present = 1;
+}
+
+pub(crate) fn parse_forward_in_place(
+    input: *mut u8,
+    input_len: usize,
+    dynamicfwd: c_int,
+    _remotefwd: c_int,
+) -> Option<ForwardParse> {
+    let input = read_slice_mut(input, input_len)?;
+    if input.is_empty() {
+        return None;
+    }
+
+    let mut tokens = [ForwardToken::default(); 4];
+    let mut count = 0usize;
+    let mut offset = 0usize;
+
+    while count < tokens.len() {
+        if *input.get(offset)? == 0 {
+            break;
+        }
+        let parsed =
+            parse_forward_field_in_place(input[offset..].as_mut_ptr(), input.len() - offset)?;
+        let arg_offset = offset + parsed.arg_offset;
+        let next_offset = offset + parsed.next_offset;
+        let arg_len = input[arg_offset..]
+            .iter()
+            .position(|byte| *byte == 0)?;
+        tokens[count] = ForwardToken {
+            offset: arg_offset,
+            len: arg_len,
+            ispath: parsed.ispath,
+        };
+        count += 1;
+        offset = next_offset;
+    }
+    if count == 0 || *input.get(offset)? != 0 {
+        return None;
+    }
+
+    let mut out = ForwardParse {
+        field_count: count as u32,
+        listen_host_offset: 0,
+        listen_host_len: 0,
+        listen_port_offset: 0,
+        listen_port_len: 0,
+        listen_path_offset: 0,
+        listen_path_len: 0,
+        connect_host_offset: 0,
+        connect_host_len: 0,
+        connect_port_offset: 0,
+        connect_port_len: 0,
+        connect_path_offset: 0,
+        connect_path_len: 0,
+        has_listen_host: 0,
+        has_listen_port: 0,
+        has_listen_path: 0,
+        has_connect_host: 0,
+        has_connect_host_socks: 0,
+        has_connect_port: 0,
+        has_connect_path: 0,
+    };
+
+    match count {
+        1 => {
+            if tokens[0].ispath != 0 {
+                assign_forward_token(
+                    tokens[0],
+                    &mut out.listen_path_offset,
+                    &mut out.listen_path_len,
+                    &mut out.has_listen_path,
+                );
+            } else {
+                assign_forward_token(
+                    tokens[0],
+                    &mut out.listen_port_offset,
+                    &mut out.listen_port_len,
+                    &mut out.has_listen_port,
+                );
+            }
+            out.has_connect_host_socks = 1;
+        }
+        2 => {
+            if tokens[0].ispath != 0 && tokens[1].ispath != 0 {
+                assign_forward_token(
+                    tokens[0],
+                    &mut out.listen_path_offset,
+                    &mut out.listen_path_len,
+                    &mut out.has_listen_path,
+                );
+                assign_forward_token(
+                    tokens[1],
+                    &mut out.connect_path_offset,
+                    &mut out.connect_path_len,
+                    &mut out.has_connect_path,
+                );
+            } else if tokens[1].ispath != 0 {
+                assign_forward_token(
+                    tokens[0],
+                    &mut out.listen_port_offset,
+                    &mut out.listen_port_len,
+                    &mut out.has_listen_port,
+                );
+                assign_forward_token(
+                    tokens[1],
+                    &mut out.connect_path_offset,
+                    &mut out.connect_path_len,
+                    &mut out.has_connect_path,
+                );
+            } else {
+                assign_forward_token(
+                    tokens[0],
+                    &mut out.listen_host_offset,
+                    &mut out.listen_host_len,
+                    &mut out.has_listen_host,
+                );
+                assign_forward_token(
+                    tokens[1],
+                    &mut out.listen_port_offset,
+                    &mut out.listen_port_len,
+                    &mut out.has_listen_port,
+                );
+                out.has_connect_host_socks = 1;
+            }
+        }
+        3 => {
+            if tokens[0].ispath != 0 {
+                assign_forward_token(
+                    tokens[0],
+                    &mut out.listen_path_offset,
+                    &mut out.listen_path_len,
+                    &mut out.has_listen_path,
+                );
+                assign_forward_token(
+                    tokens[1],
+                    &mut out.connect_host_offset,
+                    &mut out.connect_host_len,
+                    &mut out.has_connect_host,
+                );
+                assign_forward_token(
+                    tokens[2],
+                    &mut out.connect_port_offset,
+                    &mut out.connect_port_len,
+                    &mut out.has_connect_port,
+                );
+            } else if tokens[2].ispath != 0 {
+                assign_forward_token(
+                    tokens[0],
+                    &mut out.listen_host_offset,
+                    &mut out.listen_host_len,
+                    &mut out.has_listen_host,
+                );
+                assign_forward_token(
+                    tokens[1],
+                    &mut out.listen_port_offset,
+                    &mut out.listen_port_len,
+                    &mut out.has_listen_port,
+                );
+                assign_forward_token(
+                    tokens[2],
+                    &mut out.connect_path_offset,
+                    &mut out.connect_path_len,
+                    &mut out.has_connect_path,
+                );
+            } else {
+                assign_forward_token(
+                    tokens[0],
+                    &mut out.listen_port_offset,
+                    &mut out.listen_port_len,
+                    &mut out.has_listen_port,
+                );
+                assign_forward_token(
+                    tokens[1],
+                    &mut out.connect_host_offset,
+                    &mut out.connect_host_len,
+                    &mut out.has_connect_host,
+                );
+                assign_forward_token(
+                    tokens[2],
+                    &mut out.connect_port_offset,
+                    &mut out.connect_port_len,
+                    &mut out.has_connect_port,
+                );
+            }
+        }
+        4 => {
+            assign_forward_token(
+                tokens[0],
+                &mut out.listen_host_offset,
+                &mut out.listen_host_len,
+                &mut out.has_listen_host,
+            );
+            assign_forward_token(
+                tokens[1],
+                &mut out.listen_port_offset,
+                &mut out.listen_port_len,
+                &mut out.has_listen_port,
+            );
+            assign_forward_token(
+                tokens[2],
+                &mut out.connect_host_offset,
+                &mut out.connect_host_len,
+                &mut out.has_connect_host,
+            );
+            assign_forward_token(
+                tokens[3],
+                &mut out.connect_port_offset,
+                &mut out.connect_port_len,
+                &mut out.has_connect_port,
+            );
+        }
+        _ => return None,
+    }
+
+    if dynamicfwd != 0 {
+        if !(count == 1 || count == 2) {
+            return None;
+        }
+    } else if !(count == 3 || count == 4)
+        && out.has_connect_path == 0
+        && out.has_listen_path == 0
+    {
+        return None;
+    }
+
+    Some(out)
+}
+
 pub(crate) fn parse_user_host_port(input: *const u8, input_len: usize) -> Option<UserHostPortParse> {
     let input = read_slice(input, input_len)?;
     if input.is_empty() {
@@ -677,8 +945,8 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 mod tests {
     use super::{
         argv_split_parse, argv_split_write, hpdelim2_parse_in_place, parse_forward_field_in_place,
-        parse_uri, parse_user_host_path, parse_user_host_port, strdelim_parse_in_place, UriParse,
-        UserHostPathParse, UserHostPortParse,
+        parse_forward_in_place, parse_uri, parse_user_host_path, parse_user_host_port,
+        strdelim_parse_in_place, ForwardParse, UriParse, UserHostPathParse, UserHostPortParse,
     };
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
@@ -880,6 +1148,98 @@ mod tests {
         assert_eq!(parse_fwd_field(b"[host"), None);
         assert_eq!(parse_fwd_field(b"[host]x"), None);
         assert_eq!(parse_fwd_field(br#"host\"#), None);
+    }
+
+    fn parse_forward_spec(input: &[u8], dynamicfwd: bool) -> Option<ForwardParse> {
+        let mut buf = input.to_vec();
+        buf.push(0);
+        parse_forward_in_place(buf.as_mut_ptr(), buf.len(), dynamicfwd as i32, 0)
+    }
+
+    #[test]
+    fn parse_forward_spec_handles_basic_forms() {
+        assert_eq!(
+            parse_forward_spec(b"8080:dest:80", false),
+            Some(ForwardParse {
+                field_count: 3,
+                listen_host_offset: 0,
+                listen_host_len: 0,
+                listen_port_offset: 0,
+                listen_port_len: 4,
+                listen_path_offset: 0,
+                listen_path_len: 0,
+                connect_host_offset: 5,
+                connect_host_len: 4,
+                connect_port_offset: 10,
+                connect_port_len: 2,
+                connect_path_offset: 0,
+                connect_path_len: 0,
+                has_listen_host: 0,
+                has_listen_port: 1,
+                has_listen_path: 0,
+                has_connect_host: 1,
+                has_connect_host_socks: 0,
+                has_connect_port: 1,
+                has_connect_path: 0,
+            })
+        );
+        assert_eq!(
+            parse_forward_spec(b"[host:name]:8080", true),
+            Some(ForwardParse {
+                field_count: 2,
+                listen_host_offset: 1,
+                listen_host_len: 9,
+                listen_port_offset: 12,
+                listen_port_len: 4,
+                listen_path_offset: 0,
+                listen_path_len: 0,
+                connect_host_offset: 0,
+                connect_host_len: 0,
+                connect_port_offset: 0,
+                connect_port_len: 0,
+                connect_path_offset: 0,
+                connect_path_len: 0,
+                has_listen_host: 1,
+                has_listen_port: 1,
+                has_listen_path: 0,
+                has_connect_host: 0,
+                has_connect_host_socks: 1,
+                has_connect_port: 0,
+                has_connect_path: 0,
+            })
+        );
+        assert_eq!(
+            parse_forward_spec(b"/tmp/listen.sock:/tmp/connect.sock", false),
+            Some(ForwardParse {
+                field_count: 2,
+                listen_host_offset: 0,
+                listen_host_len: 0,
+                listen_port_offset: 0,
+                listen_port_len: 0,
+                listen_path_offset: 0,
+                listen_path_len: 16,
+                connect_host_offset: 0,
+                connect_host_len: 0,
+                connect_port_offset: 0,
+                connect_port_len: 0,
+                connect_path_offset: 17,
+                connect_path_len: 17,
+                has_listen_host: 0,
+                has_listen_port: 0,
+                has_listen_path: 1,
+                has_connect_host: 0,
+                has_connect_host_socks: 0,
+                has_connect_port: 0,
+                has_connect_path: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_forward_spec_rejects_bad_forms() {
+        assert_eq!(parse_forward_spec(b"[host]x:8080:dest:80", false), None);
+        assert_eq!(parse_forward_spec(b"localhost:8080", false), None);
+        assert_eq!(parse_forward_spec(b"8080:dest:80", true), None);
     }
 
     #[test]
