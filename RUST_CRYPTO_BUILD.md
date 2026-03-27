@@ -58,6 +58,10 @@ Rust-backed today:
   - `-L`, `-R`, and `-D` forwarding specifications
   - bracketed literal forwarding fields, escaped forwarding tokens, and
     forwarding-shape validation
+- `parse_jump()` ProxyJump parsing used by:
+  - `ProxyJump`
+  - `-J`
+  - comma-separated jump-host chains, `ssh://` jump URIs, and `none`
 - RSA and ECDSA private-key loading for:
   - legacy PEM
   - PKCS#8
@@ -198,6 +202,15 @@ For the Rust-backed forwarding parser path, representative local checks are:
 
 The first should succeed. The second should fail with `Bad local forwarding
 specification`.
+
+For the Rust-backed ProxyJump parser path, representative local checks are:
+
+```sh
+./ssh -G localhost -F /dev/null -J 'jumpa,ssh://user@jumpb:2200' >/dev/null
+./ssh -G localhost -F /dev/null -J 'jumpa,,jumpb'
+```
+
+The first should succeed. The second should fail with `Invalid -J argument`.
 
 For the Rust-backed fixed-group DH path, representative local checks are:
 
