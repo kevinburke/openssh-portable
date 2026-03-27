@@ -56,11 +56,11 @@ while IFS= read -r path; do
 		add_test keygen-sshfp
 		add_test keyscan
 		;;
-	regress/*)
+	regress/*.sh)
 		test_name="${path##*/}"
 		test_name="${test_name%.sh}"
 		case "$test_name" in
-		README.regress|Makefile|""|agent-ca.pub|*.pub)
+		""|mktests|valgrind-unit|test-exec|agent-ca.pub|*.pub)
 			;;
 		*)
 			add_test "$test_name"
