@@ -66,58 +66,18 @@
 #include "rust-crypto.h"
 #endif
 
-/* XXX hmac is too easy to dictionary attack; use bcrypt? */
-
-static int
-extract_salt(const char *s, u_int l, u_char *salt, size_t salt_len)
-{
-	char *p, *b64salt;
-	u_int b64len;
-	int ret;
-
-	if (l < sizeof(HASH_MAGIC) - 1) {
-		debug2("extract_salt: string too short");
-		return (-1);
-	}
-	if (strncmp(s, HASH_MAGIC, sizeof(HASH_MAGIC) - 1) != 0) {
-		debug2("extract_salt: invalid magic identifier");
-		return (-1);
-	}
-	s += sizeof(HASH_MAGIC) - 1;
-	l -= sizeof(HASH_MAGIC) - 1;
-	if ((p = memchr(s, HASH_DELIM, l)) == NULL) {
-		debug2("extract_salt: missing salt termination character");
-		return (-1);
-	}
-
-	b64len = p - s;
-	/* Sanity check */
-	if (b64len == 0 || b64len > 1024) {
-		debug2("extract_salt: bad encoded salt length %u", b64len);
-		return (-1);
-	}
-	b64salt = xmalloc(1 + b64len);
-	memcpy(b64salt, s, b64len);
-	b64salt[b64len] = '\0';
-
-	ret = __b64_pton(b64salt, salt, salt_len);
-	free(b64salt);
-	if (ret == -1) {
-		debug2("extract_salt: salt decode error");
-		return (-1);
-	}
-	if (ret != (int)ssh_hmac_bytes(SSH_DIGEST_SHA1)) {
-		debug2("extract_salt: expected salt len %zd, got %d",
-		    ssh_hmac_bytes(SSH_DIGEST_SHA1), ret);
-		return (-1);
-	}
-
-	return (0);
-}
-
 char *
 host_hash(const char *host, const char *name_from_hostfile, u_int src_len)
 {
+#ifdef WITH_RUST_CRYPTO
+	u_char encoded[128];
+
+	if (ossh_rust_host_hash((const u_char *)host, strlen(host),
+	    name_from_hostfile == NULL ? NULL : (const u_char *)name_from_hostfile,
+	    src_len, encoded, sizeof(encoded)) != 0)
+		return NULL;
+	return xstrdup((const char *)encoded);
+#else
 	struct ssh_hmac_ctx *ctx;
 	u_char salt[256], result[256];
 	char uu_salt[512], uu_result[512];
@@ -150,6 +110,7 @@ host_hash(const char *host, const char *name_from_hostfile, u_int src_len)
 	    uu_result);
 
 	return (encoded);
+#endif
 }
 
 /*
@@ -737,19 +698,29 @@ hostfile_replace_entries(const char *filename, const char *host, const char *ip,
 static int
 match_maybe_hashed(const char *host, const char *names, int *was_hashed)
 {
-	int hashed = *names == HASH_DELIM, ret;
+	int hashed = *names == HASH_DELIM;
+#ifdef WITH_RUST_CRYPTO
+	size_t nlen = strlen(names);
+#else
+	int ret;
 	char *hashed_host = NULL;
 	size_t nlen = strlen(names);
+#endif
 
 	if (was_hashed != NULL)
 		*was_hashed = hashed;
 	if (hashed) {
+#ifdef WITH_RUST_CRYPTO
+		return ossh_rust_match_hashed_host((const u_char *)host,
+		    strlen(host), (const u_char *)names, nlen);
+#else
 		if ((hashed_host = host_hash(host, names, nlen)) == NULL)
 			return -1;
 		ret = (nlen == strlen(hashed_host) &&
 		    strncmp(hashed_host, names, nlen) == 0);
 		free(hashed_host);
 		return ret;
+#endif
 	}
 	return match_hostname(host, names) == 1;
 }

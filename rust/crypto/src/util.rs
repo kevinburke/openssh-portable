@@ -3,7 +3,14 @@ use core::slice;
 use core::mem;
 use std::ffi::CString;
 
+use base64ct::{Base64, Encoding};
+use rand_core::{OsRng, RngCore};
+use sha1::{Digest, Sha1};
+
 pub(crate) const SSHBUF_MAX_BIGNUM: usize = 16_384 / 8;
+const HOST_HASH_MAGIC: &[u8] = b"|1|";
+const HOST_HASH_DELIM: u8 = b'|';
+const HOST_HASH_LEN: usize = 20;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ArgvSplitParse {
@@ -377,6 +384,129 @@ pub(crate) fn parse_hostfile_line(input: *const u8, input_len: usize) -> Option<
         keytype_offset,
         keytype_len: keytype_end - keytype_offset,
     })
+}
+
+fn parse_hashed_host_entry(input: &[u8]) -> Option<([u8; HOST_HASH_LEN], [u8; HOST_HASH_LEN])> {
+    if !input.starts_with(HOST_HASH_MAGIC) {
+        return None;
+    }
+    let rest = &input[HOST_HASH_MAGIC.len()..];
+    let salt_end = rest.iter().position(|byte| *byte == HOST_HASH_DELIM)?;
+    let salt_b64 = core::str::from_utf8(&rest[..salt_end]).ok()?;
+    let hash_b64 = core::str::from_utf8(&rest[salt_end + 1..]).ok()?;
+    let salt = Base64::decode_vec(salt_b64).ok()?;
+    let hash = Base64::decode_vec(hash_b64).ok()?;
+    if salt.len() != HOST_HASH_LEN || hash.len() != HOST_HASH_LEN {
+        return None;
+    }
+    let mut salt_out = [0u8; HOST_HASH_LEN];
+    let mut hash_out = [0u8; HOST_HASH_LEN];
+    salt_out.copy_from_slice(&salt);
+    hash_out.copy_from_slice(&hash);
+    Some((salt_out, hash_out))
+}
+
+fn hmac_sha1(key: &[u8], data: &[u8]) -> [u8; HOST_HASH_LEN] {
+    let mut block = [0u8; 64];
+    if key.len() > block.len() {
+        let digest = Sha1::digest(key);
+        block[..HOST_HASH_LEN].copy_from_slice(&digest);
+    } else {
+        block[..key.len()].copy_from_slice(key);
+    }
+
+    let mut ipad = [0u8; 64];
+    let mut opad = [0u8; 64];
+    for (dst, src) in ipad.iter_mut().zip(block.iter()) {
+        *dst = *src ^ 0x36;
+    }
+    for (dst, src) in opad.iter_mut().zip(block.iter()) {
+        *dst = *src ^ 0x5c;
+    }
+
+    let mut inner = Sha1::new();
+    inner.update(ipad);
+    inner.update(data);
+    let inner_digest = inner.finalize();
+
+    let mut outer = Sha1::new();
+    outer.update(opad);
+    outer.update(inner_digest);
+    let digest = outer.finalize();
+
+    let mut out = [0u8; HOST_HASH_LEN];
+    out.copy_from_slice(&digest);
+    out
+}
+
+pub(crate) fn host_hash_write(
+    host: *const u8,
+    host_len: usize,
+    name_from_hostfile: *const u8,
+    src_len: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    let host = match read_slice(host, host_len) {
+        Some(host) if !host.is_empty() => host,
+        _ => return -1,
+    };
+
+    let salt = if name_from_hostfile.is_null() {
+        let mut salt = [0u8; HOST_HASH_LEN];
+        OsRng.fill_bytes(&mut salt);
+        salt
+    } else {
+        let names = match read_slice(name_from_hostfile, src_len) {
+            Some(names) => names,
+            None => return -1,
+        };
+        let Some((salt, _)) = parse_hashed_host_entry(names) else {
+            return -1;
+        };
+        salt
+    };
+
+    let result = hmac_sha1(&salt, host);
+    let encoded = format!(
+        "{}{}{}{}",
+        core::str::from_utf8(HOST_HASH_MAGIC).unwrap(),
+        Base64::encode_string(&salt),
+        HOST_HASH_DELIM as char,
+        Base64::encode_string(&result)
+    );
+    let bytes = encoded.as_bytes();
+    if out.is_null() || out_len < bytes.len() + 1 {
+        return -1;
+    }
+    let out = unsafe { slice::from_raw_parts_mut(out, out_len) };
+    out[..bytes.len()].copy_from_slice(bytes);
+    out[bytes.len()] = 0;
+    0
+}
+
+pub(crate) fn match_hashed_host(
+    host: *const u8,
+    host_len: usize,
+    names: *const u8,
+    names_len: usize,
+) -> c_int {
+    let host = match read_slice(host, host_len) {
+        Some(host) if !host.is_empty() => host,
+        _ => return -1,
+    };
+    let names = match read_slice(names, names_len) {
+        Some(names) => names,
+        None => return -1,
+    };
+    let Some((salt, expected)) = parse_hashed_host_entry(names) else {
+        return -1;
+    };
+    if hmac_sha1(&salt, host) == expected {
+        1
+    } else {
+        0
+    }
 }
 
 pub(crate) fn read_array<const N: usize>(ptr: *const u8, len: usize) -> Option<[u8; N]> {
@@ -1341,11 +1471,11 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 #[cfg(test)]
 mod tests {
     use super::{
-        argv_split_parse, argv_split_write, hpdelim2_parse_in_place, parse_forward_field_in_place,
-        parse_absolute_time, parse_forward_in_place, parse_hostfile_line, parse_jump, parse_uri,
-        parse_user_host_path, parse_user_host_port, strdelim_parse_in_place,
-        validate_permit, ForwardParse, HostfileLineParse, JumpParse, UriParse,
-        UserHostPathParse, UserHostPortParse,
+        argv_split_parse, argv_split_write, host_hash_write, hpdelim2_parse_in_place,
+        match_hashed_host, parse_forward_field_in_place, parse_absolute_time,
+        parse_forward_in_place, parse_hostfile_line, parse_jump, parse_uri, parse_user_host_path,
+        parse_user_host_port, strdelim_parse_in_place, validate_permit, ForwardParse,
+        HostfileLineParse, JumpParse, UriParse, UserHostPathParse, UserHostPortParse,
     };
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
@@ -1942,6 +2072,45 @@ mod tests {
                 keytype_offset: 13,
                 keytype_len: 11,
             })
+        );
+    }
+
+    #[test]
+    fn host_hash_reuses_known_salt_and_matches_fixture() {
+        let host = b"sisyphus.example.com";
+        let entry = b"|1|B7t/AYabn8zgwU47Cb4A/Nqt3eI=|arQPZyRphkzisr7w6wwikvhaOyE=";
+        let mut out = [0u8; 128];
+        assert_eq!(
+            host_hash_write(
+                host.as_ptr(),
+                host.len(),
+                entry.as_ptr(),
+                entry.len(),
+                out.as_mut_ptr(),
+                out.len()
+            ),
+            0
+        );
+        let out_len = out.iter().position(|byte| *byte == 0).unwrap();
+        assert_eq!(&out[..out_len], entry);
+        assert_eq!(match_hashed_host(host.as_ptr(), host.len(), entry.as_ptr(), entry.len()), 1);
+        assert_eq!(
+            match_hashed_host(
+                b"prometheus.example.com".as_ptr(),
+                b"prometheus.example.com".len(),
+                entry.as_ptr(),
+                entry.len()
+            ),
+            0
+        );
+    }
+
+    #[test]
+    fn host_hash_rejects_invalid_hashed_entries() {
+        let host = b"sisyphus.example.com";
+        assert_eq!(
+            match_hashed_host(host.as_ptr(), host.len(), b"|1|bad".as_ptr(), b"|1|bad".len()),
+            -1
         );
     }
 
