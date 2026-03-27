@@ -96,16 +96,22 @@ configure_tree() {
 		cd "$dir"
 		autoreconf -fi >/dev/null
 		./configure --prefix="$dir/local" "$@" >/dev/null
-		make -j"$JOBS" \
-			regress/unittests/sshkey/test_sshkey \
-			regress/unittests/kex/test_kex >/dev/null
+		if [ "$label" = "rust" ]; then
+			CARGO_NET_OFFLINE=true make -j"$JOBS" \
+				regress/unittests/sshkey/test_sshkey \
+				regress/unittests/kex/test_kex >/dev/null
+		else
+			make -j"$JOBS" \
+				regress/unittests/sshkey/test_sshkey \
+				regress/unittests/kex/test_kex >/dev/null
+		fi
 	)
 	printf 'prepared %s build in %s\n' "$label" "$dir"
 }
 
-extract_bench_line() {
+extract_bench_lines() {
 	file="$1"
-	sed -n '/^[^ ].*[0-9][0-9]*\.[0-9][0-9] .*\/s$/p' "$file" | tail -n 1
+	sed -n '/^[^ ].*[0-9][0-9]*\.[0-9][0-9] .*\/s$/p' "$file"
 }
 
 extract_time_summary() {
@@ -133,12 +139,12 @@ extract_time_summary() {
 			"${wall:-n/a}" "${user:-n/a}" "${sys:-n/a}" "${rss:-n/a}"
 		;;
 	*)
-		line="$(grep ' real$' "$file" | tail -n 1 || true)"
-		if [ -n "$line" ]; then
-			real="$(printf '%s\n' "$line" | awk '{print $1}')"
-			user="$(printf '%s\n' "$line" | awk '{print $3}')"
-			sys="$(printf '%s\n' "$line" | awk '{print $5}')"
-			printf 'wall=%ss user=%ss sys=%ss\n' "$real" "$user" "$sys"
+		real="$(awk '/^real[[:space:]]/{print $2}' "$file" | tail -n 1)"
+		user="$(awk '/^user[[:space:]]/{print $2}' "$file" | tail -n 1)"
+		sys="$(awk '/^sys[[:space:]]/{print $2}' "$file" | tail -n 1)"
+		if [ -n "$real" ] || [ -n "$user" ] || [ -n "$sys" ]; then
+			printf 'wall=%ss user=%ss sys=%ss\n' \
+				"${real:-n/a}" "${user:-n/a}" "${sys:-n/a}"
 		else
 			printf 'time-summary-unavailable\n'
 		fi
@@ -152,6 +158,7 @@ run_one() {
 	binary="$3"
 	pattern="$4"
 	tag="$5"
+	missing_note="${6:-}"
 	stdout_log="$logs_dir/$tag.$label.out"
 	stderr_log="$logs_dir/$tag.$label.time"
 
@@ -170,7 +177,15 @@ run_one() {
 			;;
 		esac
 	)
-	printf '  bench: %s\n' "$(extract_bench_line "$stdout_log")"
+	bench_lines="$(extract_bench_lines "$stdout_log")"
+	if [ -n "$bench_lines" ]; then
+		printf '  bench:\n'
+		printf '%s\n' "$bench_lines" | sed 's/^/    /'
+	elif [ -n "$missing_note" ]; then
+		printf '  bench: skipped (%s)\n' "$missing_note"
+	else
+		printf '  bench: none matched (benchmark not available in this build or filter matched nothing)\n'
+	fi
 	printf '  usage: %s\n' "$(extract_time_summary "$stderr_log")"
 }
 
@@ -187,8 +202,11 @@ configure_tree rust "$rust_dir" \
 
 run_one openssl "$openssl_dir" ./regress/unittests/sshkey/test_sshkey "generate ED25519" sshkey-generate-ed25519
 run_one rust    "$rust_dir"    ./regress/unittests/sshkey/test_sshkey "generate ED25519" sshkey-generate-ed25519
-run_one openssl "$openssl_dir" ./regress/unittests/sshkey/test_sshkey "ED25519" sshkey-ed25519
-run_one rust    "$rust_dir"    ./regress/unittests/sshkey/test_sshkey "ED25519" sshkey-ed25519
+run_one openssl "$openssl_dir" ./regress/unittests/sshkey/test_sshkey "sign ED25519" sshkey-sign-ed25519
+run_one rust    "$rust_dir"    ./regress/unittests/sshkey/test_sshkey "sign ED25519" sshkey-sign-ed25519 \
+	"not built in the current rust/no-openssl sshkey benchmark binary"
+run_one openssl "$openssl_dir" ./regress/unittests/sshkey/test_sshkey "verify ED25519" sshkey-verify-ed25519
+run_one rust    "$rust_dir"    ./regress/unittests/sshkey/test_sshkey "verify ED25519" sshkey-verify-ed25519
 run_one openssl "$openssl_dir" ./regress/unittests/kex/test_kex "KEX curve25519-sha256" kex-curve25519
 run_one rust    "$rust_dir"    ./regress/unittests/kex/test_kex "KEX curve25519-sha256" kex-curve25519
 run_one openssl "$openssl_dir" ./regress/unittests/kex/test_kex "KEX diffie-hellman-group-exchange-sha256" kex-dhgex
