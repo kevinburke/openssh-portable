@@ -68,6 +68,9 @@ Rust-backed today:
 - classic fixed-group DH key exchange helpers
   (`diffie-hellman-group14-sha1`, `diffie-hellman-group14-sha256`,
   `diffie-hellman-group16-sha512`, `diffie-hellman-group18-sha512`)
+- DH-GEX key exchange helpers in Rust mode
+  (`diffie-hellman-group-exchange-sha1`,
+  `diffie-hellman-group-exchange-sha256`)
 - the X25519 portion of the hybrid
   `sntrup761x25519-sha512` and `mlkem768x25519-sha256` KEX paths
 - AES-CTR transport cipher (`aes128-ctr`, `aes192-ctr`, `aes256-ctr`)
@@ -82,7 +85,6 @@ Still on the existing C path today:
 - MD5 and SHA1 digest support
 - SNTRUP761 KEM code
 - MLKEM768 KEM code
-- DH-GEX
 - PKCS#11 and security-key code paths
 - SK / FIDO private-key deserialization inside decrypted
   `openssh-key-v1` private sections
@@ -134,6 +136,9 @@ That gives both Rust-native coverage and OpenSSH integration coverage in CI.
 
 For reproducing `rust-crypto`, `openssl-noec`, and similar CI jobs locally in
 Docker, see [CI_REPRO.md](CI_REPRO.md).
+
+The Docker repro image installs current stable Rust via `rustup`, so local
+repros do not depend on the distro `cargo` version inside the base image.
 
 ## Test commands
 
@@ -204,6 +209,20 @@ make -j1 regress/unittests/kex/test_kex
 In this Codex environment, real outbound handshake checks for these DH groups
 are blocked by local sandbox networking, so `ssh -Q kex` plus `test_kex`
 are the practical local validation signals for this slice.
+
+For the Rust-backed DH-GEX path, the most relevant local checks are:
+
+```sh
+./ssh -Q kex | rg 'group-exchange'
+make -j1 regress/unittests/kex/test_kex
+./regress/unittests/kex/test_kex
+```
+
+For the full Rust-mode CI-equivalent unit pass in Docker:
+
+```sh
+env MAKE_TARGETS=unit ./contrib/ci-repro.sh rust-crypto
+```
 
 For the Rust-backed private-key load path, targeted local checks that are
 worth rerunning are:
