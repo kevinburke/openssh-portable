@@ -8,6 +8,7 @@ rm -f ${LOG}
 cp $OBJ/sshd_proxy $OBJ/sshd_proxy_bak
 
 kexs=`${SSH} -Q kex | grep diffie-hellman-group-exchange`
+ciphers=`${SSH} -Q cipher`
 
 ssh_test_dhgex()
 {
@@ -48,6 +49,7 @@ check()
 	bits="$1"; shift
 
 	for c in $@; do
+		echo "$ciphers" | grep -Fx "$c" >/dev/null || continue
 		for k in $kexs; do
 			ssh_test_dhgex $bits $c $k
 		done
