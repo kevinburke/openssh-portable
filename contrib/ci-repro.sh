@@ -22,7 +22,6 @@ EOF
 run_make_targets() {
 	unit_first=""
 	rest=""
-	make_vars=""
 
 	for target in "$@"; do
 		if [ "$target" = "unit" ]; then
@@ -32,30 +31,25 @@ run_make_targets() {
 		fi
 	done
 
-	if [ -n "${LTESTS:-}" ]; then
-		make_vars="$make_vars LTESTS=$LTESTS"
-	fi
-	if [ -n "${LTESTS_FROM:-}" ]; then
-		make_vars="$make_vars LTESTS_FROM=$LTESTS_FROM"
-	fi
-	if [ -n "${SKIP_LTESTS:-}" ]; then
-		make_vars="$make_vars SKIP_LTESTS=$SKIP_LTESTS"
-	fi
-
 	if [ -n "$unit_first" ]; then
 		printf '==> running make unit\n'
-		# shellcheck disable=SC2086
-		make -j"$JOBS" \
+		env \
 		    TEST_SSH_UNSAFE_PERMISSIONS="$TEST_SSH_UNSAFE_PERMISSIONS" \
-		    $make_vars \
+		    LTESTS="${LTESTS:-}" \
+		    LTESTS_FROM="${LTESTS_FROM:-}" \
+		    SKIP_LTESTS="${SKIP_LTESTS:-}" \
+		    make -j"$JOBS" \
 		    unit
 	fi
 	if [ -n "$rest" ]; then
 		printf '==> running make%s\n' "$rest"
 		# shellcheck disable=SC2086
-		make -j"$JOBS" \
+		env \
 		    TEST_SSH_UNSAFE_PERMISSIONS="$TEST_SSH_UNSAFE_PERMISSIONS" \
-		    $make_vars \
+		    LTESTS="${LTESTS:-}" \
+		    LTESTS_FROM="${LTESTS_FROM:-}" \
+		    SKIP_LTESTS="${SKIP_LTESTS:-}" \
+		    make -j"$JOBS" \
 		    $rest
 	fi
 }
