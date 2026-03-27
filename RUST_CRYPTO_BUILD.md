@@ -30,6 +30,10 @@ Rust-backed today:
   - host-list token extraction
   - no-parse key-type token extraction
   - structured invalid-line classification during hostfile iteration
+- hashed `known_hosts` matching and hashing:
+  - `|1|salt|hash` entry parsing
+  - HMAC-SHA1 host matching
+  - hashed host re-encoding with existing or fresh salt
 - OpenSSH `openssh-key-v1` armor and header parsing
 - OpenSSH `openssh-key-v1` decrypted private-section parsing for Ed25519,
   RSA, and ECDSA keys:
@@ -214,6 +218,7 @@ replacements through:
 It also exercises the Rust-backed hostfile parser path through:
 
 - `regress/unittests/hostkeys/test_iterate.c`
+- `regress/knownhosts.sh` via the Docker `rust-crypto` repro
 
 For the Rust-backed forwarding parser path, representative local checks are:
 
