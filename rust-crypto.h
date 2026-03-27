@@ -132,6 +132,28 @@ struct ossh_rust_forward_field_parse {
 	size_t next_offset;
 	uint32_t ispath;
 };
+struct ossh_rust_forward_parse {
+	uint32_t field_count;
+	size_t listen_host_offset;
+	size_t listen_host_len;
+	size_t listen_port_offset;
+	size_t listen_port_len;
+	size_t listen_path_offset;
+	size_t listen_path_len;
+	size_t connect_host_offset;
+	size_t connect_host_len;
+	size_t connect_port_offset;
+	size_t connect_port_len;
+	size_t connect_path_offset;
+	size_t connect_path_len;
+	uint32_t has_listen_host;
+	uint32_t has_listen_port;
+	uint32_t has_listen_path;
+	uint32_t has_connect_host;
+	uint32_t has_connect_host_socks;
+	uint32_t has_connect_port;
+	uint32_t has_connect_path;
+};
 struct ossh_rust_user_host_port_parse {
 	size_t user_offset;
 	size_t user_len;
@@ -188,6 +210,8 @@ int ossh_rust_hpdelim2_parse(uint8_t *input, size_t input_len,
     struct ossh_rust_hpdelim_parse *out);
 int ossh_rust_parse_forward_field(uint8_t *input, size_t input_len,
     struct ossh_rust_forward_field_parse *out);
+int ossh_rust_parse_forward(uint8_t *input, size_t input_len, int dynamicfwd,
+    int remotefwd, struct ossh_rust_forward_parse *out);
 int ossh_rust_parse_user_host_port(const uint8_t *input, size_t input_len,
     struct ossh_rust_user_host_port_parse *out);
 int ossh_rust_parse_uri(const uint8_t *input, size_t input_len,

@@ -17,8 +17,20 @@
 
 #include "log.h"
 #include "misc.h"
+#include "ssh.h"
+#include "readconf.h"
 
 void test_parse(void);
+
+static void
+free_forward(struct Forward *fwd)
+{
+	free(fwd->listen_host);
+	free(fwd->listen_path);
+	free(fwd->connect_host);
+	free(fwd->connect_path);
+	memset(fwd, 0, sizeof(*fwd));
+}
 
 void
 test_parse(void)
@@ -117,5 +129,61 @@ test_parse(void)
 	TEST_START("misc_parse_uri_rejects_empty_user");
 	ASSERT_INT_EQ(parse_uri("ssh", "ssh://@some.host:22/path",
 	    &user, &host, &port, &path), -1);
+	TEST_DONE();
+
+	TEST_START("readconf_parse_forward_local_tcp");
+	{
+		struct Forward fwd;
+		memset(&fwd, 0, sizeof(fwd));
+		ASSERT_INT_EQ(parse_forward(&fwd, "8080:dest.example:80", 0, 0), 3);
+		ASSERT_PTR_EQ(fwd.listen_host, NULL);
+		ASSERT_INT_EQ(fwd.listen_port, 8080);
+		ASSERT_PTR_EQ(fwd.listen_path, NULL);
+		ASSERT_STRING_EQ(fwd.connect_host, "dest.example");
+		ASSERT_INT_EQ(fwd.connect_port, 80);
+		ASSERT_PTR_EQ(fwd.connect_path, NULL);
+		free_forward(&fwd);
+	}
+	TEST_DONE();
+
+	TEST_START("readconf_parse_forward_dynamic_with_listen_host");
+	{
+		struct Forward fwd;
+		memset(&fwd, 0, sizeof(fwd));
+		ASSERT_INT_EQ(parse_forward(&fwd, "[host:name]:8080", 1, 0), 2);
+		ASSERT_STRING_EQ(fwd.listen_host, "host:name");
+		ASSERT_INT_EQ(fwd.listen_port, 8080);
+		ASSERT_PTR_EQ(fwd.listen_path, NULL);
+		ASSERT_STRING_EQ(fwd.connect_host, "socks");
+		ASSERT_INT_EQ(fwd.connect_port, 0);
+		ASSERT_PTR_EQ(fwd.connect_path, NULL);
+		free_forward(&fwd);
+	}
+	TEST_DONE();
+
+	TEST_START("readconf_parse_forward_streamlocal");
+	{
+		struct Forward fwd;
+		memset(&fwd, 0, sizeof(fwd));
+		ASSERT_INT_EQ(parse_forward(&fwd,
+		    "/tmp/listen.sock:/tmp/connect.sock", 0, 0), 2);
+		ASSERT_PTR_EQ(fwd.listen_host, NULL);
+		ASSERT_INT_EQ(fwd.listen_port, PORT_STREAMLOCAL);
+		ASSERT_STRING_EQ(fwd.listen_path, "/tmp/listen.sock");
+		ASSERT_PTR_EQ(fwd.connect_host, NULL);
+		ASSERT_INT_EQ(fwd.connect_port, PORT_STREAMLOCAL);
+		ASSERT_STRING_EQ(fwd.connect_path, "/tmp/connect.sock");
+		free_forward(&fwd);
+	}
+	TEST_DONE();
+
+	TEST_START("readconf_parse_forward_rejects_bad_brackets");
+	{
+		struct Forward fwd;
+		memset(&fwd, 0, sizeof(fwd));
+		ASSERT_INT_EQ(parse_forward(&fwd,
+		    "[host]x:8080:dest.example:80", 0, 0), 0);
+		free_forward(&fwd);
+	}
 	TEST_DONE();
 }
