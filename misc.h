@@ -214,6 +214,7 @@ int	 safe_path(const char *, struct stat *, const char *, uid_t,
 	    char *, size_t);
 int	 safe_path_fd(int, const char *, struct passwd *,
 	    char *err, size_t errlen);
+int	 valid_permit(const char *, int);
 
 /* authorized_key-style options parsing helpers */
 int	opt_flag(const char *opt, int allow_negate, const char **optsp);

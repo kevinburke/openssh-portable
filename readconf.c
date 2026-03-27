@@ -1785,21 +1785,9 @@ parse_pubkey_algos:
 					goto out;
 				}
 			} else {
-				p = hpdelim(&arg);
-				if (p == NULL) {
-					fatal("%s line %d: missing host in %s",
+				if (valid_permit(arg, 0) != 0) {
+					fatal("%s line %d: bad %s specification",
 					    filename, linenum,
-					    lookup_opcode_name(opcode));
-				}
-				p = cleanhostname(p);
-				/*
-				 * don't want to use permitopen_port to avoid
-				 * dependency on channels.[ch] here.
-				 */
-				if (arg == NULL || (strcmp(arg, "*") != 0 &&
-				    a2port(arg) <= 0)) {
-					fatal("%s line %d: bad port number "
-					    "in %s", filename, linenum,
 					    lookup_opcode_name(opcode));
 				}
 			}
