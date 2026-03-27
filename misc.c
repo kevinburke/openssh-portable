@@ -2320,6 +2320,46 @@ permitopen_port(const char *p)
 	return -1;
 }
 
+/*
+ * Validate a permitopen/permitlisten-style host:port token.
+ * When allow_bare_port is set, also allow a bare port token to indicate
+ * a wildcard host.
+ * Returns 0 on success, -1 on failure.
+ */
+int
+valid_permit(const char *s, int allow_bare_port)
+{
+#ifdef WITH_RUST_CRYPTO
+	if (s == NULL)
+		return -1;
+	return ossh_rust_validate_permit((const u_char *)s, strlen(s),
+	    allow_bare_port);
+#else
+	char *tmp = NULL, *cp = NULL;
+	const char *host;
+	int ret = -1;
+
+	if (s == NULL || *s == '\0')
+		return -1;
+	if (allow_bare_port && strchr(s, ':') == NULL)
+		return permitopen_port(s) >= 0 ? 0 : -1;
+	if ((tmp = cp = strdup(s)) == NULL)
+		return -1;
+	host = hpdelim2(&cp, NULL);
+	if (host == NULL || strlen(host) >= NI_MAXHOST)
+		goto out;
+	host = cleanhostname(host);
+	if (*host == '\0' || strlen(host) >= NI_MAXHOST)
+		goto out;
+	if (cp == NULL || permitopen_port(cp) < 0)
+		goto out;
+	ret = 0;
+ out:
+	free(tmp);
+	return ret;
+#endif
+}
+
 /* returns 1 if process is already daemonized, 0 otherwise */
 int
 daemonized(void)

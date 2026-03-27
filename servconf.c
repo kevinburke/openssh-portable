@@ -2250,16 +2250,9 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 				xasprintf(&arg2, "*:%s", arg);
 			} else {
 				arg2 = xstrdup(arg);
-				p = hpdelim(&arg);
-				if (p == NULL) {
-					fatal("%s line %d: %s missing host",
-					    filename, linenum, keyword);
-				}
-				p = cleanhostname(p);
 			}
-			if (arg == NULL ||
-			    ((port = permitopen_port(arg)) < 0)) {
-				fatal("%s line %d: %s bad port number",
+			if (valid_permit(arg, opcode == sPermitListen) != 0) {
+				fatal("%s line %d: %s bad specification",
 				    filename, linenum, keyword);
 			}
 			opt_array_append(filename, linenum, keyword,

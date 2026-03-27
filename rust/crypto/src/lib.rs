@@ -49,10 +49,10 @@ use rsa::{
 };
 use util::{
     argv_split_parse, argv_split_write, parse_forward_field_in_place, parse_forward_in_place,
-    parse_jump, read_slice, strdelim_parse_in_place, write_prefix,
+    parse_jump, read_slice, strdelim_parse_in_place, validate_permit, write_prefix,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 22;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 24;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -669,6 +669,19 @@ pub extern "C" fn ossh_rust_parse_user_host_path(
         };
     }
     0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_validate_permit(
+    input: *const u8,
+    input_len: usize,
+    allow_bare_port: c_int,
+) -> c_int {
+    if validate_permit(input, input_len, allow_bare_port) {
+        0
+    } else {
+        -1
+    }
 }
 
 #[unsafe(no_mangle)]

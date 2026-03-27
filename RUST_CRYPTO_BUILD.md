@@ -63,6 +63,11 @@ Rust-backed today:
   - `ProxyJump`
   - `-J`
   - comma-separated jump-host chains, `ssh://` jump URIs, and `none`
+- permit host/port validation used by:
+  - `PermitRemoteOpen`
+  - `PermitOpen`
+  - `PermitListen`
+  - bare-port `PermitListen` wildcard forms
 - RSA and ECDSA private-key loading for:
   - legacy PEM
   - PKCS#8
@@ -212,6 +217,19 @@ For the Rust-backed ProxyJump parser path, representative local checks are:
 ```
 
 The first should succeed. The second should fail with `Invalid -J argument`.
+
+For the Rust-backed permit validation path, representative local checks are:
+
+```sh
+tmpd=$(mktemp -d /tmp/permitcfg.XXXXXX)
+printf 'Host *\n    PermitRemoteOpen dest.example:80\n' > "$tmpd/ssh_config"
+printf 'PermitOpen dest.example:80\nPermitListen 8080\n' > "$tmpd/sshd_config"
+./ssh -G localhost -F "$tmpd/ssh_config" >/dev/null
+./sshd -T -f "$tmpd/sshd_config" >/dev/null
+```
+
+Those should both succeed. Invalid forms like `PermitRemoteOpen host:0` or
+`PermitListen [host]x:22` should fail during config parsing.
 
 For comparative performance measurements between the default/OpenSSL build and
 the Rust crypto build, use:
