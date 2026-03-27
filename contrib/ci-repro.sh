@@ -31,26 +31,26 @@ run_make_targets() {
 		fi
 	done
 
+	set -- make -j"$JOBS" TEST_SSH_UNSAFE_PERMISSIONS="$TEST_SSH_UNSAFE_PERMISSIONS"
+
+	if [ -n "${LTESTS:-}" ]; then
+		set -- "$@" "LTESTS=${LTESTS}"
+	fi
+	if [ -n "${LTESTS_FROM:-}" ]; then
+		set -- "$@" "LTESTS_FROM=${LTESTS_FROM}"
+	fi
+	if [ -n "${SKIP_LTESTS:-}" ]; then
+		set -- "$@" "SKIP_LTESTS=${SKIP_LTESTS}"
+	fi
+
 	if [ -n "$unit_first" ]; then
 		printf '==> running make unit\n'
-		env \
-		    TEST_SSH_UNSAFE_PERMISSIONS="$TEST_SSH_UNSAFE_PERMISSIONS" \
-		    LTESTS="${LTESTS:-}" \
-		    LTESTS_FROM="${LTESTS_FROM:-}" \
-		    SKIP_LTESTS="${SKIP_LTESTS:-}" \
-		    make -j"$JOBS" \
-		    unit
+		"$@" unit
 	fi
 	if [ -n "$rest" ]; then
 		printf '==> running make%s\n' "$rest"
 		# shellcheck disable=SC2086
-		env \
-		    TEST_SSH_UNSAFE_PERMISSIONS="$TEST_SSH_UNSAFE_PERMISSIONS" \
-		    LTESTS="${LTESTS:-}" \
-		    LTESTS_FROM="${LTESTS_FROM:-}" \
-		    SKIP_LTESTS="${SKIP_LTESTS:-}" \
-		    make -j"$JOBS" \
-		    $rest
+		"$@" $rest
 	fi
 }
 

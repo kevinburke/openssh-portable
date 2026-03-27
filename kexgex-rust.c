@@ -97,6 +97,17 @@ rust_mpint_bits(const u_char *d, size_t len)
 	return 0;
 }
 
+static int
+rust_count_set_bits(const u_char *d, size_t len)
+{
+	size_t i;
+	int bits_set = 0;
+
+	for (i = 0; i < len; i++)
+		bits_set += __builtin_popcount((unsigned int)d[i]);
+	return bits_set;
+}
+
 static void
 rust_dh_cleanup(struct kex *kex)
 {
@@ -197,8 +208,8 @@ rust_dh_shared_secret(const struct kex *kex, const u_char *peer_public,
     size_t peer_public_len, struct sshbuf **shared_secretp)
 {
 	struct sshbuf *shared_secret = NULL;
-	u_char *shared = NULL;
-	size_t shared_len;
+	u_char *shared = NULL, *modulus = NULL;
+	size_t shared_len, modulus_len = 0;
 	int r;
 
 	*shared_secretp = NULL;
@@ -206,12 +217,18 @@ rust_dh_shared_secret(const struct kex *kex, const u_char *peer_public,
 		return SSH_ERR_INVALID_ARGUMENT;
 	if ((shared_len = ossh_rust_dh_public_len(kex->dh)) == 0)
 		return SSH_ERR_INVALID_ARGUMENT;
-	if ((shared = calloc(1, shared_len)) == NULL)
-		return SSH_ERR_ALLOC_FAIL;
+	if ((r = rust_dh_export_modulus(kex, &modulus, &modulus_len)) != 0)
+		return r;
+	if ((shared = calloc(1, shared_len)) == NULL) {
+		r = SSH_ERR_ALLOC_FAIL;
+		goto out;
+	}
 	if ((shared_secret = sshbuf_new()) == NULL) {
 		r = SSH_ERR_ALLOC_FAIL;
 		goto out;
 	}
+	debug2("bits set: %d/%d", rust_count_set_bits(peer_public, peer_public_len),
+	    rust_mpint_bits(modulus, modulus_len));
 	if (ossh_rust_dh_shared_secret(kex->dh, peer_public, peer_public_len,
 	    shared, shared_len) != 0) {
 		r = SSH_ERR_MESSAGE_INCOMPLETE;
@@ -223,6 +240,7 @@ rust_dh_shared_secret(const struct kex *kex, const u_char *peer_public,
 	shared_secret = NULL;
 	r = 0;
  out:
+	freezero(modulus, modulus_len);
 	freezero(shared, shared_len);
 	sshbuf_free(shared_secret);
 	return r;
