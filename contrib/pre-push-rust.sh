@@ -32,6 +32,9 @@ echo "==> docker without-openssl unit"
 docker run --rm -v "$repo_root:/src" -w /src openssh-ci-repro \
 	env MAKE_TARGETS=unit ./contrib/ci-repro.sh without-openssl
 
-echo "==> docker rust-crypto rekey"
-docker run --rm -v "$repo_root:/src" -w /src openssh-ci-repro \
-	env MAKE_TARGETS=t-exec LTESTS=rekey ./contrib/ci-repro.sh rust-crypto
+ltests="$(./contrib/select-rust-ltests.sh)"
+if [ -n "$ltests" ]; then
+	echo "==> docker rust-crypto t-exec ($ltests)"
+	docker run --rm -v "$repo_root:/src" -w /src openssh-ci-repro \
+		env MAKE_TARGETS=t-exec LTESTS="$ltests" ./contrib/ci-repro.sh rust-crypto
+fi
