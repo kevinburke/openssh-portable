@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 31U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 32U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -262,6 +262,7 @@ int ossh_rust_parse_user_host_path(const uint8_t *input, size_t input_len,
 int ossh_rust_validate_permit(const uint8_t *input, size_t input_len,
     int allow_bare_port);
 int ossh_rust_parse_ipqos(const uint8_t *input, size_t input_len, int *out);
+int ossh_rust_a2port(const uint8_t *input, size_t input_len, int *out);
 int ossh_rust_valid_env_name(const uint8_t *input, size_t input_len);
 int ossh_rust_valid_domain(uint8_t *input, size_t input_len, int makelower,
     int *status);

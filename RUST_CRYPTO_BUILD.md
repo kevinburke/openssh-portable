@@ -87,6 +87,9 @@ Rust-backed today:
   - `parse_ipqos()` for `IPQoS`
   - `valid_env_name()` for legacy `$ENV` option handling and auth env lists
   - `valid_domain()` for canonical-domain and related hostname validation
+- `a2port()` numeric and service-name port parsing used by:
+  - destination and forwarding helpers layered above shared host/port parsing
+  - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers
 - `parse_pattern_interval()` parsing used by:
   - `ChannelTimeout`
   - similar `pattern=interval` config semantics shared by client/server code
@@ -222,6 +225,9 @@ replacements through:
 - `regress/unittests/misc/test_parse.c`
 - `regress/unittests/misc/test_convtime.c`
 - `regress/unittests/misc/test_misc.c`
+
+That `test_misc` coverage now also includes the Rust-backed `a2port()` path
+for numeric and service-name port resolution.
 
 It also exercises the Rust-backed hostfile parser path through:
 

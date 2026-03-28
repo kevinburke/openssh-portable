@@ -340,6 +340,11 @@ pub(crate) fn parse_pattern_interval(input: *const u8, input_len: usize) -> Opti
     })
 }
 
+pub(crate) fn a2port(input: *const u8, input_len: usize) -> Option<i32> {
+    let input = read_slice(input, input_len)?;
+    parse_port_token(input)
+}
+
 fn parse_decimal_component(input: &[u8]) -> Option<i32> {
     if input.is_empty() || !input.iter().all(|byte| byte.is_ascii_digit()) {
         return None;
@@ -1639,7 +1644,7 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 #[cfg(test)]
 mod tests {
     use super::{
-        argv_split_parse, argv_split_write, host_hash_write, hpdelim2_parse_in_place,
+        a2port, argv_split_parse, argv_split_write, host_hash_write, hpdelim2_parse_in_place,
         match_hashed_host, parse_forward_field_in_place, parse_absolute_time, parse_forward_in_place,
         parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval, parse_uri,
         parse_user_host_path, parse_user_host_port, strdelim_parse_in_place, valid_domain,
@@ -2205,6 +2210,23 @@ mod tests {
         assert_eq!(parse_pattern_interval(b"session".as_ptr(), 7), None);
         assert_eq!(parse_pattern_interval(b"=1m".as_ptr(), 3), None);
         assert_eq!(parse_pattern_interval(b"session=".as_ptr(), 8), None);
+    }
+
+    #[test]
+    fn a2port_handles_basic_forms() {
+        assert_eq!(a2port(b"0".as_ptr(), 1), Some(0));
+        assert_eq!(a2port(b"22".as_ptr(), 2), Some(22));
+        assert_eq!(a2port(b"65535".as_ptr(), 5), Some(65535));
+        assert_eq!(a2port(b"smtp".as_ptr(), 4), Some(25));
+    }
+
+    #[test]
+    fn a2port_rejects_bad_forms() {
+        assert_eq!(a2port(core::ptr::null(), 0), None);
+        assert_eq!(a2port(b"".as_ptr(), 0), None);
+        assert_eq!(a2port(b"-1".as_ptr(), 2), None);
+        assert_eq!(a2port(b"65536".as_ptr(), 5), None);
+        assert_eq!(a2port(b"no-such-service".as_ptr(), 15), None);
     }
 
     #[test]
