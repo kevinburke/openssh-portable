@@ -596,16 +596,28 @@ pwfree(struct passwd *pw)
 int
 a2port(const char *s)
 {
+#ifdef WITH_RUST_CRYPTO
+	int port;
+
+	if (s == NULL)
+		return -1;
+	if (ossh_rust_a2port((const uint8_t *)s, strlen(s), &port) == 0)
+		return port;
+	return -1;
+#else
 	struct servent *se;
 	long long port;
 	const char *errstr;
 
+	if (s == NULL)
+		return -1;
 	port = strtonum(s, 0, 65535, &errstr);
 	if (errstr == NULL)
 		return (int)port;
 	if ((se = getservbyname(s, "tcp")) != NULL)
 		return ntohs(se->s_port);
 	return -1;
+#endif
 }
 
 int
