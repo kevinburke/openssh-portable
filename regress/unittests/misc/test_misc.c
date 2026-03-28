@@ -7,6 +7,7 @@
 #include "includes.h"
 
 #include <sys/types.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -459,6 +460,100 @@ test_skip_space(void)
 	TEST_DONE();
 }
 
+static void
+test_parse_ipqos(void)
+{
+	TEST_START("parse_ipqos names");
+	ASSERT_INT_EQ(parse_ipqos("af21"), 72);
+	ASSERT_INT_EQ(parse_ipqos("CS6"), 192);
+	ASSERT_INT_EQ(parse_ipqos("none"), INT_MAX);
+	TEST_DONE();
+
+	TEST_START("parse_ipqos numbers");
+	ASSERT_INT_EQ(parse_ipqos("0"), 0);
+	ASSERT_INT_EQ(parse_ipqos("184"), 184);
+	ASSERT_INT_EQ(parse_ipqos("255"), 255);
+	TEST_DONE();
+
+	TEST_START("parse_ipqos rejects invalid");
+	ASSERT_INT_EQ(parse_ipqos(NULL), -1);
+	ASSERT_INT_EQ(parse_ipqos(""), -1);
+	ASSERT_INT_EQ(parse_ipqos("256"), -1);
+	ASSERT_INT_EQ(parse_ipqos("-1"), -1);
+	ASSERT_INT_EQ(parse_ipqos("bogus"), -1);
+	TEST_DONE();
+}
+
+static void
+test_valid_env_name(void)
+{
+	TEST_START("valid_env_name accepts basic");
+	ASSERT_INT_EQ(valid_env_name("FOO"), 1);
+	ASSERT_INT_EQ(valid_env_name("foo_123"), 1);
+	TEST_DONE();
+
+	TEST_START("valid_env_name rejects invalid");
+	ASSERT_INT_EQ(valid_env_name(""), 0);
+	ASSERT_INT_EQ(valid_env_name("FOO-BAR"), 0);
+	ASSERT_INT_EQ(valid_env_name("FOO.BAR"), 0);
+	ASSERT_INT_EQ(valid_env_name(" FOO"), 0);
+	TEST_DONE();
+}
+
+static void
+test_valid_domain(void)
+{
+	char *s;
+	const char *errstr = "sentinel";
+
+	TEST_START("valid_domain lowercases and trims trailing dot");
+	s = xstrdup("EXAMPLE.COM.");
+	ASSERT_INT_EQ(valid_domain(s, 1, &errstr), 1);
+	ASSERT_STRING_EQ(s, "example.com");
+	ASSERT_PTR_EQ(errstr, NULL);
+	free(s);
+	TEST_DONE();
+
+	TEST_START("valid_domain preserves case when requested");
+	s = xstrdup("MiXeD.Example");
+	ASSERT_INT_EQ(valid_domain(s, 0, &errstr), 1);
+	ASSERT_STRING_EQ(s, "MiXeD.Example");
+	ASSERT_PTR_EQ(errstr, NULL);
+	free(s);
+	TEST_DONE();
+
+	TEST_START("valid_domain rejects empty");
+	s = xstrdup("");
+	ASSERT_INT_EQ(valid_domain(s, 1, &errstr), 0);
+	ASSERT_STRING_EQ(errstr, "empty domain name");
+	free(s);
+	TEST_DONE();
+
+	TEST_START("valid_domain rejects bad initial character");
+	s = xstrdup("-bad.example");
+	ASSERT_INT_EQ(valid_domain(s, 1, &errstr), 0);
+	ASSERT_STRING_EQ(errstr,
+	    "domain name \"-bad.example\" starts with invalid character");
+	free(s);
+	TEST_DONE();
+
+	TEST_START("valid_domain rejects consecutive separators");
+	s = xstrdup("bad..example");
+	ASSERT_INT_EQ(valid_domain(s, 1, &errstr), 0);
+	ASSERT_STRING_EQ(errstr,
+	    "domain name \"bad..example\" contains consecutive separators");
+	free(s);
+	TEST_DONE();
+
+	TEST_START("valid_domain rejects invalid characters");
+	s = xstrdup("bad!example");
+	ASSERT_INT_EQ(valid_domain(s, 1, &errstr), 0);
+	ASSERT_STRING_EQ(errstr,
+	    "domain name \"bad!example\" contains invalid characters");
+	free(s);
+	TEST_DONE();
+}
+
 void
 test_misc(void)
 {
@@ -472,4 +567,7 @@ test_misc(void)
 	test_path_absolute();
 	test_stringlist();
 	test_skip_space();
+	test_parse_ipqos();
+	test_valid_env_name();
+	test_valid_domain();
 }

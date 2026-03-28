@@ -15,11 +15,15 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 29U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 30U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
 #define OSSH_RUST_PARSE_STATUS_EC_CURVE_MISMATCH 3
+#define OSSH_RUST_DOMAIN_STATUS_EMPTY 1
+#define OSSH_RUST_DOMAIN_STATUS_START_INVALID 2
+#define OSSH_RUST_DOMAIN_STATUS_CONSECUTIVE_SEPARATORS 3
+#define OSSH_RUST_DOMAIN_STATUS_INVALID_CHARS 4
 #define OSSH_RUST_PRIVATE2_KDF_NONE 0
 #define OSSH_RUST_PRIVATE2_KDF_BCRYPT 1
 #define OSSH_RUST_PRIVATE2_KEY_UNSUPPORTED 0
@@ -252,6 +256,10 @@ int ossh_rust_parse_user_host_path(const uint8_t *input, size_t input_len,
     struct ossh_rust_user_host_path_parse *out);
 int ossh_rust_validate_permit(const uint8_t *input, size_t input_len,
     int allow_bare_port);
+int ossh_rust_parse_ipqos(const uint8_t *input, size_t input_len, int *out);
+int ossh_rust_valid_env_name(const uint8_t *input, size_t input_len);
+int ossh_rust_valid_domain(uint8_t *input, size_t input_len, int makelower,
+    int *status);
 int ossh_rust_parse_absolute_time(const uint8_t *input, size_t input_len,
     uint64_t *tp);
 void *ossh_rust_dh_group_new(int group_id);

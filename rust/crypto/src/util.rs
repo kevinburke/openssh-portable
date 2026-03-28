@@ -11,6 +11,38 @@ pub(crate) const SSHBUF_MAX_BIGNUM: usize = 16_384 / 8;
 const HOST_HASH_MAGIC: &[u8] = b"|1|";
 const HOST_HASH_DELIM: u8 = b'|';
 const HOST_HASH_LEN: usize = 20;
+const IPQOS_NONE: i32 = i32::MAX;
+const IPQOS_AF11: i32 = 40;
+const IPQOS_AF12: i32 = 48;
+const IPQOS_AF13: i32 = 56;
+const IPQOS_AF21: i32 = 72;
+const IPQOS_AF22: i32 = 80;
+const IPQOS_AF23: i32 = 88;
+const IPQOS_AF31: i32 = 104;
+const IPQOS_AF32: i32 = 112;
+const IPQOS_AF33: i32 = 120;
+const IPQOS_AF41: i32 = 136;
+const IPQOS_AF42: i32 = 144;
+const IPQOS_AF43: i32 = 152;
+const IPQOS_CS0: i32 = 0;
+const IPQOS_CS1: i32 = 32;
+const IPQOS_CS2: i32 = 64;
+const IPQOS_CS3: i32 = 96;
+const IPQOS_CS4: i32 = 128;
+const IPQOS_CS5: i32 = 160;
+const IPQOS_CS6: i32 = 192;
+const IPQOS_CS7: i32 = 224;
+const IPQOS_EF: i32 = 184;
+const IPQOS_LE: i32 = 4;
+const IPQOS_VA: i32 = 176;
+const IPQOS_LOWDELAY: i32 = i32::MIN;
+const IPQOS_THROUGHPUT: i32 = 8;
+const IPQOS_RELIABILITY: i32 = 4;
+
+pub(crate) const DOMAIN_STATUS_EMPTY: c_int = 1;
+pub(crate) const DOMAIN_STATUS_START_INVALID: c_int = 2;
+pub(crate) const DOMAIN_STATUS_CONSECUTIVE_SEPARATORS: c_int = 3;
+pub(crate) const DOMAIN_STATUS_INVALID_CHARS: c_int = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ArgvSplitParse {
@@ -170,6 +202,122 @@ pub(crate) fn validate_permit(input: *const u8, input_len: usize, allow_bare_por
         return false;
     }
     parse_permit_port_token(port)
+}
+
+fn parse_ipqos_name(input: &[u8]) -> Option<i32> {
+    if input.eq_ignore_ascii_case(b"none") {
+        Some(IPQOS_NONE)
+    } else if input.eq_ignore_ascii_case(b"af11") {
+        Some(IPQOS_AF11)
+    } else if input.eq_ignore_ascii_case(b"af12") {
+        Some(IPQOS_AF12)
+    } else if input.eq_ignore_ascii_case(b"af13") {
+        Some(IPQOS_AF13)
+    } else if input.eq_ignore_ascii_case(b"af21") {
+        Some(IPQOS_AF21)
+    } else if input.eq_ignore_ascii_case(b"af22") {
+        Some(IPQOS_AF22)
+    } else if input.eq_ignore_ascii_case(b"af23") {
+        Some(IPQOS_AF23)
+    } else if input.eq_ignore_ascii_case(b"af31") {
+        Some(IPQOS_AF31)
+    } else if input.eq_ignore_ascii_case(b"af32") {
+        Some(IPQOS_AF32)
+    } else if input.eq_ignore_ascii_case(b"af33") {
+        Some(IPQOS_AF33)
+    } else if input.eq_ignore_ascii_case(b"af41") {
+        Some(IPQOS_AF41)
+    } else if input.eq_ignore_ascii_case(b"af42") {
+        Some(IPQOS_AF42)
+    } else if input.eq_ignore_ascii_case(b"af43") {
+        Some(IPQOS_AF43)
+    } else if input.eq_ignore_ascii_case(b"cs0") {
+        Some(IPQOS_CS0)
+    } else if input.eq_ignore_ascii_case(b"cs1") {
+        Some(IPQOS_CS1)
+    } else if input.eq_ignore_ascii_case(b"cs2") {
+        Some(IPQOS_CS2)
+    } else if input.eq_ignore_ascii_case(b"cs3") {
+        Some(IPQOS_CS3)
+    } else if input.eq_ignore_ascii_case(b"cs4") {
+        Some(IPQOS_CS4)
+    } else if input.eq_ignore_ascii_case(b"cs5") {
+        Some(IPQOS_CS5)
+    } else if input.eq_ignore_ascii_case(b"cs6") {
+        Some(IPQOS_CS6)
+    } else if input.eq_ignore_ascii_case(b"cs7") {
+        Some(IPQOS_CS7)
+    } else if input.eq_ignore_ascii_case(b"ef") {
+        Some(IPQOS_EF)
+    } else if input.eq_ignore_ascii_case(b"le") {
+        Some(IPQOS_LE)
+    } else if input.eq_ignore_ascii_case(b"va") {
+        Some(IPQOS_VA)
+    } else if input.eq_ignore_ascii_case(b"lowdelay") {
+        Some(IPQOS_LOWDELAY)
+    } else if input.eq_ignore_ascii_case(b"throughput") {
+        Some(IPQOS_THROUGHPUT)
+    } else if input.eq_ignore_ascii_case(b"reliability") {
+        Some(IPQOS_RELIABILITY)
+    } else {
+        None
+    }
+}
+
+pub(crate) fn parse_ipqos(input: *const u8, input_len: usize) -> Option<i32> {
+    let input = read_slice(input, input_len)?;
+    if let Some(val) = parse_ipqos_name(input) {
+        return Some(val);
+    }
+    let parsed = core::str::from_utf8(input).ok()?.parse::<i32>().ok()?;
+    (0..=255).contains(&parsed).then_some(parsed)
+}
+
+pub(crate) fn valid_env_name(input: *const u8, input_len: usize) -> bool {
+    let Some(input) = read_slice(input, input_len) else {
+        return false;
+    };
+    !input.is_empty()
+        && input
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+}
+
+pub(crate) fn valid_domain(
+    input: *mut u8,
+    input_len: usize,
+    makelower: c_int,
+) -> Result<(), c_int> {
+    if input.is_null() {
+        return Err(DOMAIN_STATUS_EMPTY);
+    }
+    let input = unsafe { slice::from_raw_parts_mut(input, input_len) };
+    if input.is_empty() {
+        return Err(DOMAIN_STATUS_EMPTY);
+    }
+    let first = input[0];
+    if !first.is_ascii_alphanumeric() && first != b'_' {
+        return Err(DOMAIN_STATUS_START_INVALID);
+    }
+    let lower = makelower != 0;
+    let mut last = 0u8;
+    for byte in input.iter_mut() {
+        let c = byte.to_ascii_lowercase();
+        if lower {
+            *byte = c;
+        }
+        if last == b'.' && c == b'.' {
+            return Err(DOMAIN_STATUS_CONSECUTIVE_SEPARATORS);
+        }
+        if c != b'.' && c != b'-' && c != b'_' && !c.is_ascii_alphanumeric() {
+            return Err(DOMAIN_STATUS_INVALID_CHARS);
+        }
+        last = c;
+    }
+    if input[input.len() - 1] == b'.' {
+        input[input.len() - 1] = 0;
+    }
+    Ok(())
 }
 
 fn parse_decimal_component(input: &[u8]) -> Option<i32> {
@@ -1472,10 +1620,13 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 mod tests {
     use super::{
         argv_split_parse, argv_split_write, host_hash_write, hpdelim2_parse_in_place,
-        match_hashed_host, parse_forward_field_in_place, parse_absolute_time,
-        parse_forward_in_place, parse_hostfile_line, parse_jump, parse_uri, parse_user_host_path,
-        parse_user_host_port, strdelim_parse_in_place, validate_permit, ForwardParse,
-        HostfileLineParse, JumpParse, UriParse, UserHostPathParse, UserHostPortParse,
+        match_hashed_host, parse_forward_field_in_place, parse_absolute_time, parse_forward_in_place,
+        parse_hostfile_line, parse_ipqos, parse_jump, parse_uri, parse_user_host_path,
+        parse_user_host_port, strdelim_parse_in_place, valid_domain, valid_env_name,
+        validate_permit, ForwardParse, HostfileLineParse, JumpParse, UriParse,
+        UserHostPathParse, UserHostPortParse, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
+        DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID,
+        IPQOS_AF21, IPQOS_CS6, IPQOS_NONE,
     };
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
@@ -1939,6 +2090,71 @@ mod tests {
         assert!(!validate_permit(b"[host]x:22".as_ptr(), 10, 0));
         assert!(!validate_permit(b"host:0".as_ptr(), 6, 0));
         assert!(!validate_permit(b"foo/bar".as_ptr(), 7, 0));
+    }
+
+    #[test]
+    fn parse_ipqos_handles_basic_forms() {
+        assert_eq!(parse_ipqos(b"af21".as_ptr(), 4), Some(IPQOS_AF21));
+        assert_eq!(parse_ipqos(b"CS6".as_ptr(), 3), Some(IPQOS_CS6));
+        assert_eq!(parse_ipqos(b"none".as_ptr(), 4), Some(IPQOS_NONE));
+        assert_eq!(parse_ipqos(b"184".as_ptr(), 3), Some(184));
+    }
+
+    #[test]
+    fn parse_ipqos_rejects_bad_forms() {
+        assert_eq!(parse_ipqos(core::ptr::null(), 0), None);
+        assert_eq!(parse_ipqos(b"".as_ptr(), 0), None);
+        assert_eq!(parse_ipqos(b"256".as_ptr(), 3), None);
+        assert_eq!(parse_ipqos(b"-1".as_ptr(), 2), None);
+        assert_eq!(parse_ipqos(b"bogus".as_ptr(), 5), None);
+    }
+
+    #[test]
+    fn valid_env_name_handles_basic_forms() {
+        assert!(valid_env_name(b"FOO".as_ptr(), 3));
+        assert!(valid_env_name(b"foo_123".as_ptr(), 7));
+        assert!(!valid_env_name(core::ptr::null(), 0));
+        assert!(!valid_env_name(b"".as_ptr(), 0));
+        assert!(!valid_env_name(b"FOO-BAR".as_ptr(), 7));
+        assert!(!valid_env_name(b"FOO.BAR".as_ptr(), 7));
+    }
+
+    #[test]
+    fn valid_domain_handles_basic_forms() {
+        let mut lowered = b"EXAMPLE.COM.".to_vec();
+        assert_eq!(valid_domain(lowered.as_mut_ptr(), lowered.len(), 1), Ok(()));
+        assert_eq!(&lowered[..], b"example.com\0");
+
+        let mut preserved = b"MiXeD.Example".to_vec();
+        assert_eq!(valid_domain(preserved.as_mut_ptr(), preserved.len(), 0), Ok(()));
+        assert_eq!(&preserved[..], b"MiXeD.Example");
+    }
+
+    #[test]
+    fn valid_domain_rejects_bad_forms() {
+        let mut empty = Vec::<u8>::new();
+        assert_eq!(
+            valid_domain(empty.as_mut_ptr(), empty.len(), 1),
+            Err(DOMAIN_STATUS_EMPTY)
+        );
+
+        let mut bad_start = b"-bad.example".to_vec();
+        assert_eq!(
+            valid_domain(bad_start.as_mut_ptr(), bad_start.len(), 1),
+            Err(DOMAIN_STATUS_START_INVALID)
+        );
+
+        let mut double_dot = b"bad..example".to_vec();
+        assert_eq!(
+            valid_domain(double_dot.as_mut_ptr(), double_dot.len(), 1),
+            Err(DOMAIN_STATUS_CONSECUTIVE_SEPARATORS)
+        );
+
+        let mut bad_chars = b"bad!example".to_vec();
+        assert_eq!(
+            valid_domain(bad_chars.as_mut_ptr(), bad_chars.len(), 1),
+            Err(DOMAIN_STATUS_INVALID_CHARS)
+        );
     }
 
     #[test]
