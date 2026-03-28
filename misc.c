@@ -3205,6 +3205,37 @@ opt_dequote(const char **sp, const char **errstrp)
 	size_t i;
 
 	*errstrp = NULL;
+#ifdef WITH_RUST_CRYPTO
+	{
+		struct ossh_rust_opt_dequote_parse parsed;
+		int status = 0;
+
+		if (ossh_rust_opt_dequote_parse((const u_char *)s, strlen(s),
+		    &parsed, &status) == 0) {
+			if ((ret = malloc(parsed.output_len + 1)) == NULL) {
+				*errstrp = "memory allocation failed";
+				return NULL;
+			}
+			if (ossh_rust_opt_dequote_write((const u_char *)s, strlen(s),
+			    (u_char *)ret, parsed.output_len) != 0) {
+				*errstrp = "missing end quote";
+				free(ret);
+				return NULL;
+			}
+			ret[parsed.output_len] = '\0';
+			*sp = s + parsed.next_offset;
+			return ret;
+		}
+		if (status == OSSH_RUST_OPT_DEQUOTE_MISSING_START) {
+			*errstrp = "missing start quote";
+			return NULL;
+		}
+		if (status == OSSH_RUST_OPT_DEQUOTE_MISSING_END) {
+			*errstrp = "missing end quote";
+			return NULL;
+		}
+	}
+#endif
 	if (*s != '"') {
 		*errstrp = "missing start quote";
 		return NULL;
