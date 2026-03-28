@@ -95,6 +95,10 @@ Rust-backed today:
   - `valid_domain()` for canonical-domain and related hostname validation
   - `atoi_err()` for shared non-negative integer option parsing and
     standardized `missing` / `invalid` / `too small` / `too large` reporting
+- shared multistate option lookup used by:
+  - repeated client config enums in `readconf.c`
+  - repeated server config enums in `servconf.c`
+  - case-insensitive matching of `yes`/`no`/`ask`/mode-style config values
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers
@@ -239,6 +243,9 @@ for numeric and service-name port resolution.
 
 It also includes direct coverage for the Rust-backed `atoi_err()` path and its
 error-string mapping used by shared config numeric parsing.
+
+It now also includes direct coverage for the shared Rust-backed
+`multistate_lookup()` path used by repeated client/server config enums.
 
 The existing OpenSSH `test_convtime` coverage now also exercises the
 Rust-backed `convtime()` / `convtime_double()` path.

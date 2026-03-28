@@ -51,6 +51,11 @@ struct ForwardOptions {
 	int	 streamlocal_bind_unlink; /* unlink socket before bind */
 };
 
+struct multistate {
+	char	*key;
+	int	 value;
+};
+
 /* misc.c */
 
 char	*chop(char *);
@@ -106,6 +111,7 @@ int	 unix_listener(const char *, int, int);
 int	 valid_domain(char *, int, const char **);
 int	 valid_env_name(const char *);
 const char *atoi_err(const char *, int *);
+int	 multistate_lookup(const char *, const struct multistate *, int *);
 int	 parse_absolute_time(const char *, uint64_t *);
 void	 format_absolute_time(uint64_t, char *, size_t);
 int	 parse_pattern_interval(const char *, char **, int *);

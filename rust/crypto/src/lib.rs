@@ -51,15 +51,16 @@ use rsa::{
 };
 use util::{
     a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
-    atoi_err, parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
-    parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval, read_slice,
-    strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit, write_prefix,
-    ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL,
-    DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS,
-    DOMAIN_STATUS_START_INVALID,
+    atoi_err, multistate_lookup, parse_convtime_double, parse_forward_field_in_place,
+    parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
+    parse_pattern_interval, read_slice, strdelim_parse_in_place, valid_domain,
+    valid_env_name, validate_permit, write_prefix, ATOI_STATUS_INVALID,
+    ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL,
+    DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
+    DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID, MultistateEntry,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 34;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 35;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -121,6 +122,8 @@ pub struct RustCertBodyParse {
     signature_offset: usize,
     signature_len: usize,
 }
+
+pub type RustMultistateEntry = MultistateEntry;
 
 #[repr(C)]
 pub struct RustPrivate2HeaderParse {
@@ -830,6 +833,28 @@ pub extern "C" fn ossh_rust_atoi_err(
             store_parse_status(status, mapped);
             -1
         }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_multistate_lookup(
+    input: *const u8,
+    input_len: usize,
+    entries: *const RustMultistateEntry,
+    nentries: usize,
+    out: *mut c_int,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match multistate_lookup(input, input_len, entries, nentries) {
+        Some(parsed) => {
+            unsafe {
+                *out = parsed;
+            }
+            0
+        }
+        None => -1,
     }
 }
 
