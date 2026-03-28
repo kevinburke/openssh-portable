@@ -55,6 +55,13 @@ pub struct MultistateEntry {
     pub value: c_int,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct KeywordEntry {
+    pub key: *const c_char,
+    pub value: c_int,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ArgvSplitParse {
     pub(crate) argc: usize,
@@ -421,6 +428,35 @@ pub(crate) fn multistate_name(
     let entries = unsafe { entries.as_ref() }
         .map(|_| unsafe { slice::from_raw_parts(entries, nentries) })?;
     entries.iter().position(|entry| entry.value == value)
+}
+
+pub(crate) fn keyword_lookup(
+    input: *const u8,
+    input_len: usize,
+    entries: *const KeywordEntry,
+    nentries: usize,
+    ignore_case: bool,
+) -> Option<c_int> {
+    let input = read_slice(input, input_len)?;
+    if nentries == 0 {
+        return None;
+    }
+    let entries = unsafe { entries.as_ref() }
+        .map(|_| unsafe { slice::from_raw_parts(entries, nentries) })?;
+    entries.iter().find_map(|entry| {
+        let key = unsafe { entry.key.as_ref() }
+            .and_then(|_| unsafe { CStr::from_ptr(entry.key) }.to_str().ok())?;
+        let matches = if ignore_case {
+            input.eq_ignore_ascii_case(key.as_bytes())
+        } else {
+            input == key.as_bytes()
+        };
+        if matches {
+            Some(entry.value)
+        } else {
+            None
+        }
+    })
 }
 
 pub(crate) fn parse_convtime_double(input: *const u8, input_len: usize) -> Option<f64> {
@@ -1823,16 +1859,17 @@ mod tests {
     use super::{
         a2port, atoi_err, argv_split_parse, argv_split_write, host_hash_write,
         hpdelim2_parse_in_place, match_hashed_host, parse_convtime_double,
-        multistate_lookup, multistate_name, parse_forward_field_in_place, parse_absolute_time,
-        parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
+        keyword_lookup, multistate_lookup, multistate_name,
+        parse_forward_field_in_place, parse_absolute_time, parse_forward_in_place,
+        parse_hostfile_line, parse_ipqos, parse_jump,
         parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
         strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
         ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE,
         ATOI_STATUS_TOO_SMALL, ForwardParse, HostfileLineParse, JumpParse,
-        MultistateEntry, PatternIntervalParse, UriParse, UserHostPathParse,
-        UserHostPortParse, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
-        DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID, IPQOS_AF21, IPQOS_CS6,
-        IPQOS_NONE,
+        KeywordEntry, MultistateEntry, PatternIntervalParse, UriParse,
+        UserHostPathParse, UserHostPortParse, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
+        DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID,
+        IPQOS_AF21, IPQOS_CS6, IPQOS_NONE,
     };
     use std::ffi::CString;
 
@@ -2496,6 +2533,47 @@ mod tests {
 
         assert_eq!(multistate_name(2, entries.as_ptr(), entries.len()), None);
         assert_eq!(multistate_name(1, core::ptr::null(), 1), None);
+    }
+
+    #[test]
+    fn keyword_lookup_handles_basic_forms() {
+        let user = CString::new("user").unwrap();
+        let hostname = CString::new("hostname").unwrap();
+        let entries = [
+            KeywordEntry {
+                key: user.as_ptr(),
+                value: 1,
+            },
+            KeywordEntry {
+                key: hostname.as_ptr(),
+                value: 2,
+            },
+        ];
+
+        assert_eq!(
+            keyword_lookup(b"user".as_ptr(), 4, entries.as_ptr(), entries.len(), false),
+            Some(1)
+        );
+        assert_eq!(
+            keyword_lookup(b"HOSTNAME".as_ptr(), 8, entries.as_ptr(), entries.len(), true),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn keyword_lookup_rejects_bad_forms() {
+        let user = CString::new("user").unwrap();
+        let entries = [KeywordEntry {
+            key: user.as_ptr(),
+            value: 1,
+        }];
+
+        assert_eq!(
+            keyword_lookup(b"USER".as_ptr(), 4, entries.as_ptr(), entries.len(), false),
+            None
+        );
+        assert_eq!(keyword_lookup(core::ptr::null(), 0, entries.as_ptr(), 1, false), None);
+        assert_eq!(keyword_lookup(b"user".as_ptr(), 4, core::ptr::null(), 1, false), None);
     }
 
     #[test]
