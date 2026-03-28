@@ -623,6 +623,45 @@ test_opt_flag(void)
 }
 
 static void
+test_lookup_env_in_list(void)
+{
+	char env1[] = "TERM=xterm-256color";
+	char env2[] = "LANG=en_US.UTF-8";
+	char env3[] = "FOO=bar";
+	char *envs[] = { env1, env2, env3 };
+
+	TEST_START("lookup_env_in_list basic");
+	ASSERT_STRING_EQ(lookup_env_in_list("TERM", envs, 3), "xterm-256color");
+	ASSERT_STRING_EQ(lookup_env_in_list("LANG", envs, 3), "en_US.UTF-8");
+	TEST_DONE();
+
+	TEST_START("lookup_env_in_list rejects missing");
+	ASSERT_PTR_EQ(lookup_env_in_list("MISSING", envs, 3), NULL);
+	ASSERT_PTR_EQ(lookup_env_in_list("", envs, 3), NULL);
+	TEST_DONE();
+}
+
+static void
+test_lookup_setenv_in_list(void)
+{
+	char env1[] = "TERM=xterm-256color";
+	char env2[] = "LANG=en_US.UTF-8";
+	char env3[] = "FOO=bar";
+	char *envs[] = { env1, env2, env3 };
+
+	TEST_START("lookup_setenv_in_list basic");
+	ASSERT_STRING_EQ(lookup_setenv_in_list("TERM=dumb", envs, 3),
+	    "xterm-256color");
+	ASSERT_STRING_EQ(lookup_setenv_in_list("LANG=C", envs, 3), "en_US.UTF-8");
+	TEST_DONE();
+
+	TEST_START("lookup_setenv_in_list rejects bad forms");
+	ASSERT_PTR_EQ(lookup_setenv_in_list("MISSING=value", envs, 3), NULL);
+	ASSERT_PTR_EQ(lookup_setenv_in_list("invalid", envs, 3), NULL);
+	TEST_DONE();
+}
+
+static void
 test_valid_domain(void)
 {
 	char *s;
@@ -722,6 +761,8 @@ test_misc(void)
 	test_multistate_lookup();
 	test_multistate_name();
 	test_opt_flag();
+	test_lookup_env_in_list();
+	test_lookup_setenv_in_list();
 	test_valid_domain();
 	test_parse_pattern_interval();
 }
