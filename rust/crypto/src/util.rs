@@ -43,6 +43,10 @@ pub(crate) const DOMAIN_STATUS_EMPTY: c_int = 1;
 pub(crate) const DOMAIN_STATUS_START_INVALID: c_int = 2;
 pub(crate) const DOMAIN_STATUS_CONSECUTIVE_SEPARATORS: c_int = 3;
 pub(crate) const DOMAIN_STATUS_INVALID_CHARS: c_int = 4;
+pub(crate) const ATOI_STATUS_MISSING: c_int = 1;
+pub(crate) const ATOI_STATUS_INVALID: c_int = 2;
+pub(crate) const ATOI_STATUS_TOO_SMALL: c_int = 3;
+pub(crate) const ATOI_STATUS_TOO_LARGE: c_int = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ArgvSplitParse {
@@ -343,6 +347,32 @@ pub(crate) fn parse_pattern_interval(input: *const u8, input_len: usize) -> Opti
 pub(crate) fn a2port(input: *const u8, input_len: usize) -> Option<i32> {
     let input = read_slice(input, input_len)?;
     parse_port_token(input)
+}
+
+pub(crate) fn atoi_err(input: *const u8, input_len: usize) -> Result<i32, c_int> {
+    let input = read_slice(input, input_len).ok_or(ATOI_STATUS_MISSING)?;
+    if input.is_empty() {
+        return Err(ATOI_STATUS_MISSING);
+    }
+    if input[0] == b'+' {
+        return Err(ATOI_STATUS_INVALID);
+    }
+    if input[0] == b'-' {
+        let digits = &input[1..];
+        if digits.is_empty() || !digits.iter().all(|byte| byte.is_ascii_digit()) {
+            return Err(ATOI_STATUS_INVALID);
+        }
+        let value = parse_u64_decimal(digits).ok_or(ATOI_STATUS_TOO_LARGE)?;
+        if value == 0 {
+            return Ok(0);
+        }
+        return Err(ATOI_STATUS_TOO_SMALL);
+    }
+    if !input.iter().all(|byte| byte.is_ascii_digit()) {
+        return Err(ATOI_STATUS_INVALID);
+    }
+    let value = parse_u64_decimal(input).ok_or(ATOI_STATUS_TOO_LARGE)?;
+    i32::try_from(value).map_err(|_| ATOI_STATUS_TOO_LARGE)
 }
 
 pub(crate) fn parse_convtime_double(input: *const u8, input_len: usize) -> Option<f64> {
@@ -1743,15 +1773,17 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 #[cfg(test)]
 mod tests {
     use super::{
-        a2port, argv_split_parse, argv_split_write, host_hash_write, hpdelim2_parse_in_place,
-        match_hashed_host, parse_convtime_double, parse_forward_field_in_place,
-        parse_absolute_time, parse_forward_in_place, parse_hostfile_line, parse_ipqos,
-        parse_jump, parse_pattern_interval, parse_uri, parse_user_host_path,
-        parse_user_host_port, strdelim_parse_in_place, valid_domain, valid_env_name,
-        validate_permit, ForwardParse, HostfileLineParse, JumpParse, PatternIntervalParse,
-        UriParse, UserHostPathParse, UserHostPortParse, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
-        DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID,
-        IPQOS_AF21, IPQOS_CS6, IPQOS_NONE,
+        a2port, atoi_err, argv_split_parse, argv_split_write, host_hash_write,
+        hpdelim2_parse_in_place, match_hashed_host, parse_convtime_double,
+        parse_forward_field_in_place, parse_absolute_time, parse_forward_in_place,
+        parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval, parse_uri,
+        parse_user_host_path, parse_user_host_port, strdelim_parse_in_place, valid_domain,
+        valid_env_name, validate_permit, ATOI_STATUS_INVALID, ATOI_STATUS_MISSING,
+        ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL, ForwardParse, HostfileLineParse,
+        JumpParse, PatternIntervalParse, UriParse, UserHostPathParse, UserHostPortParse,
+        DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
+        DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID, IPQOS_AF21, IPQOS_CS6,
+        IPQOS_NONE,
     };
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
@@ -2326,6 +2358,24 @@ mod tests {
         assert_eq!(a2port(b"-1".as_ptr(), 2), None);
         assert_eq!(a2port(b"65536".as_ptr(), 5), None);
         assert_eq!(a2port(b"no-such-service".as_ptr(), 15), None);
+    }
+
+    #[test]
+    fn atoi_err_handles_basic_forms() {
+        assert_eq!(atoi_err(b"0".as_ptr(), 1), Ok(0));
+        assert_eq!(atoi_err(b"22".as_ptr(), 2), Ok(22));
+        assert_eq!(atoi_err(b"-0".as_ptr(), 2), Ok(0));
+        assert_eq!(atoi_err(b"2147483647".as_ptr(), 10), Ok(i32::MAX));
+    }
+
+    #[test]
+    fn atoi_err_reports_status() {
+        assert_eq!(atoi_err(core::ptr::null(), 0), Err(ATOI_STATUS_MISSING));
+        assert_eq!(atoi_err(b"".as_ptr(), 0), Err(ATOI_STATUS_MISSING));
+        assert_eq!(atoi_err(b"bogus".as_ptr(), 5), Err(ATOI_STATUS_INVALID));
+        assert_eq!(atoi_err(b"+1".as_ptr(), 2), Err(ATOI_STATUS_INVALID));
+        assert_eq!(atoi_err(b"-1".as_ptr(), 2), Err(ATOI_STATUS_TOO_SMALL));
+        assert_eq!(atoi_err(b"2147483648".as_ptr(), 10), Err(ATOI_STATUS_TOO_LARGE));
     }
 
     #[test]
