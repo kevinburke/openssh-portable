@@ -51,14 +51,15 @@ use rsa::{
 };
 use util::{
     a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
-    parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
+    atoi_err, parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
     parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval, read_slice,
     strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit, write_prefix,
+    ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL,
     DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS,
     DOMAIN_STATUS_START_INVALID,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 33;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 34;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -68,6 +69,10 @@ const OSSH_RUST_DOMAIN_STATUS_START_INVALID: c_int = DOMAIN_STATUS_START_INVALID
 const OSSH_RUST_DOMAIN_STATUS_CONSECUTIVE_SEPARATORS: c_int =
     DOMAIN_STATUS_CONSECUTIVE_SEPARATORS;
 const OSSH_RUST_DOMAIN_STATUS_INVALID_CHARS: c_int = DOMAIN_STATUS_INVALID_CHARS;
+const OSSH_RUST_ATOI_STATUS_MISSING: c_int = ATOI_STATUS_MISSING;
+const OSSH_RUST_ATOI_STATUS_INVALID: c_int = ATOI_STATUS_INVALID;
+const OSSH_RUST_ATOI_STATUS_TOO_SMALL: c_int = ATOI_STATUS_TOO_SMALL;
+const OSSH_RUST_ATOI_STATUS_TOO_LARGE: c_int = ATOI_STATUS_TOO_LARGE;
 static BACKEND_LABEL: &[u8] = b"Rust crypto backend\0";
 
 fn store_parse_status(status: *mut c_int, value: c_int) {
@@ -795,6 +800,37 @@ pub extern "C" fn ossh_rust_a2port(
         *out = parsed;
     }
     0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_atoi_err(
+    input: *const u8,
+    input_len: usize,
+    out: *mut c_int,
+    status: *mut c_int,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match atoi_err(input, input_len) {
+        Ok(parsed) => {
+            store_parse_status(status, OSSH_RUST_PARSE_STATUS_OK);
+            unsafe {
+                *out = parsed;
+            }
+            0
+        }
+        Err(err) => {
+            let mapped = match err {
+                ATOI_STATUS_MISSING => OSSH_RUST_ATOI_STATUS_MISSING,
+                ATOI_STATUS_TOO_SMALL => OSSH_RUST_ATOI_STATUS_TOO_SMALL,
+                ATOI_STATUS_TOO_LARGE => OSSH_RUST_ATOI_STATUS_TOO_LARGE,
+                _ => OSSH_RUST_ATOI_STATUS_INVALID,
+            };
+            store_parse_status(status, mapped);
+            -1
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
