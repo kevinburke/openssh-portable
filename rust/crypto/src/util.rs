@@ -362,7 +362,12 @@ pub(crate) fn atoi_err(input: *const u8, input_len: usize) -> Result<i32, c_int>
         return Err(ATOI_STATUS_MISSING);
     }
     if input[0] == b'+' {
-        return Err(ATOI_STATUS_INVALID);
+        let digits = &input[1..];
+        if digits.is_empty() || !digits.iter().all(|byte| byte.is_ascii_digit()) {
+            return Err(ATOI_STATUS_INVALID);
+        }
+        let value = parse_u64_decimal(digits).ok_or(ATOI_STATUS_TOO_LARGE)?;
+        return i32::try_from(value).map_err(|_| ATOI_STATUS_TOO_LARGE);
     }
     if input[0] == b'-' {
         let digits = &input[1..];
@@ -2396,6 +2401,7 @@ mod tests {
     fn atoi_err_handles_basic_forms() {
         assert_eq!(atoi_err(b"0".as_ptr(), 1), Ok(0));
         assert_eq!(atoi_err(b"22".as_ptr(), 2), Ok(22));
+        assert_eq!(atoi_err(b"+1".as_ptr(), 2), Ok(1));
         assert_eq!(atoi_err(b"-0".as_ptr(), 2), Ok(0));
         assert_eq!(atoi_err(b"2147483647".as_ptr(), 10), Ok(i32::MAX));
     }
@@ -2405,7 +2411,7 @@ mod tests {
         assert_eq!(atoi_err(core::ptr::null(), 0), Err(ATOI_STATUS_MISSING));
         assert_eq!(atoi_err(b"".as_ptr(), 0), Err(ATOI_STATUS_MISSING));
         assert_eq!(atoi_err(b"bogus".as_ptr(), 5), Err(ATOI_STATUS_INVALID));
-        assert_eq!(atoi_err(b"+1".as_ptr(), 2), Err(ATOI_STATUS_INVALID));
+        assert_eq!(atoi_err(b"+".as_ptr(), 1), Err(ATOI_STATUS_INVALID));
         assert_eq!(atoi_err(b"-1".as_ptr(), 2), Err(ATOI_STATUS_TOO_SMALL));
         assert_eq!(atoi_err(b"2147483648".as_ptr(), 10), Err(ATOI_STATUS_TOO_LARGE));
     }
