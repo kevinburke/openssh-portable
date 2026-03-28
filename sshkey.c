@@ -3850,17 +3850,16 @@ sshkey_parse_private2(struct sshbuf *blob, int type, const char *passphrase,
 		    &parsed, &k, &comment);
 		if (r != 0)
 			goto out;
-		goto matched;
 	}
 #endif
 
 	/* Load the private key and comment */
-	if ((r = sshkey_private_deserialize(decrypted, &k)) != 0 ||
+	if (k == NULL &&
+	    ((r = sshkey_private_deserialize(decrypted, &k)) != 0 ||
 	    (r = sshbuf_get_cstring(decrypted, &comment, NULL)) != 0 ||
-	    (r = private2_check_padding(decrypted)) != 0)
+	    (r = private2_check_padding(decrypted)) != 0))
 		goto out;
 
- matched:
 	/* Check that the public key in the envelope matches the private key */
 	if (!sshkey_equal_public(pubkey, k)) {
 		r = SSH_ERR_INVALID_FORMAT;
