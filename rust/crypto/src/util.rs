@@ -547,6 +547,24 @@ pub(crate) fn lookup_setenv_in_list_parse(
     lookup_env_bytes(&env[..eq], envs, nenvs)
 }
 
+pub(crate) fn opt_match_parse(
+    term: *const u8,
+    term_len: usize,
+    input: *const u8,
+    input_len: usize,
+) -> Option<(usize, c_int)> {
+    let term = read_slice(term, term_len)?;
+    let input = read_slice(input, input_len)?;
+    if input.len() > term.len()
+        && input[..term.len()].eq_ignore_ascii_case(term)
+        && input[term.len()] == b'='
+    {
+        Some((term.len() + 1, 1))
+    } else {
+        Some((0, 0))
+    }
+}
+
 pub(crate) fn parse_convtime_double(input: *const u8, input_len: usize) -> Option<f64> {
     let input = read_slice(input, input_len)?;
     if input.is_empty() {
@@ -1948,8 +1966,8 @@ mod tests {
         a2port, atoi_err, argv_split_parse, argv_split_write, host_hash_write,
         hpdelim2_parse_in_place, keyword_lookup, lookup_env_in_list_parse,
         lookup_setenv_in_list_parse, match_hashed_host, multistate_lookup,
-        multistate_name, opt_flag_parse, parse_absolute_time, parse_convtime_double,
-        parse_forward_field_in_place, parse_forward_in_place,
+        multistate_name, opt_flag_parse, opt_match_parse, parse_absolute_time,
+        parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
         parse_hostfile_line, parse_ipqos, parse_jump,
         parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
         strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
@@ -2761,6 +2779,30 @@ mod tests {
         );
         assert_eq!(
             lookup_setenv_in_list_parse(b"TERM=dumb".as_ptr(), 9, core::ptr::null(), 1),
+            None
+        );
+    }
+
+    #[test]
+    fn opt_match_parse_handles_basic_forms() {
+        assert_eq!(
+            opt_match_parse(b"command".as_ptr(), 7, b"COMMAND=/bin/sh".as_ptr(), 15),
+            Some((8, 1))
+        );
+    }
+
+    #[test]
+    fn opt_match_parse_rejects_bad_forms() {
+        assert_eq!(
+            opt_match_parse(b"command".as_ptr(), 7, b"command".as_ptr(), 7),
+            Some((0, 0))
+        );
+        assert_eq!(
+            opt_match_parse(b"command".as_ptr(), 7, b"comm=/bin/sh".as_ptr(), 12),
+            Some((0, 0))
+        );
+        assert_eq!(
+            opt_match_parse(b"command".as_ptr(), 7, core::ptr::null(), 1),
             None
         );
     }

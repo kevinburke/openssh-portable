@@ -52,8 +52,8 @@ use rsa::{
 use util::{
     a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
     atoi_err, keyword_lookup, lookup_env_in_list_parse, lookup_setenv_in_list_parse,
-    multistate_lookup, multistate_name, opt_flag_parse, parse_convtime_double, parse_forward_field_in_place,
-    parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
+    multistate_lookup, multistate_name, opt_flag_parse, opt_match_parse,
+    parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
     parse_pattern_interval, read_slice, strdelim_parse_in_place, valid_domain,
     valid_env_name, validate_permit, write_prefix, ATOI_STATUS_INVALID,
     ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL,
@@ -62,7 +62,7 @@ use util::{
     KeywordEntry,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 39;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 40;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -971,6 +971,30 @@ pub extern "C" fn ossh_rust_lookup_setenv_in_list(
             unsafe {
                 *out_index = index;
                 *out_value_offset = offset;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_opt_match(
+    term: *const u8,
+    term_len: usize,
+    input: *const u8,
+    input_len: usize,
+    out_offset: *mut usize,
+    out_result: *mut c_int,
+) -> c_int {
+    if out_offset.is_null() || out_result.is_null() {
+        return -1;
+    }
+    match opt_match_parse(term, term_len, input, input_len) {
+        Some((offset, result)) => {
+            unsafe {
+                *out_offset = offset;
+                *out_result = result;
             }
             0
         }

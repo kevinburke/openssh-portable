@@ -662,6 +662,27 @@ test_lookup_setenv_in_list(void)
 }
 
 static void
+test_opt_match(void)
+{
+	const char *opts;
+
+	TEST_START("opt_match basic");
+	opts = "COMMAND=/bin/sh";
+	ASSERT_INT_EQ(opt_match(&opts, "command"), 1);
+	ASSERT_STRING_EQ(opts, "/bin/sh");
+	TEST_DONE();
+
+	TEST_START("opt_match rejects bad forms");
+	opts = "command";
+	ASSERT_INT_EQ(opt_match(&opts, "command"), 0);
+	ASSERT_STRING_EQ(opts, "command");
+	opts = "comm=/bin/sh";
+	ASSERT_INT_EQ(opt_match(&opts, "command"), 0);
+	ASSERT_STRING_EQ(opts, "comm=/bin/sh");
+	TEST_DONE();
+}
+
+static void
 test_valid_domain(void)
 {
 	char *s;
@@ -763,6 +784,7 @@ test_misc(void)
 	test_opt_flag();
 	test_lookup_env_in_list();
 	test_lookup_setenv_in_list();
+	test_opt_match();
 	test_valid_domain();
 	test_parse_pattern_interval();
 }

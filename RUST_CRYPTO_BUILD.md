@@ -111,6 +111,10 @@ Rust-backed today:
   - `lookup_env_in_list()` for `TERM` and similar inherited `name=value` lookups
   - `lookup_setenv_in_list()` for duplicate-name detection in `SetEnv`
   - shared client/server config handling of `SetEnv`-style lists
+- `opt_match()` parsing used by:
+  - `command=`, `principals=`, `permitopen=`, and similar auth-option fields
+  - `sshsig` option parsing like `namespaces=`, `valid-after=`, and `valid-before=`
+  - case-insensitive `name=` matching that advances the caller input pointer
 - client config keyword lookup used by:
   - `readconf.c` option-name parsing before per-option semantics
   - `ssh -G` and normal client config loading
@@ -275,6 +279,9 @@ used by boolean option fragments with optional `no-` prefixes.
 
 It also includes direct coverage for the shared Rust-backed env-list lookup
 helpers used by `lookup_env_in_list()` and `lookup_setenv_in_list()`.
+
+It also includes direct coverage for the shared Rust-backed `opt_match()`
+path used by `name=` style auth-option and `sshsig` field parsing.
 
 It also includes direct Rust coverage for the client keyword lookup helper and
 `ssh -G` smoke coverage for accepted and rejected client config options.
