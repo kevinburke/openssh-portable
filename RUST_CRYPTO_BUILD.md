@@ -107,6 +107,10 @@ Rust-backed today:
   - `readconf.c` option-name parsing before per-option semantics
   - `ssh -G` and normal client config loading
   - exact matching after the existing lowercase normalization step
+- server config keyword lookup used by:
+  - `servconf.c` option-name parsing before per-option semantics
+  - `sshd -T` and normal server config loading
+  - case-insensitive keyword matching with existing flag selection preserved
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers
@@ -260,6 +264,9 @@ It also includes direct coverage for the shared Rust-backed
 
 It also includes direct Rust coverage for the client keyword lookup helper and
 `ssh -G` smoke coverage for accepted and rejected client config options.
+
+It also includes `sshd -T` smoke coverage for accepted and rejected
+server config options through the Rust-backed keyword lookup path.
 
 The existing OpenSSH `test_convtime` coverage now also exercises the
 Rust-backed `convtime()` / `convtime_double()` path.

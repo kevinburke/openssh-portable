@@ -533,6 +533,16 @@ static struct {
 #undef SSHCONF_UNSUPPORTED_STRING
 #undef SSHCONF_ALIAS
 
+static size_t
+keyword_nentries(void)
+{
+	size_t i = 0;
+
+	while (keywords[i].name != NULL)
+		i++;
+	return i;
+}
+
 static struct {
 	int val;
 	char *text;
@@ -566,13 +576,20 @@ static ServerOpCodes
 parse_token(const char *cp, const char *filename,
 	    int linenum, u_int *flags)
 {
-	u_int i;
+	int opcode;
+	size_t i;
 
-	for (i = 0; keywords[i].name; i++)
-		if (strcasecmp(cp, keywords[i].name) == 0) {
-			*flags = keywords[i].flags;
-			return keywords[i].opcode;
+	if (ossh_rust_keyword_lookup((const u_char *)cp,
+	    cp == NULL ? 0 : strlen(cp),
+	    (const struct ossh_rust_keyword_entry *)keywords, keyword_nentries(),
+	    1, &opcode) == 0) {
+		for (i = 0; keywords[i].name; i++) {
+			if ((int)keywords[i].opcode == opcode) {
+				*flags = keywords[i].flags;
+				return keywords[i].opcode;
+			}
 		}
+	}
 
 	error("%s: line %d: Bad configuration option: %s",
 	    filename, linenum, cp);
