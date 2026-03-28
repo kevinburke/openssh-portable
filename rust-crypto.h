@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 25U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 29U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -297,6 +297,17 @@ int ossh_rust_mlkem768x25519_enc(const uint8_t *client_blob,
 int ossh_rust_mlkem768x25519_dec(const uint8_t *server_blob,
     size_t server_blob_len, const uint8_t *mlkem_secret,
     size_t mlkem_secret_len, const uint8_t *curve25519_secret,
+    size_t curve25519_secret_len, uint8_t *shared_hash,
+    size_t shared_hash_len);
+int ossh_rust_sntrup761x25519_keypair(uint8_t *client_blob,
+    size_t client_blob_len, uint8_t *sntrup_secret, size_t sntrup_secret_len,
+    uint8_t *curve25519_secret, size_t curve25519_secret_len);
+int ossh_rust_sntrup761x25519_enc(const uint8_t *client_blob,
+    size_t client_blob_len, uint8_t *server_blob, size_t server_blob_len,
+    uint8_t *shared_hash, size_t shared_hash_len);
+int ossh_rust_sntrup761x25519_dec(const uint8_t *server_blob,
+    size_t server_blob_len, const uint8_t *sntrup_secret,
+    size_t sntrup_secret_len, const uint8_t *curve25519_secret,
     size_t curve25519_secret_len, uint8_t *shared_hash,
     size_t shared_hash_len);
 int ossh_rust_ecdh_keypair(int curve_id, uint8_t *secret_key,
