@@ -488,6 +488,65 @@ pub(crate) fn opt_flag_parse(
     }
 }
 
+fn read_cstr_bytes<'a>(ptr: *const c_char) -> Option<&'a [u8]> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(unsafe { CStr::from_ptr(ptr) }.to_bytes())
+    }
+}
+
+fn read_ptr_slice<'a, T>(ptr: *const T, len: usize) -> Option<&'a [T]> {
+    if len == 0 {
+        Some(&[])
+    } else if ptr.is_null() {
+        None
+    } else {
+        Some(unsafe { slice::from_raw_parts(ptr, len) })
+    }
+}
+
+fn lookup_env_bytes(env: &[u8], envs: *const *const c_char, nenvs: usize) -> Option<(usize, usize)> {
+    let envs = read_ptr_slice(envs, nenvs)?;
+    for (i, entry) in envs.iter().copied().enumerate() {
+        let bytes = match read_cstr_bytes(entry) {
+            Some(bytes) => bytes,
+            None => continue,
+        };
+        let Some(eq) = bytes.iter().position(|&b| b == b'=') else {
+            continue;
+        };
+        if bytes[..eq] == *env {
+            return Some((i, eq + 1));
+        }
+    }
+    None
+}
+
+pub(crate) fn lookup_env_in_list_parse(
+    env: *const u8,
+    env_len: usize,
+    envs: *const *const c_char,
+    nenvs: usize,
+) -> Option<(usize, usize)> {
+    let env = read_slice(env, env_len)?;
+    if env.is_empty() {
+        return None;
+    }
+    lookup_env_bytes(env, envs, nenvs)
+}
+
+pub(crate) fn lookup_setenv_in_list_parse(
+    env: *const u8,
+    env_len: usize,
+    envs: *const *const c_char,
+    nenvs: usize,
+) -> Option<(usize, usize)> {
+    let env = read_slice(env, env_len)?;
+    let eq = env.iter().position(|&b| b == b'=')?;
+    lookup_env_bytes(&env[..eq], envs, nenvs)
+}
+
 pub(crate) fn parse_convtime_double(input: *const u8, input_len: usize) -> Option<f64> {
     let input = read_slice(input, input_len)?;
     if input.is_empty() {
@@ -1887,9 +1946,10 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 mod tests {
     use super::{
         a2port, atoi_err, argv_split_parse, argv_split_write, host_hash_write,
-        hpdelim2_parse_in_place, match_hashed_host, parse_convtime_double,
-        keyword_lookup, multistate_lookup, multistate_name, opt_flag_parse,
-        parse_forward_field_in_place, parse_absolute_time, parse_forward_in_place,
+        hpdelim2_parse_in_place, keyword_lookup, lookup_env_in_list_parse,
+        lookup_setenv_in_list_parse, match_hashed_host, multistate_lookup,
+        multistate_name, opt_flag_parse, parse_absolute_time, parse_convtime_double,
+        parse_forward_field_in_place, parse_forward_in_place,
         parse_hostfile_line, parse_ipqos, parse_jump,
         parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
         strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
@@ -2633,6 +2693,74 @@ mod tests {
         );
         assert_eq!(
             opt_flag_parse(b"pty".as_ptr(), 3, true, core::ptr::null(), 1),
+            None
+        );
+    }
+
+    #[test]
+    fn lookup_env_in_list_handles_basic_forms() {
+        let term = CString::new("TERM=xterm-256color").unwrap();
+        let lang = CString::new("LANG=en_US.UTF-8").unwrap();
+        let envs = [term.as_ptr(), lang.as_ptr()];
+
+        assert_eq!(
+            lookup_env_in_list_parse(b"TERM".as_ptr(), 4, envs.as_ptr(), envs.len()),
+            Some((0, 5))
+        );
+        assert_eq!(
+            lookup_env_in_list_parse(b"LANG".as_ptr(), 4, envs.as_ptr(), envs.len()),
+            Some((1, 5))
+        );
+    }
+
+    #[test]
+    fn lookup_env_in_list_rejects_bad_forms() {
+        let term = CString::new("TERM=xterm-256color").unwrap();
+        let invalid = CString::new("INVALID").unwrap();
+        let envs = [term.as_ptr(), invalid.as_ptr()];
+
+        assert_eq!(
+            lookup_env_in_list_parse(b"MISSING".as_ptr(), 7, envs.as_ptr(), envs.len()),
+            None
+        );
+        assert_eq!(lookup_env_in_list_parse(core::ptr::null(), 0, envs.as_ptr(), envs.len()), None);
+        assert_eq!(
+            lookup_env_in_list_parse(b"TERM".as_ptr(), 4, core::ptr::null(), 1),
+            None
+        );
+    }
+
+    #[test]
+    fn lookup_setenv_in_list_handles_basic_forms() {
+        let term = CString::new("TERM=xterm-256color").unwrap();
+        let lang = CString::new("LANG=en_US.UTF-8").unwrap();
+        let envs = [term.as_ptr(), lang.as_ptr()];
+
+        assert_eq!(
+            lookup_setenv_in_list_parse(b"TERM=dumb".as_ptr(), 9, envs.as_ptr(), envs.len()),
+            Some((0, 5))
+        );
+        assert_eq!(
+            lookup_setenv_in_list_parse(b"LANG=C".as_ptr(), 6, envs.as_ptr(), envs.len()),
+            Some((1, 5))
+        );
+    }
+
+    #[test]
+    fn lookup_setenv_in_list_rejects_bad_forms() {
+        let term = CString::new("TERM=xterm-256color").unwrap();
+        let envs = [term.as_ptr()];
+
+        assert_eq!(
+            lookup_setenv_in_list_parse(b"MISSING=value".as_ptr(), 13, envs.as_ptr(), envs.len()),
+            None
+        );
+        assert_eq!(
+            lookup_setenv_in_list_parse(b"invalid".as_ptr(), 7, envs.as_ptr(), envs.len()),
+            None
+        );
+        assert_eq!(
+            lookup_setenv_in_list_parse(b"TERM=dumb".as_ptr(), 9, core::ptr::null(), 1),
             None
         );
     }

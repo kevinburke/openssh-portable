@@ -107,6 +107,10 @@ Rust-backed today:
   - `no-pty`, `no-agent-forwarding`, and similar auth-option flags
   - shared config helpers that consume optional `no-` prefixes
   - boolean option fragments that advance the caller input pointer in place
+- environment-list lookup helpers used by:
+  - `lookup_env_in_list()` for `TERM` and similar inherited `name=value` lookups
+  - `lookup_setenv_in_list()` for duplicate-name detection in `SetEnv`
+  - shared client/server config handling of `SetEnv`-style lists
 - client config keyword lookup used by:
   - `readconf.c` option-name parsing before per-option semantics
   - `ssh -G` and normal client config loading
@@ -268,6 +272,9 @@ It also includes direct coverage for the shared Rust-backed
 
 It also includes direct coverage for the shared Rust-backed `opt_flag()` path
 used by boolean option fragments with optional `no-` prefixes.
+
+It also includes direct coverage for the shared Rust-backed env-list lookup
+helpers used by `lookup_env_in_list()` and `lookup_setenv_in_list()`.
 
 It also includes direct Rust coverage for the client keyword lookup helper and
 `ssh -G` smoke coverage for accepted and rejected client config options.
