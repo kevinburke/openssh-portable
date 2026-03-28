@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 30U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 31U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -213,6 +213,11 @@ struct ossh_rust_user_host_path_parse {
 	size_t path_len;
 	uint32_t has_user;
 };
+struct ossh_rust_pattern_interval_parse {
+	size_t type_len;
+	size_t interval_offset;
+	size_t interval_len;
+};
 int ossh_rust_cert_parse_body(const uint8_t *input, size_t input_len,
     struct ossh_rust_cert_body_parse *out);
 size_t ossh_rust_private2_decode_len(const uint8_t *input, size_t input_len);
@@ -262,6 +267,8 @@ int ossh_rust_valid_domain(uint8_t *input, size_t input_len, int makelower,
     int *status);
 int ossh_rust_parse_absolute_time(const uint8_t *input, size_t input_len,
     uint64_t *tp);
+int ossh_rust_parse_pattern_interval(const uint8_t *input, size_t input_len,
+    struct ossh_rust_pattern_interval_parse *out);
 void *ossh_rust_dh_group_new(int group_id);
 void *ossh_rust_dh_group_from_params(const uint8_t *generator,
     size_t generator_len, const uint8_t *modulus, size_t modulus_len);

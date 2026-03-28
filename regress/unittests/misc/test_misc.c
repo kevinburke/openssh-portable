@@ -554,6 +554,32 @@ test_valid_domain(void)
 	TEST_DONE();
 }
 
+static void
+test_parse_pattern_interval(void)
+{
+	char *type = NULL;
+	int secs = -1;
+
+	TEST_START("parse_pattern_interval basic");
+	ASSERT_INT_EQ(parse_pattern_interval("session:command=1m", &type, &secs), 0);
+	ASSERT_STRING_EQ(type, "session:command");
+	ASSERT_INT_EQ(secs, 60);
+	free(type);
+	TEST_DONE();
+
+	TEST_START("parse_pattern_interval without outputs");
+	ASSERT_INT_EQ(parse_pattern_interval("global=10", NULL, NULL), 0);
+	TEST_DONE();
+
+	TEST_START("parse_pattern_interval rejects invalid");
+	ASSERT_INT_EQ(parse_pattern_interval(NULL, &type, &secs), -1);
+	ASSERT_INT_EQ(parse_pattern_interval("session", &type, &secs), -1);
+	ASSERT_INT_EQ(parse_pattern_interval("=1m", &type, &secs), -1);
+	ASSERT_INT_EQ(parse_pattern_interval("session=", &type, &secs), -1);
+	ASSERT_INT_EQ(parse_pattern_interval("session:nope", &type, &secs), -1);
+	TEST_DONE();
+}
+
 void
 test_misc(void)
 {
@@ -570,4 +596,5 @@ test_misc(void)
 	test_parse_ipqos();
 	test_valid_env_name();
 	test_valid_domain();
+	test_parse_pattern_interval();
 }
