@@ -548,6 +548,31 @@ test_atoi_err(void)
 }
 
 static void
+test_multistate_lookup(void)
+{
+	static const struct multistate yesnoask[] = {
+		{ "yes", 1 },
+		{ "no", 0 },
+		{ "ask", 2 },
+		{ NULL, -1 }
+	};
+	int value = -1;
+
+	TEST_START("multistate lookup basic");
+	ASSERT_INT_EQ(multistate_lookup("YES", yesnoask, &value), 0);
+	ASSERT_INT_EQ(value, 1);
+	ASSERT_INT_EQ(multistate_lookup("ask", yesnoask, &value), 0);
+	ASSERT_INT_EQ(value, 2);
+	TEST_DONE();
+
+	TEST_START("multistate lookup rejects bad forms");
+	ASSERT_INT_EQ(multistate_lookup(NULL, yesnoask, &value), -1);
+	ASSERT_INT_EQ(multistate_lookup("", yesnoask, &value), -1);
+	ASSERT_INT_EQ(multistate_lookup("maybe", yesnoask, &value), -1);
+	TEST_DONE();
+}
+
+static void
 test_valid_domain(void)
 {
 	char *s;
@@ -644,6 +669,7 @@ test_misc(void)
 	test_a2port();
 	test_valid_env_name();
 	test_atoi_err();
+	test_multistate_lookup();
 	test_valid_domain();
 	test_parse_pattern_interval();
 }

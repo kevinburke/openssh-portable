@@ -1,6 +1,6 @@
-use core::ffi::c_int;
-use core::slice;
 use core::mem;
+use core::ffi::{c_char, c_int, CStr};
+use core::slice;
 use std::ffi::CString;
 
 use base64ct::{Base64, Encoding};
@@ -47,6 +47,13 @@ pub(crate) const ATOI_STATUS_MISSING: c_int = 1;
 pub(crate) const ATOI_STATUS_INVALID: c_int = 2;
 pub(crate) const ATOI_STATUS_TOO_SMALL: c_int = 3;
 pub(crate) const ATOI_STATUS_TOO_LARGE: c_int = 4;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct MultistateEntry {
+    pub key: *const c_char,
+    pub value: c_int,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ArgvSplitParse {
@@ -373,6 +380,29 @@ pub(crate) fn atoi_err(input: *const u8, input_len: usize) -> Result<i32, c_int>
     }
     let value = parse_u64_decimal(input).ok_or(ATOI_STATUS_TOO_LARGE)?;
     i32::try_from(value).map_err(|_| ATOI_STATUS_TOO_LARGE)
+}
+
+pub(crate) fn multistate_lookup(
+    input: *const u8,
+    input_len: usize,
+    entries: *const MultistateEntry,
+    nentries: usize,
+) -> Option<c_int> {
+    let input = read_slice(input, input_len)?;
+    if nentries == 0 {
+        return None;
+    }
+    let entries = unsafe { entries.as_ref() }
+        .map(|_| unsafe { slice::from_raw_parts(entries, nentries) })?;
+    entries.iter().find_map(|entry| {
+        let key = unsafe { entry.key.as_ref() }
+            .and_then(|_| unsafe { CStr::from_ptr(entry.key) }.to_str().ok())?;
+        if input.eq_ignore_ascii_case(key.as_bytes()) {
+            Some(entry.value)
+        } else {
+            None
+        }
+    })
 }
 
 pub(crate) fn parse_convtime_double(input: *const u8, input_len: usize) -> Option<f64> {
@@ -1775,16 +1805,18 @@ mod tests {
     use super::{
         a2port, atoi_err, argv_split_parse, argv_split_write, host_hash_write,
         hpdelim2_parse_in_place, match_hashed_host, parse_convtime_double,
-        parse_forward_field_in_place, parse_absolute_time, parse_forward_in_place,
-        parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval, parse_uri,
-        parse_user_host_path, parse_user_host_port, strdelim_parse_in_place, valid_domain,
-        valid_env_name, validate_permit, ATOI_STATUS_INVALID, ATOI_STATUS_MISSING,
-        ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL, ForwardParse, HostfileLineParse,
-        JumpParse, PatternIntervalParse, UriParse, UserHostPathParse, UserHostPortParse,
-        DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
+        multistate_lookup, parse_forward_field_in_place, parse_absolute_time,
+        parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
+        parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
+        strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
+        ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE,
+        ATOI_STATUS_TOO_SMALL, ForwardParse, HostfileLineParse, JumpParse,
+        MultistateEntry, PatternIntervalParse, UriParse, UserHostPathParse,
+        UserHostPortParse, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
         DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID, IPQOS_AF21, IPQOS_CS6,
         IPQOS_NONE,
     };
+    use std::ffi::CString;
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
         let parsed = argv_split_parse(input.as_ptr(), input.len(), terminate_on_comment as i32)?;
@@ -2376,6 +2408,44 @@ mod tests {
         assert_eq!(atoi_err(b"+1".as_ptr(), 2), Err(ATOI_STATUS_INVALID));
         assert_eq!(atoi_err(b"-1".as_ptr(), 2), Err(ATOI_STATUS_TOO_SMALL));
         assert_eq!(atoi_err(b"2147483648".as_ptr(), 10), Err(ATOI_STATUS_TOO_LARGE));
+    }
+
+    #[test]
+    fn multistate_lookup_handles_basic_forms() {
+        let yes = CString::new("yes").unwrap();
+        let no = CString::new("no").unwrap();
+        let entries = [
+            MultistateEntry {
+                key: yes.as_ptr(),
+                value: 1,
+            },
+            MultistateEntry {
+                key: no.as_ptr(),
+                value: 0,
+            },
+        ];
+
+        assert_eq!(
+            multistate_lookup(b"YES".as_ptr(), 3, entries.as_ptr(), entries.len()),
+            Some(1)
+        );
+        assert_eq!(
+            multistate_lookup(b"no".as_ptr(), 2, entries.as_ptr(), entries.len()),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn multistate_lookup_rejects_bad_forms() {
+        let yes = CString::new("yes").unwrap();
+        let entries = [MultistateEntry {
+            key: yes.as_ptr(),
+            value: 1,
+        }];
+
+        assert_eq!(multistate_lookup(core::ptr::null(), 0, entries.as_ptr(), 1), None);
+        assert_eq!(multistate_lookup(b"maybe".as_ptr(), 5, entries.as_ptr(), 1), None);
+        assert_eq!(multistate_lookup(b"yes".as_ptr(), 3, core::ptr::null(), 1), None);
     }
 
     #[test]
