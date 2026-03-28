@@ -2,11 +2,14 @@ use core::ffi::c_int;
 use core::slice;
 
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
+use fips203::ml_kem_768;
+use fips203::traits::{Decaps, Encaps, KeyGen, SerDes};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use p256::{PublicKey as P256PublicKey, SecretKey as P256SecretKey};
 use p384::{PublicKey as P384PublicKey, SecretKey as P384SecretKey};
 use p521::{PublicKey as P521PublicKey, SecretKey as P521SecretKey};
-use rand_core::OsRng;
+use rand_core::{OsRng, RngCore};
+use sha2::{Digest, Sha256};
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 
 use crate::util::{read_array, read_slice, write_prefix, SshWireReader};
@@ -20,6 +23,12 @@ const ED25519_PUBLIC_KEY_LENGTH: usize = 32;
 const ED25519_SECRET_KEY_LENGTH: usize = 64;
 const ED25519_SIGNATURE_LENGTH: usize = 64;
 const CURVE25519_KEY_LENGTH: usize = 32;
+const MLKEM768_PUBLIC_KEY_LENGTH: usize = ml_kem_768::EK_LEN;
+const MLKEM768_SECRET_KEY_LENGTH: usize = ml_kem_768::DK_LEN;
+const MLKEM768_CIPHERTEXT_LENGTH: usize = ml_kem_768::CT_LEN;
+const MLKEM768_SHARED_SECRET_LENGTH: usize = 32;
+const MLKEM768X25519_CLIENT_BLOB_LENGTH: usize = MLKEM768_PUBLIC_KEY_LENGTH + CURVE25519_KEY_LENGTH;
+const MLKEM768X25519_SERVER_BLOB_LENGTH: usize = MLKEM768_CIPHERTEXT_LENGTH + CURVE25519_KEY_LENGTH;
 const ECDH_NISTP256_SECRET_LENGTH: usize = 32;
 const ECDH_NISTP256_PUBLIC_LENGTH: usize = 65;
 const ECDH_NISTP384_SECRET_LENGTH: usize = 48;
@@ -276,6 +285,183 @@ pub(crate) fn curve25519_shared_secret(
     write_prefix(shared_secret, shared_secret_len, &shared)
 }
 
+fn checked_x25519_shared_secret(secret_key: &[u8], public_key: &[u8]) -> Result<[u8; 32], ()> {
+    if secret_key.len() != CURVE25519_KEY_LENGTH || public_key.len() != CURVE25519_KEY_LENGTH {
+        return Err(());
+    }
+    let mut secret = [0u8; CURVE25519_KEY_LENGTH];
+    secret.copy_from_slice(secret_key);
+    let mut public = [0u8; CURVE25519_KEY_LENGTH];
+    public.copy_from_slice(public_key);
+    let shared = x25519(secret, public);
+    if shared.iter().all(|byte| *byte == 0) {
+        return Err(());
+    }
+    Ok(shared)
+}
+
+fn hash_mlkem768x25519_shared(mlkem_shared: &[u8], x25519_shared: &[u8], out: &mut [u8]) -> Result<(), ()> {
+    if mlkem_shared.len() != MLKEM768_SHARED_SECRET_LENGTH
+        || x25519_shared.len() != CURVE25519_KEY_LENGTH
+        || out.len() != 32
+    {
+        return Err(());
+    }
+    let mut digest = Sha256::new();
+    digest.update(mlkem_shared);
+    digest.update(x25519_shared);
+    out.copy_from_slice(&digest.finalize());
+    Ok(())
+}
+
+pub(crate) fn mlkem768x25519_keypair(
+    client_blob: *mut u8,
+    client_blob_len: usize,
+    mlkem_secret: *mut u8,
+    mlkem_secret_len: usize,
+    curve25519_secret: *mut u8,
+    curve25519_secret_len: usize,
+) -> c_int {
+    if client_blob.is_null() || mlkem_secret.is_null() || curve25519_secret.is_null() {
+        return -1;
+    }
+    if client_blob_len != MLKEM768X25519_CLIENT_BLOB_LENGTH
+        || mlkem_secret_len != MLKEM768_SECRET_KEY_LENGTH
+        || curve25519_secret_len != CURVE25519_KEY_LENGTH
+    {
+        return -1;
+    }
+    let client_blob = unsafe { slice::from_raw_parts_mut(client_blob, client_blob_len) };
+    let mlkem_secret = unsafe { slice::from_raw_parts_mut(mlkem_secret, mlkem_secret_len) };
+    let curve25519_secret =
+        unsafe { slice::from_raw_parts_mut(curve25519_secret, curve25519_secret_len) };
+
+    let (encaps_key, decaps_key): (ml_kem_768::EncapsKey, ml_kem_768::DecapsKey) =
+        match ml_kem_768::KG::try_keygen_with_rng(&mut OsRng) {
+        Ok(pair) => pair,
+        Err(_) => return -1,
+    };
+    let public_bytes = encaps_key.into_bytes();
+    let secret_bytes = decaps_key.into_bytes();
+    client_blob[..MLKEM768_PUBLIC_KEY_LENGTH].copy_from_slice(&public_bytes);
+    mlkem_secret.copy_from_slice(&secret_bytes);
+
+    OsRng.fill_bytes(curve25519_secret);
+    let curve_public = x25519(
+        curve25519_secret.try_into().expect("curve25519 secret length"),
+        X25519_BASEPOINT_BYTES,
+    );
+    client_blob[MLKEM768_PUBLIC_KEY_LENGTH..].copy_from_slice(&curve_public);
+    0
+}
+
+pub(crate) fn mlkem768x25519_enc(
+    client_blob: *const u8,
+    client_blob_len: usize,
+    server_blob: *mut u8,
+    server_blob_len: usize,
+    shared_hash: *mut u8,
+    shared_hash_len: usize,
+) -> c_int {
+    if client_blob.is_null() || server_blob.is_null() || shared_hash.is_null() {
+        return -1;
+    }
+    if client_blob_len != MLKEM768X25519_CLIENT_BLOB_LENGTH
+        || server_blob_len != MLKEM768X25519_SERVER_BLOB_LENGTH
+        || shared_hash_len != 32
+    {
+        return -1;
+    }
+    let client_blob = unsafe { slice::from_raw_parts(client_blob, client_blob_len) };
+    let server_blob = unsafe { slice::from_raw_parts_mut(server_blob, server_blob_len) };
+    let shared_hash = unsafe { slice::from_raw_parts_mut(shared_hash, shared_hash_len) };
+    let (mlkem_public, curve25519_public) = client_blob.split_at(MLKEM768_PUBLIC_KEY_LENGTH);
+
+    let encaps_key: ml_kem_768::EncapsKey =
+        match ml_kem_768::EncapsKey::try_from_bytes(mlkem_public.try_into().unwrap()) {
+        Ok(key) => key,
+        Err(_) => return -1,
+    };
+    let (mlkem_shared, ciphertext): (fips203::SharedSecretKey, ml_kem_768::CipherText) =
+        match encaps_key.try_encaps_with_rng(&mut OsRng) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
+    let ciphertext_bytes = ciphertext.into_bytes();
+    server_blob[..MLKEM768_CIPHERTEXT_LENGTH].copy_from_slice(&ciphertext_bytes);
+
+    let (_, server_curve_secret) = {
+        let mut secret = [0u8; CURVE25519_KEY_LENGTH];
+        OsRng.fill_bytes(&mut secret);
+        let public = x25519(secret, X25519_BASEPOINT_BYTES);
+        (public, secret)
+    };
+    let server_curve_public = x25519(server_curve_secret, X25519_BASEPOINT_BYTES);
+    server_blob[MLKEM768_CIPHERTEXT_LENGTH..].copy_from_slice(&server_curve_public);
+
+    let x25519_shared = match checked_x25519_shared_secret(&server_curve_secret, curve25519_public) {
+        Ok(shared) => shared,
+        Err(_) => return -1,
+    };
+    if hash_mlkem768x25519_shared(&mlkem_shared.into_bytes(), &x25519_shared, shared_hash).is_err() {
+        return -1;
+    }
+    0
+}
+
+pub(crate) fn mlkem768x25519_dec(
+    server_blob: *const u8,
+    server_blob_len: usize,
+    mlkem_secret: *const u8,
+    mlkem_secret_len: usize,
+    curve25519_secret: *const u8,
+    curve25519_secret_len: usize,
+    shared_hash: *mut u8,
+    shared_hash_len: usize,
+) -> c_int {
+    if server_blob.is_null()
+        || mlkem_secret.is_null()
+        || curve25519_secret.is_null()
+        || shared_hash.is_null()
+    {
+        return -1;
+    }
+    if server_blob_len != MLKEM768X25519_SERVER_BLOB_LENGTH
+        || mlkem_secret_len != MLKEM768_SECRET_KEY_LENGTH
+        || curve25519_secret_len != CURVE25519_KEY_LENGTH
+        || shared_hash_len != 32
+    {
+        return -1;
+    }
+    let server_blob = unsafe { slice::from_raw_parts(server_blob, server_blob_len) };
+    let mlkem_secret = unsafe { slice::from_raw_parts(mlkem_secret, mlkem_secret_len) };
+    let curve25519_secret = unsafe { slice::from_raw_parts(curve25519_secret, curve25519_secret_len) };
+    let shared_hash = unsafe { slice::from_raw_parts_mut(shared_hash, shared_hash_len) };
+    let (ciphertext, server_curve_public) = server_blob.split_at(MLKEM768_CIPHERTEXT_LENGTH);
+
+    let decaps_key: ml_kem_768::DecapsKey =
+        match ml_kem_768::DecapsKey::try_from_bytes(mlkem_secret.try_into().unwrap()) {
+        Ok(key) => key,
+        Err(_) => return -1,
+    };
+    let ciphertext = match ml_kem_768::CipherText::try_from_bytes(ciphertext.try_into().unwrap()) {
+        Ok(ct) => ct,
+        Err(_) => return -1,
+    };
+    let mlkem_shared: fips203::SharedSecretKey = match decaps_key.try_decaps(&ciphertext) {
+        Ok(shared) => shared,
+        Err(_) => return -1,
+    };
+    let x25519_shared = match checked_x25519_shared_secret(curve25519_secret, server_curve_public) {
+        Ok(shared) => shared,
+        Err(_) => return -1,
+    };
+    if hash_mlkem768x25519_shared(&mlkem_shared.into_bytes(), &x25519_shared, shared_hash).is_err() {
+        return -1;
+    }
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use ed25519_dalek::Signer;
@@ -283,8 +469,12 @@ mod tests {
 
     use super::{
         ed25519_parse_public_blob, ed25519_public_from_seed, ed25519_sign, ed25519_verify,
-        curve25519_public_from_secret, curve25519_shared_secret, x25519, EcdhCurve, OSSH_RUST_ECDH_NISTP256,
-        OSSH_RUST_ECDH_NISTP384, OSSH_RUST_ECDH_NISTP521, Signature, SigningKey, VerifyingKey,
+        curve25519_public_from_secret, curve25519_shared_secret, mlkem768x25519_dec,
+        mlkem768x25519_enc, mlkem768x25519_keypair, x25519, EcdhCurve,
+        OSSH_RUST_ECDH_NISTP256, OSSH_RUST_ECDH_NISTP384, OSSH_RUST_ECDH_NISTP521,
+        CURVE25519_KEY_LENGTH,
+        Signature, SigningKey, VerifyingKey, MLKEM768_SECRET_KEY_LENGTH,
+        MLKEM768X25519_CLIENT_BLOB_LENGTH, MLKEM768X25519_SERVER_BLOB_LENGTH,
         X25519_BASEPOINT_BYTES,
     };
 
@@ -578,5 +768,52 @@ mod tests {
         assert_nist_ecdh_invalid_public_rejected(OSSH_RUST_ECDH_NISTP256, 32, 65, 32);
         assert_nist_ecdh_invalid_public_rejected(OSSH_RUST_ECDH_NISTP384, 48, 97, 48);
         assert_nist_ecdh_invalid_public_rejected(OSSH_RUST_ECDH_NISTP521, 66, 133, 66);
+    }
+
+    #[test]
+    fn mlkem768x25519_roundtrip() {
+        let mut client_blob = [0u8; MLKEM768X25519_CLIENT_BLOB_LENGTH];
+        let mut client_mlkem_secret = [0u8; MLKEM768_SECRET_KEY_LENGTH];
+        let mut client_curve_secret = [0u8; CURVE25519_KEY_LENGTH];
+        let mut server_blob = [0u8; MLKEM768X25519_SERVER_BLOB_LENGTH];
+        let mut server_shared = [0u8; 32];
+        let mut client_shared = [0u8; 32];
+
+        assert_eq!(
+            mlkem768x25519_keypair(
+                client_blob.as_mut_ptr(),
+                client_blob.len(),
+                client_mlkem_secret.as_mut_ptr(),
+                client_mlkem_secret.len(),
+                client_curve_secret.as_mut_ptr(),
+                client_curve_secret.len(),
+            ),
+            0
+        );
+        assert_eq!(
+            mlkem768x25519_enc(
+                client_blob.as_ptr(),
+                client_blob.len(),
+                server_blob.as_mut_ptr(),
+                server_blob.len(),
+                server_shared.as_mut_ptr(),
+                server_shared.len(),
+            ),
+            0
+        );
+        assert_eq!(
+            mlkem768x25519_dec(
+                server_blob.as_ptr(),
+                server_blob.len(),
+                client_mlkem_secret.as_ptr(),
+                client_mlkem_secret.len(),
+                client_curve_secret.as_ptr(),
+                client_curve_secret.len(),
+                client_shared.as_mut_ptr(),
+                client_shared.len(),
+            ),
+            0
+        );
+        assert_eq!(client_shared, server_shared);
     }
 }
