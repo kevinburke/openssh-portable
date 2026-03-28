@@ -52,17 +52,17 @@ use rsa::{
 use util::{
     a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
     atoi_err, keyword_lookup, lookup_env_in_list_parse, lookup_setenv_in_list_parse,
-    multistate_lookup, multistate_name, opt_flag_parse, opt_match_parse,
-    parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
-    parse_pattern_interval, read_slice, strdelim_parse_in_place, valid_domain,
-    valid_env_name, validate_permit, write_prefix, ATOI_STATUS_INVALID,
+    multistate_lookup, multistate_name, opt_dequote_parse, opt_dequote_write,
+    opt_flag_parse, opt_match_parse, parse_convtime_double, parse_forward_field_in_place,
+    parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval,
+    read_slice, strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit, write_prefix, ATOI_STATUS_INVALID,
     ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL,
     DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
-    DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID, MultistateEntry,
-    KeywordEntry,
+    DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID, KeywordEntry,
+    MultistateEntry, OPT_DEQUOTE_MISSING_END, OPT_DEQUOTE_MISSING_START,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 40;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 41;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -76,6 +76,8 @@ const OSSH_RUST_ATOI_STATUS_MISSING: c_int = ATOI_STATUS_MISSING;
 const OSSH_RUST_ATOI_STATUS_INVALID: c_int = ATOI_STATUS_INVALID;
 const OSSH_RUST_ATOI_STATUS_TOO_SMALL: c_int = ATOI_STATUS_TOO_SMALL;
 const OSSH_RUST_ATOI_STATUS_TOO_LARGE: c_int = ATOI_STATUS_TOO_LARGE;
+const OSSH_RUST_OPT_DEQUOTE_MISSING_START: c_int = OPT_DEQUOTE_MISSING_START;
+const OSSH_RUST_OPT_DEQUOTE_MISSING_END: c_int = OPT_DEQUOTE_MISSING_END;
 static BACKEND_LABEL: &[u8] = b"Rust crypto backend\0";
 
 fn store_parse_status(status: *mut c_int, value: c_int) {
@@ -294,6 +296,12 @@ pub struct RustPatternIntervalParse {
     type_len: usize,
     interval_offset: usize,
     interval_len: usize,
+}
+
+#[repr(C)]
+pub struct RustOptDequoteParse {
+    output_len: usize,
+    next_offset: usize,
 }
 
 #[unsafe(no_mangle)]
@@ -999,6 +1007,52 @@ pub extern "C" fn ossh_rust_opt_match(
             0
         }
         None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_opt_dequote_parse(
+    input: *const u8,
+    input_len: usize,
+    out: *mut RustOptDequoteParse,
+    status: *mut c_int,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match opt_dequote_parse(input, input_len) {
+        Ok(parsed) => {
+            store_parse_status(status, OSSH_RUST_PARSE_STATUS_OK);
+            unsafe {
+                *out = RustOptDequoteParse {
+                    output_len: parsed.output_len,
+                    next_offset: parsed.next_offset,
+                };
+            }
+            0
+        }
+        Err(err) => {
+            let mapped = match err {
+                OPT_DEQUOTE_MISSING_START => OSSH_RUST_OPT_DEQUOTE_MISSING_START,
+                _ => OSSH_RUST_OPT_DEQUOTE_MISSING_END,
+            };
+            store_parse_status(status, mapped);
+            -1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_opt_dequote_write(
+    input: *const u8,
+    input_len: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if opt_dequote_write(input, input_len, out, out_len).is_some() {
+        0
+    } else {
+        -1
     }
 }
 

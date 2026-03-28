@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 40U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 41U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -28,6 +28,8 @@ extern "C" {
 #define OSSH_RUST_ATOI_STATUS_INVALID 2
 #define OSSH_RUST_ATOI_STATUS_TOO_SMALL 3
 #define OSSH_RUST_ATOI_STATUS_TOO_LARGE 4
+#define OSSH_RUST_OPT_DEQUOTE_MISSING_START 1
+#define OSSH_RUST_OPT_DEQUOTE_MISSING_END 2
 
 struct ossh_rust_multistate_entry {
 	const char *key;
@@ -37,6 +39,10 @@ struct ossh_rust_multistate_entry {
 struct ossh_rust_keyword_entry {
 	const char *key;
 	int value;
+};
+struct ossh_rust_opt_dequote_parse {
+	size_t output_len;
+	size_t next_offset;
 };
 #define OSSH_RUST_PRIVATE2_KDF_NONE 0
 #define OSSH_RUST_PRIVATE2_KDF_BCRYPT 1
@@ -300,6 +306,10 @@ int ossh_rust_lookup_setenv_in_list(const uint8_t *env, size_t env_len,
 int ossh_rust_opt_match(const uint8_t *term, size_t term_len,
     const uint8_t *input, size_t input_len, size_t *out_offset,
     int *out_result);
+int ossh_rust_opt_dequote_parse(const uint8_t *input, size_t input_len,
+    struct ossh_rust_opt_dequote_parse *out, int *status);
+int ossh_rust_opt_dequote_write(const uint8_t *input, size_t input_len,
+    uint8_t *out, size_t out_len);
 int ossh_rust_valid_env_name(const uint8_t *input, size_t input_len);
 int ossh_rust_valid_domain(uint8_t *input, size_t input_len, int makelower,
     int *status);
