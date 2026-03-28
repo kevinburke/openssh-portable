@@ -51,15 +51,22 @@ use rsa::{
 };
 use util::{
     argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
-    parse_forward_field_in_place, parse_forward_in_place, parse_hostfile_line, parse_jump,
-    read_slice, strdelim_parse_in_place, validate_permit, write_prefix,
+    parse_forward_field_in_place, parse_forward_in_place, parse_hostfile_line, parse_ipqos,
+    parse_jump, read_slice, strdelim_parse_in_place, valid_domain, valid_env_name,
+    validate_permit, write_prefix, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
+    DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 29;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 30;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
 const OSSH_RUST_PARSE_STATUS_EC_CURVE_MISMATCH: c_int = 3;
+const OSSH_RUST_DOMAIN_STATUS_EMPTY: c_int = DOMAIN_STATUS_EMPTY;
+const OSSH_RUST_DOMAIN_STATUS_START_INVALID: c_int = DOMAIN_STATUS_START_INVALID;
+const OSSH_RUST_DOMAIN_STATUS_CONSECUTIVE_SEPARATORS: c_int =
+    DOMAIN_STATUS_CONSECUTIVE_SEPARATORS;
+const OSSH_RUST_DOMAIN_STATUS_INVALID_CHARS: c_int = DOMAIN_STATUS_INVALID_CHARS;
 static BACKEND_LABEL: &[u8] = b"Rust crypto backend\0";
 
 fn store_parse_status(status: *mut c_int, value: c_int) {
@@ -743,6 +750,60 @@ pub extern "C" fn ossh_rust_validate_permit(
         0
     } else {
         -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_parse_ipqos(
+    input: *const u8,
+    input_len: usize,
+    out: *mut c_int,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(parsed) = parse_ipqos(input, input_len) else {
+        return -1;
+    };
+    unsafe {
+        *out = parsed;
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_valid_env_name(input: *const u8, input_len: usize) -> c_int {
+    if valid_env_name(input, input_len) {
+        1
+    } else {
+        0
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_valid_domain(
+    input: *mut u8,
+    input_len: usize,
+    makelower: c_int,
+    status: *mut c_int,
+) -> c_int {
+    match valid_domain(input, input_len, makelower) {
+        Ok(()) => {
+            store_parse_status(status, OSSH_RUST_PARSE_STATUS_OK);
+            0
+        }
+        Err(err) => {
+            let mapped = match err {
+                DOMAIN_STATUS_EMPTY => OSSH_RUST_DOMAIN_STATUS_EMPTY,
+                DOMAIN_STATUS_START_INVALID => OSSH_RUST_DOMAIN_STATUS_START_INVALID,
+                DOMAIN_STATUS_CONSECUTIVE_SEPARATORS => {
+                    OSSH_RUST_DOMAIN_STATUS_CONSECUTIVE_SEPARATORS
+                }
+                _ => OSSH_RUST_DOMAIN_STATUS_INVALID_CHARS,
+            };
+            store_parse_status(status, mapped);
+            -1
+        }
     }
 }
 

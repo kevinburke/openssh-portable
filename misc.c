@@ -2176,6 +2176,15 @@ static const struct {
 int
 parse_ipqos(const char *cp)
 {
+#ifdef WITH_RUST_CRYPTO
+	int val;
+
+	if (cp == NULL)
+		return -1;
+	if (ossh_rust_parse_ipqos((const u_char *)cp, strlen(cp), &val) != 0)
+		return -1;
+	return val;
+#else
 	const char *errstr;
 	u_int i;
 	int val;
@@ -2191,6 +2200,7 @@ parse_ipqos(const char *cp)
 	if (errstr)
 		return -1;
 	return val;
+#endif
 }
 
 const char *
@@ -2766,6 +2776,38 @@ child_set_env(char ***envp, u_int *envsizep, const char *name,
 int
 valid_domain(char *name, int makelower, const char **errstr)
 {
+#ifdef WITH_RUST_CRYPTO
+	size_t l = strlen(name);
+	int status = OSSH_RUST_PARSE_STATUS_OK;
+	static char errbuf[256];
+
+	if (ossh_rust_valid_domain((u_char *)name, l, makelower, &status) == 0) {
+		if (errstr != NULL)
+			*errstr = NULL;
+		return 1;
+	}
+	switch (status) {
+	case OSSH_RUST_DOMAIN_STATUS_EMPTY:
+		strlcpy(errbuf, "empty domain name", sizeof(errbuf));
+		break;
+	case OSSH_RUST_DOMAIN_STATUS_START_INVALID:
+		snprintf(errbuf, sizeof(errbuf), "domain name \"%.100s\" "
+		    "starts with invalid character", name);
+		break;
+	case OSSH_RUST_DOMAIN_STATUS_CONSECUTIVE_SEPARATORS:
+		snprintf(errbuf, sizeof(errbuf), "domain name "
+		    "\"%.100s\" contains consecutive separators", name);
+		break;
+	case OSSH_RUST_DOMAIN_STATUS_INVALID_CHARS:
+	default:
+		snprintf(errbuf, sizeof(errbuf), "domain name "
+		    "\"%.100s\" contains invalid characters", name);
+		break;
+	}
+	if (errstr != NULL)
+		*errstr = errbuf;
+	return 0;
+#else
 	size_t i, l = strlen(name);
 	u_char c, last = '\0';
 	static char errbuf[256];
@@ -2806,6 +2848,7 @@ bad:
 	if (errstr != NULL)
 		*errstr = errbuf;
 	return 0;
+#endif
 }
 
 /*
@@ -2816,6 +2859,11 @@ bad:
 int
 valid_env_name(const char *name)
 {
+#ifdef WITH_RUST_CRYPTO
+	if (name == NULL)
+		return 0;
+	return ossh_rust_valid_env_name((const u_char *)name, strlen(name));
+#else
 	const char *cp;
 
 	if (name[0] == '\0')
@@ -2825,6 +2873,7 @@ valid_env_name(const char *name)
 			return 0;
 	}
 	return 1;
+#endif
 }
 
 const char *
