@@ -485,6 +485,28 @@ test_parse_ipqos(void)
 }
 
 static void
+test_a2port(void)
+{
+	TEST_START("a2port numeric");
+	ASSERT_INT_EQ(a2port("0"), 0);
+	ASSERT_INT_EQ(a2port("22"), 22);
+	ASSERT_INT_EQ(a2port("65535"), 65535);
+	TEST_DONE();
+
+	TEST_START("a2port service names");
+	ASSERT_INT_EQ(a2port("smtp"), 25);
+	TEST_DONE();
+
+	TEST_START("a2port rejects invalid");
+	ASSERT_INT_EQ(a2port(NULL), -1);
+	ASSERT_INT_EQ(a2port(""), -1);
+	ASSERT_INT_EQ(a2port("-1"), -1);
+	ASSERT_INT_EQ(a2port("65536"), -1);
+	ASSERT_INT_EQ(a2port("no-such-service"), -1);
+	TEST_DONE();
+}
+
+static void
 test_valid_env_name(void)
 {
 	TEST_START("valid_env_name accepts basic");
@@ -594,6 +616,7 @@ test_misc(void)
 	test_stringlist();
 	test_skip_space();
 	test_parse_ipqos();
+	test_a2port();
 	test_valid_env_name();
 	test_valid_domain();
 	test_parse_pattern_interval();
