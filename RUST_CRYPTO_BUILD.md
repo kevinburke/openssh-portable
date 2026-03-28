@@ -99,6 +99,10 @@ Rust-backed today:
   - repeated client config enums in `readconf.c`
   - repeated server config enums in `servconf.c`
   - case-insensitive matching of `yes`/`no`/`ask`/mode-style config values
+- shared multistate option formatting used by:
+  - `ssh -G` style client config output
+  - `sshd -T` style server config output
+  - reverse mapping of enum values back to canonical config strings
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers
@@ -246,6 +250,9 @@ error-string mapping used by shared config numeric parsing.
 
 It now also includes direct coverage for the shared Rust-backed
 `multistate_lookup()` path used by repeated client/server config enums.
+
+It also includes direct coverage for the shared Rust-backed
+`multistate_name()` path used by repeated client/server config formatting.
 
 The existing OpenSSH `test_convtime` coverage now also exercises the
 Rust-backed `convtime()` / `convtime_double()` path.
