@@ -83,6 +83,12 @@ Rust-backed today:
   - certificate validity windows
   - `sshsig` `valid-after` / `valid-before` options
   - `ssh-keygen -V` time parsing
+- `convtime()` / `convtime_double()` parsing used by:
+  - `ConnectTimeout`, `ForwardX11Timeout`, `ControlPersist`, and similar
+    duration-valued config options
+  - `ClientAliveInterval` / `UnusedConnectionTimeout` and related server-side
+    duration parsing
+  - `ChannelTimeout` interval decoding layered above the shared duration parser
 - shared config validation helpers used by:
   - `parse_ipqos()` for `IPQoS`
   - `valid_env_name()` for legacy `$ENV` option handling and auth env lists
@@ -228,6 +234,9 @@ replacements through:
 
 That `test_misc` coverage now also includes the Rust-backed `a2port()` path
 for numeric and service-name port resolution.
+
+The existing OpenSSH `test_convtime` coverage now also exercises the
+Rust-backed `convtime()` / `convtime_double()` path.
 
 It also exercises the Rust-backed hostfile parser path through:
 
