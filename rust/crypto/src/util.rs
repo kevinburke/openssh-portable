@@ -47,6 +47,8 @@ pub(crate) const ATOI_STATUS_MISSING: c_int = 1;
 pub(crate) const ATOI_STATUS_INVALID: c_int = 2;
 pub(crate) const ATOI_STATUS_TOO_SMALL: c_int = 3;
 pub(crate) const ATOI_STATUS_TOO_LARGE: c_int = 4;
+pub(crate) const OPT_DEQUOTE_MISSING_START: c_int = 1;
+pub(crate) const OPT_DEQUOTE_MISSING_END: c_int = 2;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -66,6 +68,12 @@ pub struct KeywordEntry {
 pub(crate) struct ArgvSplitParse {
     pub(crate) argc: usize,
     pub(crate) packed_len: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct OptDequoteParse {
+    pub(crate) output_len: usize,
+    pub(crate) next_offset: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -563,6 +571,59 @@ pub(crate) fn opt_match_parse(
     } else {
         Some((0, 0))
     }
+}
+
+pub(crate) fn opt_dequote_parse(
+    input: *const u8,
+    input_len: usize,
+) -> Result<OptDequoteParse, c_int> {
+    let input = read_slice(input, input_len).ok_or(OPT_DEQUOTE_MISSING_START)?;
+    if input.first().copied() != Some(b'"') {
+        return Err(OPT_DEQUOTE_MISSING_START);
+    }
+
+    let mut i = 1usize;
+    let mut output_len = 0usize;
+    while i < input.len() {
+        if input[i] == b'"' {
+            return Ok(OptDequoteParse {
+                output_len,
+                next_offset: i + 1,
+            });
+        }
+        if input[i] == b'\\' && input.get(i + 1) == Some(&b'"') {
+            i += 1;
+        }
+        output_len += 1;
+        i += 1;
+    }
+    Err(OPT_DEQUOTE_MISSING_END)
+}
+
+pub(crate) fn opt_dequote_write(
+    input: *const u8,
+    input_len: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let input = read_slice(input, input_len)?;
+    let out = read_slice_mut(out, out_len)?;
+    let parsed = opt_dequote_parse(input.as_ptr(), input.len()).ok()?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+
+    let mut i = 1usize;
+    let mut j = 0usize;
+    while i < parsed.next_offset - 1 {
+        if input[i] == b'\\' && input.get(i + 1) == Some(&b'"') {
+            i += 1;
+        }
+        out[j] = input[i];
+        j += 1;
+        i += 1;
+    }
+    Some(())
 }
 
 pub(crate) fn parse_convtime_double(input: *const u8, input_len: usize) -> Option<f64> {
@@ -1966,14 +2027,15 @@ mod tests {
         a2port, atoi_err, argv_split_parse, argv_split_write, host_hash_write,
         hpdelim2_parse_in_place, keyword_lookup, lookup_env_in_list_parse,
         lookup_setenv_in_list_parse, match_hashed_host, multistate_lookup,
-        multistate_name, opt_flag_parse, opt_match_parse, parse_absolute_time,
-        parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
-        parse_hostfile_line, parse_ipqos, parse_jump,
+        multistate_name, opt_dequote_parse, opt_dequote_write, opt_flag_parse,
+        opt_match_parse, parse_absolute_time, parse_convtime_double,
+        parse_forward_field_in_place, parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
         parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
         strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
         ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE,
         ATOI_STATUS_TOO_SMALL, ForwardParse, HostfileLineParse, JumpParse,
-        KeywordEntry, MultistateEntry, PatternIntervalParse, UriParse,
+        KeywordEntry, MultistateEntry, OptDequoteParse, OPT_DEQUOTE_MISSING_END,
+        OPT_DEQUOTE_MISSING_START, PatternIntervalParse, UriParse,
         UserHostPathParse, UserHostPortParse, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
         DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID,
         IPQOS_AF21, IPQOS_CS6, IPQOS_NONE,
@@ -2805,6 +2867,34 @@ mod tests {
             opt_match_parse(b"command".as_ptr(), 7, core::ptr::null(), 1),
             None
         );
+    }
+
+    #[test]
+    fn opt_dequote_parse_handles_basic_forms() {
+        assert_eq!(
+            opt_dequote_parse(br#""hello\"world"tail"#.as_ptr(), 18),
+            Ok(OptDequoteParse {
+                output_len: 11,
+                next_offset: 14,
+            })
+        );
+    }
+
+    #[test]
+    fn opt_dequote_parse_rejects_bad_forms() {
+        assert_eq!(opt_dequote_parse(b"plain".as_ptr(), 5), Err(OPT_DEQUOTE_MISSING_START));
+        assert_eq!(opt_dequote_parse(br#""unterminated"#.as_ptr(), 13), Err(OPT_DEQUOTE_MISSING_END));
+    }
+
+    #[test]
+    fn opt_dequote_write_handles_escaped_quotes() {
+        let input = br#""hello\"world"tail"#;
+        let mut out = [0u8; 11];
+        assert_eq!(
+            opt_dequote_write(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len()),
+            Some(())
+        );
+        assert_eq!(&out, b"hello\"world");
     }
 
     #[test]

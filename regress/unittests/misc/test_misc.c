@@ -683,6 +683,39 @@ test_opt_match(void)
 }
 
 static void
+test_opt_dequote(void)
+{
+	const char *opts, *errstr = "sentinel";
+	char *value;
+
+	TEST_START("opt_dequote basic");
+	opts = "\"hello\\\"world\"tail";
+	value = opt_dequote(&opts, &errstr);
+	ASSERT_PTR_NE(value, NULL);
+	ASSERT_STRING_EQ(value, "hello\"world");
+	ASSERT_STRING_EQ(opts, "tail");
+	ASSERT_PTR_EQ(errstr, NULL);
+	free(value);
+	TEST_DONE();
+
+	TEST_START("opt_dequote rejects missing start quote");
+	opts = "plain";
+	value = opt_dequote(&opts, &errstr);
+	ASSERT_PTR_EQ(value, NULL);
+	ASSERT_STRING_EQ(errstr, "missing start quote");
+	ASSERT_STRING_EQ(opts, "plain");
+	TEST_DONE();
+
+	TEST_START("opt_dequote rejects missing end quote");
+	opts = "\"unterminated";
+	value = opt_dequote(&opts, &errstr);
+	ASSERT_PTR_EQ(value, NULL);
+	ASSERT_STRING_EQ(errstr, "missing end quote");
+	ASSERT_STRING_EQ(opts, "\"unterminated");
+	TEST_DONE();
+}
+
+static void
 test_valid_domain(void)
 {
 	char *s;
@@ -785,6 +818,7 @@ test_misc(void)
 	test_lookup_env_in_list();
 	test_lookup_setenv_in_list();
 	test_opt_match();
+	test_opt_dequote();
 	test_valid_domain();
 	test_parse_pattern_interval();
 }
