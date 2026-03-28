@@ -3233,6 +3233,17 @@ opt_dequote(const char **sp, const char **errstrp)
 int
 opt_match(const char **opts, const char *term)
 {
+#ifdef WITH_RUST_CRYPTO
+	size_t offset;
+	int r;
+
+	if (ossh_rust_opt_match((const u_char *)term, strlen(term),
+	    (const u_char *)*opts, strlen(*opts), &offset, &r) == 0) {
+		if (r != 0)
+			*opts += offset;
+		return r;
+	}
+#endif
 	if (strncasecmp((*opts), term, strlen(term)) == 0 &&
 	    (*opts)[strlen(term)] == '=') {
 		*opts += strlen(term) + 1;
