@@ -288,6 +288,14 @@ existing in-tree unit benchmarks for:
 - `regress/unittests/sshkey/test_sshkey`
 - `regress/unittests/kex/test_kex`
 
+It also runs higher-level repeated command comparisons for representative user
+actions such as:
+
+- `ssh -G ... -F bench/ssh_config`
+- `ssh-keygen -l -f key.pub`
+- `ssh-keygen -y -f private_key`
+- `ssh-keygen -y -P ... -f encrypted_private_key`
+
 It reports benchmark throughput plus wall/user/sys time and max RSS when
 available from `/usr/bin/time`. For a broader set including RSA/ECDSA/NIST ECDH
 and group14, run:
@@ -295,6 +303,38 @@ and group14, run:
 ```sh
 ./contrib/bench-rust-crypto.sh full
 ```
+
+For a Linux run on the Caracal builder VM, use:
+
+```sh
+./contrib/bench-rust-crypto-remote.sh
+```
+
+That wrapper:
+
+- uses `../../caracal-server` when present to provision/start the builder VM,
+- ships the current `HEAD` commit to the Linux builder as a git bundle,
+- runs the existing `contrib/bench-rust-crypto.sh` there, and
+- copies the summary plus logs back to `/tmp/openssh-bench-results/<timestamp>/`.
+
+For the broader benchmark set on the remote Linux host, run:
+
+```sh
+./contrib/bench-rust-crypto-remote.sh full
+```
+
+Useful overrides:
+
+- `REMOTE_HOST=builder-or-ip` to target a different SSH host
+- `START_REMOTE=0` if the Linux machine is already up or is not managed by Caracal
+- `STOP_REMOTE=1` to shut the builder VM down after the run
+- `KEEP_REMOTE_WORK=1` to leave the remote repo/worktrees/results in place
+
+The remote wrapper benchmarks `HEAD`, matching the local helper's worktree
+behavior. Uncommitted local changes are not included. It also assumes the
+builder already has the OpenSSH benchmark prerequisites installed
+(`autoreconf`, compiler toolchain, `cargo`, `rustc`, etc.); if those are
+missing, prime the builder first and rerun the wrapper.
 
 For the Rust-backed fixed-group DH path, representative local checks are:
 
