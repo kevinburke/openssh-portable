@@ -2974,6 +2974,32 @@ format_absolute_time(uint64_t t, char *buf, size_t len)
 int
 parse_pattern_interval(const char *s, char **typep, int *secsp)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_pattern_interval_parse parsed;
+	char *type = NULL;
+	int secs;
+
+	if (typep != NULL)
+		*typep = NULL;
+	if (secsp != NULL)
+		*secsp = 0;
+	if (s == NULL)
+		return -1;
+	if (ossh_rust_parse_pattern_interval((const u_char *)s, strlen(s),
+	    &parsed) != 0)
+		return -1;
+	if ((secs = convtime(s + parsed.interval_offset)) < 0)
+		return -1;
+	if (typep != NULL) {
+		type = xmalloc(parsed.type_len + 1);
+		memcpy(type, s, parsed.type_len);
+		type[parsed.type_len] = '\0';
+		*typep = type;
+	}
+	if (secsp != NULL)
+		*secsp = secs;
+	return 0;
+#else
 	char *cp, *sdup;
 	int secs;
 
@@ -3001,6 +3027,7 @@ parse_pattern_interval(const char *s, char **typep, int *secsp)
 		*secsp = secs;
 	free(sdup);
 	return 0;
+#endif
 }
 
 /* check if path is absolute */
