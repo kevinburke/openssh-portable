@@ -66,6 +66,56 @@
 #include "rust-crypto.h"
 #endif
 
+/* XXX hmac is too easy to dictionary attack; use bcrypt? */
+
+#ifndef WITH_RUST_CRYPTO
+static int
+extract_salt(const char *s, u_int l, u_char *salt, size_t salt_len)
+{
+	char *p, *b64salt;
+	u_int b64len;
+	int ret;
+
+	if (l < sizeof(HASH_MAGIC) - 1) {
+		debug2("extract_salt: string too short");
+		return (-1);
+	}
+	if (strncmp(s, HASH_MAGIC, sizeof(HASH_MAGIC) - 1) != 0) {
+		debug2("extract_salt: invalid magic identifier");
+		return (-1);
+	}
+	s += sizeof(HASH_MAGIC) - 1;
+	l -= sizeof(HASH_MAGIC) - 1;
+	if ((p = memchr(s, HASH_DELIM, l)) == NULL) {
+		debug2("extract_salt: missing salt termination character");
+		return (-1);
+	}
+
+	b64len = p - s;
+	if (b64len == 0 || b64len > 1024) {
+		debug2("extract_salt: bad encoded salt length %u", b64len);
+		return (-1);
+	}
+	b64salt = xmalloc(1 + b64len);
+	memcpy(b64salt, s, b64len);
+	b64salt[b64len] = '\0';
+
+	ret = __b64_pton(b64salt, salt, salt_len);
+	free(b64salt);
+	if (ret == -1) {
+		debug2("extract_salt: salt decode error");
+		return (-1);
+	}
+	if (ret != (int)ssh_hmac_bytes(SSH_DIGEST_SHA1)) {
+		debug2("extract_salt: expected salt len %zd, got %d",
+		    ssh_hmac_bytes(SSH_DIGEST_SHA1), ret);
+		return (-1);
+	}
+
+	return (0);
+}
+#endif
+
 char *
 host_hash(const char *host, const char *name_from_hostfile, u_int src_len)
 {
@@ -140,6 +190,39 @@ hostfile_read_key(char **cpp, u_int *bitsp, struct sshkey *ret)
 		*bitsp = sshkey_size(ret);
 	return 1;
 }
+
+#ifndef WITH_RUST_CRYPTO
+static HostkeyMarker
+check_markers(char **cpp)
+{
+	char marker[32], *sp, *cp = *cpp;
+	int ret = MRK_NONE;
+
+	while (*cp == '@') {
+		if (ret != MRK_NONE)
+			return MRK_ERROR;
+		if ((sp = strchr(cp, ' ')) == NULL &&
+		    (sp = strchr(cp, '\t')) == NULL)
+			return MRK_ERROR;
+		if (sp <= cp + 1 || sp >= cp + sizeof(marker))
+			return MRK_ERROR;
+		memcpy(marker, cp, sp - cp);
+		marker[sp - cp] = '\0';
+		if (strcmp(marker, CA_MARKER) == 0)
+			ret = MRK_CA;
+		else if (strcmp(marker, REVOKE_MARKER) == 0)
+			ret = MRK_REVOKE;
+		else
+			return MRK_ERROR;
+
+		cp = sp;
+		for (; *cp == ' ' || *cp == '\t'; cp++)
+			;
+	}
+	*cpp = cp;
+	return ret;
+}
+#endif
 
 struct hostkeys *
 init_hostkeys(void)
