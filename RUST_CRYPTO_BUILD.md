@@ -83,6 +83,10 @@ Rust-backed today:
   - certificate validity windows
   - `sshsig` `valid-after` / `valid-before` options
   - `ssh-keygen -V` time parsing
+- shared config validation helpers used by:
+  - `parse_ipqos()` for `IPQoS`
+  - `valid_env_name()` for legacy `$ENV` option handling and auth env lists
+  - `valid_domain()` for canonical-domain and related hostname validation
 - RSA and ECDSA private-key loading for:
   - legacy PEM
   - PKCS#8
@@ -214,6 +218,7 @@ replacements through:
 - `regress/unittests/misc/test_user_host_port.c`
 - `regress/unittests/misc/test_parse.c`
 - `regress/unittests/misc/test_convtime.c`
+- `regress/unittests/misc/test_misc.c`
 
 It also exercises the Rust-backed hostfile parser path through:
 
