@@ -532,6 +532,9 @@ test_atoi_err(void)
 	errstr = atoi_err("0", &value);
 	ASSERT_PTR_EQ(errstr, NULL);
 	ASSERT_INT_EQ(value, 0);
+	errstr = atoi_err("+1", &value);
+	ASSERT_PTR_EQ(errstr, NULL);
+	ASSERT_INT_EQ(value, 1);
 	errstr = atoi_err("2147483647", &value);
 	ASSERT_PTR_EQ(errstr, NULL);
 	ASSERT_INT_EQ(value, INT_MAX);
@@ -541,7 +544,7 @@ test_atoi_err(void)
 	ASSERT_STRING_EQ(atoi_err(NULL, &value), "missing");
 	ASSERT_STRING_EQ(atoi_err("", &value), "missing");
 	ASSERT_STRING_EQ(atoi_err("bogus", &value), "invalid");
-	ASSERT_STRING_EQ(atoi_err("+1", &value), "invalid");
+	ASSERT_STRING_EQ(atoi_err("+", &value), "invalid");
 	ASSERT_STRING_EQ(atoi_err("-1", &value), "too small");
 	ASSERT_STRING_EQ(atoi_err("2147483648", &value), "too large");
 	TEST_DONE();
