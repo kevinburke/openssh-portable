@@ -327,6 +327,16 @@ static struct {
 	{ NULL, oBadOption }
 };
 
+static size_t
+keyword_nentries(void)
+{
+	size_t i = 0;
+
+	while (keywords[i].name != NULL)
+		i++;
+	return i;
+}
+
 static const char *lookup_opcode_name(OpCodes code);
 
 const char *
@@ -962,11 +972,21 @@ static OpCodes
 parse_token(const char *cp, const char *filename, int linenum,
     const char *ignored_unknown)
 {
-	int i;
+	int opcode;
+
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_keyword_lookup((const u_char *)cp,
+	    cp == NULL ? 0 : strlen(cp),
+	    (const struct ossh_rust_keyword_entry *)keywords, keyword_nentries(),
+	    0, &opcode) == 0)
+		return opcode;
+#else
+	size_t i;
 
 	for (i = 0; keywords[i].name; i++)
 		if (strcmp(cp, keywords[i].name) == 0)
 			return keywords[i].opcode;
+#endif
 	if (ignored_unknown != NULL &&
 	    match_pattern_list(cp, ignored_unknown, 1) == 1)
 		return oIgnoredUnknownOption;

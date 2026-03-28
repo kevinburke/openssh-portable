@@ -103,6 +103,10 @@ Rust-backed today:
   - `ssh -G` style client config output
   - `sshd -T` style server config output
   - reverse mapping of enum values back to canonical config strings
+- client config keyword lookup used by:
+  - `readconf.c` option-name parsing before per-option semantics
+  - `ssh -G` and normal client config loading
+  - exact matching after the existing lowercase normalization step
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers
@@ -253,6 +257,9 @@ It now also includes direct coverage for the shared Rust-backed
 
 It also includes direct coverage for the shared Rust-backed
 `multistate_name()` path used by repeated client/server config formatting.
+
+It also includes direct Rust coverage for the client keyword lookup helper and
+`ssh -G` smoke coverage for accepted and rejected client config options.
 
 The existing OpenSSH `test_convtime` coverage now also exercises the
 Rust-backed `convtime()` / `convtime_double()` path.
