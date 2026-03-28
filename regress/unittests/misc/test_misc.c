@@ -523,6 +523,31 @@ test_valid_env_name(void)
 }
 
 static void
+test_atoi_err(void)
+{
+	int value = -1;
+	const char *errstr;
+
+	TEST_START("atoi_err basic");
+	errstr = atoi_err("0", &value);
+	ASSERT_PTR_EQ(errstr, NULL);
+	ASSERT_INT_EQ(value, 0);
+	errstr = atoi_err("2147483647", &value);
+	ASSERT_PTR_EQ(errstr, NULL);
+	ASSERT_INT_EQ(value, INT_MAX);
+	TEST_DONE();
+
+	TEST_START("atoi_err reports errors");
+	ASSERT_STRING_EQ(atoi_err(NULL, &value), "missing");
+	ASSERT_STRING_EQ(atoi_err("", &value), "missing");
+	ASSERT_STRING_EQ(atoi_err("bogus", &value), "invalid");
+	ASSERT_STRING_EQ(atoi_err("+1", &value), "invalid");
+	ASSERT_STRING_EQ(atoi_err("-1", &value), "too small");
+	ASSERT_STRING_EQ(atoi_err("2147483648", &value), "too large");
+	TEST_DONE();
+}
+
+static void
 test_valid_domain(void)
 {
 	char *s;
@@ -618,6 +643,7 @@ test_misc(void)
 	test_parse_ipqos();
 	test_a2port();
 	test_valid_env_name();
+	test_atoi_err();
 	test_valid_domain();
 	test_parse_pattern_interval();
 }

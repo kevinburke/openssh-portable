@@ -93,6 +93,8 @@ Rust-backed today:
   - `parse_ipqos()` for `IPQoS`
   - `valid_env_name()` for legacy `$ENV` option handling and auth env lists
   - `valid_domain()` for canonical-domain and related hostname validation
+  - `atoi_err()` for shared non-negative integer option parsing and
+    standardized `missing` / `invalid` / `too small` / `too large` reporting
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers
@@ -234,6 +236,9 @@ replacements through:
 
 That `test_misc` coverage now also includes the Rust-backed `a2port()` path
 for numeric and service-name port resolution.
+
+It also includes direct coverage for the Rust-backed `atoi_err()` path and its
+error-string mapping used by shared config numeric parsing.
 
 The existing OpenSSH `test_convtime` coverage now also exercises the
 Rust-backed `convtime()` / `convtime_double()` path.
