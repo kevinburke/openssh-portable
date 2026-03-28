@@ -459,6 +459,35 @@ pub(crate) fn keyword_lookup(
     })
 }
 
+fn has_ascii_prefix_ignore_case(input: &[u8], prefix: &[u8]) -> bool {
+    input.len() >= prefix.len() && input[..prefix.len()].eq_ignore_ascii_case(prefix)
+}
+
+pub(crate) fn opt_flag_parse(
+    opt: *const u8,
+    opt_len: usize,
+    allow_negate: bool,
+    input: *const u8,
+    input_len: usize,
+) -> Option<(usize, c_int)> {
+    let opt = read_slice(opt, opt_len)?;
+    let mut input = read_slice(input, input_len)?;
+    let mut offset = 0usize;
+    let mut negate = false;
+
+    if allow_negate && has_ascii_prefix_ignore_case(input, b"no-") {
+        input = &input[3..];
+        offset += 3;
+        negate = true;
+    }
+    if has_ascii_prefix_ignore_case(input, opt) {
+        offset += opt.len();
+        Some((offset, if negate { 0 } else { 1 }))
+    } else {
+        Some((0, -1))
+    }
+}
+
 pub(crate) fn parse_convtime_double(input: *const u8, input_len: usize) -> Option<f64> {
     let input = read_slice(input, input_len)?;
     if input.is_empty() {
@@ -1859,7 +1888,7 @@ mod tests {
     use super::{
         a2port, atoi_err, argv_split_parse, argv_split_write, host_hash_write,
         hpdelim2_parse_in_place, match_hashed_host, parse_convtime_double,
-        keyword_lookup, multistate_lookup, multistate_name,
+        keyword_lookup, multistate_lookup, multistate_name, opt_flag_parse,
         parse_forward_field_in_place, parse_absolute_time, parse_forward_in_place,
         parse_hostfile_line, parse_ipqos, parse_jump,
         parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
@@ -2574,6 +2603,38 @@ mod tests {
         );
         assert_eq!(keyword_lookup(core::ptr::null(), 0, entries.as_ptr(), 1, false), None);
         assert_eq!(keyword_lookup(b"user".as_ptr(), 4, core::ptr::null(), 1, false), None);
+    }
+
+    #[test]
+    fn opt_flag_parse_handles_basic_forms() {
+        assert_eq!(
+            opt_flag_parse(b"pty".as_ptr(), 3, false, b"pty".as_ptr(), 3),
+            Some((3, 1))
+        );
+        assert_eq!(
+            opt_flag_parse(b"pty".as_ptr(), 3, true, b"no-pty".as_ptr(), 6),
+            Some((6, 0))
+        );
+        assert_eq!(
+            opt_flag_parse(b"pty".as_ptr(), 3, true, b"PTY".as_ptr(), 3),
+            Some((3, 1))
+        );
+    }
+
+    #[test]
+    fn opt_flag_parse_rejects_bad_forms() {
+        assert_eq!(
+            opt_flag_parse(b"pty".as_ptr(), 3, false, b"no-pty".as_ptr(), 6),
+            Some((0, -1))
+        );
+        assert_eq!(
+            opt_flag_parse(b"pty".as_ptr(), 3, true, b"pt".as_ptr(), 2),
+            Some((0, -1))
+        );
+        assert_eq!(
+            opt_flag_parse(b"pty".as_ptr(), 3, true, core::ptr::null(), 1),
+            None
+        );
     }
 
     #[test]
