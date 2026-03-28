@@ -103,6 +103,10 @@ Rust-backed today:
   - `ssh -G` style client config output
   - `sshd -T` style server config output
   - reverse mapping of enum values back to canonical config strings
+- `opt_flag()` parsing used by:
+  - `no-pty`, `no-agent-forwarding`, and similar auth-option flags
+  - shared config helpers that consume optional `no-` prefixes
+  - boolean option fragments that advance the caller input pointer in place
 - client config keyword lookup used by:
   - `readconf.c` option-name parsing before per-option semantics
   - `ssh -G` and normal client config loading
@@ -261,6 +265,9 @@ It now also includes direct coverage for the shared Rust-backed
 
 It also includes direct coverage for the shared Rust-backed
 `multistate_name()` path used by repeated client/server config formatting.
+
+It also includes direct coverage for the shared Rust-backed `opt_flag()` path
+used by boolean option fragments with optional `no-` prefixes.
 
 It also includes direct Rust coverage for the client keyword lookup helper and
 `ssh -G` smoke coverage for accepted and rejected client config options.

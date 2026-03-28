@@ -596,6 +596,33 @@ test_multistate_name(void)
 }
 
 static void
+test_opt_flag(void)
+{
+	const char *opts;
+
+	TEST_START("opt_flag basic");
+	opts = "pty";
+	ASSERT_INT_EQ(opt_flag("pty", 0, &opts), 1);
+	ASSERT_STRING_EQ(opts, "");
+	opts = "no-pty";
+	ASSERT_INT_EQ(opt_flag("pty", 1, &opts), 0);
+	ASSERT_STRING_EQ(opts, "");
+	opts = "PTY";
+	ASSERT_INT_EQ(opt_flag("pty", 1, &opts), 1);
+	ASSERT_STRING_EQ(opts, "");
+	TEST_DONE();
+
+	TEST_START("opt_flag rejects bad forms");
+	opts = "no-pty";
+	ASSERT_INT_EQ(opt_flag("pty", 0, &opts), -1);
+	ASSERT_STRING_EQ(opts, "no-pty");
+	opts = "pt";
+	ASSERT_INT_EQ(opt_flag("pty", 1, &opts), -1);
+	ASSERT_STRING_EQ(opts, "pt");
+	TEST_DONE();
+}
+
+static void
 test_valid_domain(void)
 {
 	char *s;
@@ -694,6 +721,7 @@ test_misc(void)
 	test_atoi_err();
 	test_multistate_lookup();
 	test_multistate_name();
+	test_opt_flag();
 	test_valid_domain();
 	test_parse_pattern_interval();
 }

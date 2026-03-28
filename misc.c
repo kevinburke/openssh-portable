@@ -3168,6 +3168,19 @@ skip_space(char **cpp)
 int
 opt_flag(const char *opt, int allow_negate, const char **optsp)
 {
+#ifdef WITH_RUST_CRYPTO
+	size_t offset = 0;
+	int result = -1;
+	const char *opts = *optsp;
+
+	if (ossh_rust_opt_flag((const u_char *)opt, strlen(opt), allow_negate,
+	    (const u_char *)opts, strlen(opts), &offset, &result) == 0 &&
+	    result != -1) {
+		*optsp = opts + offset;
+		return result;
+	}
+	return -1;
+#else
 	size_t opt_len = strlen(opt);
 	const char *opts = *optsp;
 	int negate = 0;
@@ -3181,6 +3194,7 @@ opt_flag(const char *opt, int allow_negate, const char **optsp)
 		return negate ? 0 : 1;
 	}
 	return -1;
+#endif
 }
 
 char *
