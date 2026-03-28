@@ -2898,6 +2898,48 @@ valid_env_name(const char *name)
 #endif
 }
 
+static size_t
+multistate_nentries(const struct multistate *multistate_ptr)
+{
+	size_t i = 0;
+
+	if (multistate_ptr == NULL)
+		return 0;
+	while (multistate_ptr[i].key != NULL)
+		i++;
+	return i;
+}
+
+int
+multistate_lookup(const char *arg, const struct multistate *multistate_ptr,
+    int *valuep)
+{
+#ifdef WITH_RUST_CRYPTO
+	size_t nentries;
+
+	if (arg == NULL || *arg == '\0' || multistate_ptr == NULL || valuep == NULL)
+		return -1;
+	nentries = multistate_nentries(multistate_ptr);
+	if (ossh_rust_multistate_lookup((const u_char *)arg, strlen(arg),
+	    (const struct ossh_rust_multistate_entry *)multistate_ptr,
+	    nentries, valuep) == 0)
+		return 0;
+	return -1;
+#else
+	size_t i;
+
+	if (arg == NULL || *arg == '\0' || multistate_ptr == NULL || valuep == NULL)
+		return -1;
+	for (i = 0; multistate_ptr[i].key != NULL; i++) {
+		if (strcasecmp(arg, multistate_ptr[i].key) == 0) {
+			*valuep = multistate_ptr[i].value;
+			return 0;
+		}
+	}
+	return -1;
+#endif
+}
+
 const char *
 atoi_err(const char *nptr, int *val)
 {
