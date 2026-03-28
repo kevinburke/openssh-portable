@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 32U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 33U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -268,6 +268,8 @@ int ossh_rust_valid_domain(uint8_t *input, size_t input_len, int makelower,
     int *status);
 int ossh_rust_parse_absolute_time(const uint8_t *input, size_t input_len,
     uint64_t *tp);
+int ossh_rust_convtime_double(const uint8_t *input, size_t input_len,
+    double *out);
 int ossh_rust_parse_pattern_interval(const uint8_t *input, size_t input_len,
     struct ossh_rust_pattern_interval_parse *out);
 void *ossh_rust_dh_group_new(int group_id);
