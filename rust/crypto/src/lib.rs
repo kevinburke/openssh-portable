@@ -51,8 +51,8 @@ use rsa::{
 };
 use util::{
     a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
-    atoi_err, keyword_lookup, multistate_lookup, multistate_name,
-    opt_flag_parse, parse_convtime_double, parse_forward_field_in_place,
+    atoi_err, keyword_lookup, lookup_env_in_list_parse, lookup_setenv_in_list_parse,
+    multistate_lookup, multistate_name, opt_flag_parse, parse_convtime_double, parse_forward_field_in_place,
     parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
     parse_pattern_interval, read_slice, strdelim_parse_in_place, valid_domain,
     valid_env_name, validate_permit, write_prefix, ATOI_STATUS_INVALID,
@@ -62,7 +62,7 @@ use util::{
     KeywordEntry,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 38;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 39;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -923,6 +923,54 @@ pub extern "C" fn ossh_rust_opt_flag(
             unsafe {
                 *out_offset = offset;
                 *out_result = result;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_lookup_env_in_list(
+    env: *const u8,
+    env_len: usize,
+    envs: *const *const c_char,
+    nenvs: usize,
+    out_index: *mut usize,
+    out_value_offset: *mut usize,
+) -> c_int {
+    if out_index.is_null() || out_value_offset.is_null() {
+        return -1;
+    }
+    match lookup_env_in_list_parse(env, env_len, envs, nenvs) {
+        Some((index, offset)) => {
+            unsafe {
+                *out_index = index;
+                *out_value_offset = offset;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_lookup_setenv_in_list(
+    env: *const u8,
+    env_len: usize,
+    envs: *const *const c_char,
+    nenvs: usize,
+    out_index: *mut usize,
+    out_value_offset: *mut usize,
+) -> c_int {
+    if out_index.is_null() || out_value_offset.is_null() {
+        return -1;
+    }
+    match lookup_setenv_in_list_parse(env, env_len, envs, nenvs) {
+        Some((index, offset)) => {
+            unsafe {
+                *out_index = index;
+                *out_value_offset = offset;
             }
             0
         }

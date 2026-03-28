@@ -3500,6 +3500,14 @@ const char *
 lookup_env_in_list(const char *env, char * const *envs, size_t nenvs)
 {
 	size_t i, envlen;
+#ifdef WITH_RUST_CRYPTO
+	size_t match_index, value_offset;
+
+	if (ossh_rust_lookup_env_in_list((const u_char *)env, strlen(env),
+	    (const char * const *)envs, nenvs, &match_index,
+	    &value_offset) == 0)
+		return envs[match_index] + value_offset;
+#endif
 
 	envlen = strlen(env);
 	for (i = 0; i < nenvs; i++) {
@@ -3516,6 +3524,14 @@ lookup_setenv_in_list(const char *env, char * const *envs, size_t nenvs)
 {
 	char *name, *cp;
 	const char *ret;
+#ifdef WITH_RUST_CRYPTO
+	size_t match_index, value_offset;
+
+	if (ossh_rust_lookup_setenv_in_list((const u_char *)env, strlen(env),
+	    (const char * const *)envs, nenvs, &match_index,
+	    &value_offset) == 0)
+		return envs[match_index] + value_offset;
+#endif
 
 	name = xstrdup(env);
 	if ((cp = strchr(name, '=')) == NULL) {
