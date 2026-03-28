@@ -12,6 +12,7 @@ Builds two throwaway worktrees from the current HEAD:
 
 Then runs selected in-tree unit benchmarks and records:
   - benchmark throughput from the unit test harness
+  - repeated command-level throughput for representative user actions
   - wall/user/sys time
   - max RSS when available from /usr/bin/time
 
@@ -98,13 +99,37 @@ configure_tree() {
 		./configure --prefix="$dir/local" "$@" >/dev/null
 		if [ "$label" = "rust" ]; then
 			CARGO_NET_OFFLINE=true make -j"$JOBS" \
+				ssh ssh-keygen \
 				regress/unittests/sshkey/test_sshkey \
-				regress/unittests/kex/test_kex >/dev/null
+				regress/unittests/kex/test_kex \
+				regress/unittests/misc/test_misc >/dev/null
 		else
 			make -j"$JOBS" \
+				ssh ssh-keygen \
 				regress/unittests/sshkey/test_sshkey \
-				regress/unittests/kex/test_kex >/dev/null
+				regress/unittests/kex/test_kex \
+				regress/unittests/misc/test_misc >/dev/null
 		fi
+		mkdir -p bench
+		cat >bench/ssh_config <<'EOF'
+Host bench
+    HostName localhost
+    Port 2222
+    ProxyJump jumpa,ssh://user@jumpb:2200
+    LocalForward [host:name]:8080:dest.example:80
+    RemoteForward 9090 localhost:22
+    PermitRemoteOpen dest.example:80
+    IPQoS af21
+    CanonicalDomains example.com
+    ChannelTimeout session:command=1m
+EOF
+		cp regress/unittests/sshkey/testdata/ed25519_1.pub bench/
+		cp regress/unittests/sshkey/testdata/rsa_1.pub bench/
+		cp regress/unittests/sshkey/testdata/ecdsa_1.pub bench/
+		cp regress/unittests/sshkey/testdata/ed25519_1 bench/
+		cp regress/unittests/sshkey/testdata/rsa_1_pw bench/
+		cp regress/unittests/sshkey/testdata/ecdsa_1_pw bench/
+		chmod 600 bench/ed25519_1 bench/rsa_1_pw bench/ecdsa_1_pw
 	)
 	printf 'prepared %s build in %s\n' "$label" "$dir"
 }
@@ -152,6 +177,32 @@ extract_time_summary() {
 	esac
 }
 
+extract_wall_seconds() {
+	file="$1"
+	case "$TIME_MODE" in
+	mac)
+		grep ' real ' "$file" | tail -n 1 | awk '{print $1}'
+		;;
+	gnu)
+		wall="$(awk -F': ' '/Elapsed \\(wall clock\\) time/{print $2}' "$file" | tail -n 1)"
+		awk -v v="$wall" 'BEGIN {
+			n = split(v, a, ":");
+			s = 0;
+			m = 1;
+			for (i = n; i >= 1; i--) {
+				s += a[i] * m;
+				m *= 60;
+			}
+			if (n > 0)
+				printf "%.6f\n", s;
+		}'
+		;;
+	*)
+		awk '/^real[[:space:]]/{print $2}' "$file" | tail -n 1
+		;;
+	esac
+}
+
 run_one() {
 	label="$1"
 	dir="$2"
@@ -189,6 +240,43 @@ run_one() {
 	printf '  usage: %s\n' "$(extract_time_summary "$stderr_log")"
 }
 
+run_cmd_loop() {
+	label="$1"
+	dir="$2"
+	tag="$3"
+	name="$4"
+	iters="$5"
+	cmd="$6"
+	stdout_log="$logs_dir/$tag.$label.out"
+	stderr_log="$logs_dir/$tag.$label.time"
+
+	printf '\n[%s] %s\n' "$label" "$name"
+	(
+		cd "$dir"
+		case "$TIME_MODE" in
+		mac)
+			BENCH_ITERS="$iters" BENCH_CMD="$cmd" /usr/bin/time -l \
+			    sh -c 'i=0; while [ "$i" -lt "$BENCH_ITERS" ]; do eval "$BENCH_CMD" >/dev/null; i=$((i+1)); done' \
+			    >"$stdout_log" 2>"$stderr_log"
+			;;
+		gnu)
+			BENCH_ITERS="$iters" BENCH_CMD="$cmd" /usr/bin/time -v \
+			    sh -c 'i=0; while [ "$i" -lt "$BENCH_ITERS" ]; do eval "$BENCH_CMD" >/dev/null; i=$((i+1)); done' \
+			    >"$stdout_log" 2>"$stderr_log"
+			;;
+		*)
+			BENCH_ITERS="$iters" BENCH_CMD="$cmd" /usr/bin/time -p \
+			    sh -c 'i=0; while [ "$i" -lt "$BENCH_ITERS" ]; do eval "$BENCH_CMD" >/dev/null; i=$((i+1)); done' \
+			    >"$stdout_log" 2>"$stderr_log"
+			;;
+		esac
+	)
+	wall="$(extract_wall_seconds "$stderr_log")"
+	ops="$(awk -v iters="$iters" -v wall="$wall" 'BEGIN { if (wall > 0) printf "%.2f", iters / wall; else print "n/a" }')"
+	printf '  bench: %-40s %s actions/s\n' "$name" "$ops"
+	printf '  usage: %s\n' "$(extract_time_summary "$stderr_log")"
+}
+
 prepare_tree "$openssl_dir"
 prepare_tree "$rust_dir"
 
@@ -211,6 +299,22 @@ run_one openssl "$openssl_dir" ./regress/unittests/kex/test_kex "KEX curve25519-
 run_one rust    "$rust_dir"    ./regress/unittests/kex/test_kex "KEX curve25519-sha256" kex-curve25519
 run_one openssl "$openssl_dir" ./regress/unittests/kex/test_kex "KEX diffie-hellman-group-exchange-sha256" kex-dhgex
 run_one rust    "$rust_dir"    ./regress/unittests/kex/test_kex "KEX diffie-hellman-group-exchange-sha256" kex-dhgex
+run_cmd_loop openssl "$openssl_dir" action-ssh-g "ssh -G config parse" 200 \
+	'./ssh -G bench -F "$PWD/bench/ssh_config"'
+run_cmd_loop rust    "$rust_dir"    action-ssh-g "ssh -G config parse" 200 \
+	'./ssh -G bench -F "$PWD/bench/ssh_config"'
+run_cmd_loop openssl "$openssl_dir" action-pub-fingerprint "ssh-keygen -l ed25519 pub" 400 \
+	'./ssh-keygen -l -f "$PWD/bench/ed25519_1.pub"'
+run_cmd_loop rust    "$rust_dir"    action-pub-fingerprint "ssh-keygen -l ed25519 pub" 400 \
+	'./ssh-keygen -l -f "$PWD/bench/ed25519_1.pub"'
+run_cmd_loop openssl "$openssl_dir" action-private-load "ssh-keygen -y ed25519 private" 200 \
+	'./ssh-keygen -y -f "$PWD/bench/ed25519_1"'
+run_cmd_loop rust    "$rust_dir"    action-private-load "ssh-keygen -y ed25519 private" 200 \
+	'./ssh-keygen -y -f "$PWD/bench/ed25519_1"'
+run_cmd_loop openssl "$openssl_dir" action-private-load-pw "ssh-keygen -y rsa private encrypted" 100 \
+	'./ssh-keygen -y -P mekmitasdigoat -f "$PWD/bench/rsa_1_pw"'
+run_cmd_loop rust    "$rust_dir"    action-private-load-pw "ssh-keygen -y rsa private encrypted" 100 \
+	'./ssh-keygen -y -P mekmitasdigoat -f "$PWD/bench/rsa_1_pw"'
 
 if [ "$mode" = "full" ]; then
 	run_one openssl "$openssl_dir" ./regress/unittests/sshkey/test_sshkey "RSA-2048/SHA256" sshkey-rsa2048-sha256
@@ -221,6 +325,18 @@ if [ "$mode" = "full" ]; then
 	run_one rust    "$rust_dir"    ./regress/unittests/kex/test_kex "KEX ecdh-sha2-nistp256" kex-ecdh-p256
 	run_one openssl "$openssl_dir" ./regress/unittests/kex/test_kex "KEX diffie-hellman-group14-sha256" kex-group14
 	run_one rust    "$rust_dir"    ./regress/unittests/kex/test_kex "KEX diffie-hellman-group14-sha256" kex-group14
+	run_cmd_loop openssl "$openssl_dir" action-pub-fingerprint-rsa "ssh-keygen -l rsa pub" 300 \
+		'./ssh-keygen -l -f "$PWD/bench/rsa_1.pub"'
+	run_cmd_loop rust    "$rust_dir"    action-pub-fingerprint-rsa "ssh-keygen -l rsa pub" 300 \
+		'./ssh-keygen -l -f "$PWD/bench/rsa_1.pub"'
+	run_cmd_loop openssl "$openssl_dir" action-pub-fingerprint-ecdsa "ssh-keygen -l ecdsa pub" 300 \
+		'./ssh-keygen -l -f "$PWD/bench/ecdsa_1.pub"'
+	run_cmd_loop rust    "$rust_dir"    action-pub-fingerprint-ecdsa "ssh-keygen -l ecdsa pub" 300 \
+		'./ssh-keygen -l -f "$PWD/bench/ecdsa_1.pub"'
+	run_cmd_loop openssl "$openssl_dir" action-private-load-pw-ecdsa "ssh-keygen -y ecdsa private encrypted" 100 \
+		'./ssh-keygen -y -P mekmitasdigoat -f "$PWD/bench/ecdsa_1_pw"'
+	run_cmd_loop rust    "$rust_dir"    action-private-load-pw-ecdsa "ssh-keygen -y ecdsa private encrypted" 100 \
+		'./ssh-keygen -y -P mekmitasdigoat -f "$PWD/bench/ecdsa_1_pw"'
 fi
 
 printf '\nraw logs saved in %s\n' "$logs_dir"
