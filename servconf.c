@@ -1041,10 +1041,6 @@ match_cfg_line(const char *full_line, int *acp, char ***avp,
 #define WHITESPACE " \t\r\n"
 
 /* Multistate option parsing */
-struct multistate {
-	char *key;
-	int value;
-};
 static const struct multistate multistate_flag[] = {
 	{ "yes",			1 },
 	{ "no",				0 },
@@ -1268,14 +1264,7 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 		if (!arg || *arg == '\0')
 			fatal("%s line %d: missing argument.",
 			    filename, linenum);
-		value = -1;
-		for (i = 0; multistate_ptr[i].key != NULL; i++) {
-			if (strcasecmp(arg, multistate_ptr[i].key) == 0) {
-				value = multistate_ptr[i].value;
-				break;
-			}
-		}
-		if (value == -1)
+		if (multistate_lookup(arg, multistate_ptr, &value) != 0)
 			fatal("%s line %d: unsupported option \"%s\".",
 			    filename, linenum, arg);
 		if (*activep && *intptr == -1)

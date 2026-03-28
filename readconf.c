@@ -990,10 +990,6 @@ free_canon_cnames(struct allowed_cname *cnames, u_int n)
 }
 
 /* Multistate option parsing */
-struct multistate {
-	char *key;
-	int value;
-};
 static const struct multistate multistate_flag[] = {
 	{ "true",			1 },
 	{ "false",			0 },
@@ -1112,10 +1108,8 @@ parse_multistate_value(const char *arg, const char *filename, int linenum,
 		error("%s line %d: missing argument.", filename, linenum);
 		return -1;
 	}
-	for (i = 0; multistate_ptr[i].key != NULL; i++) {
-		if (strcasecmp(arg, multistate_ptr[i].key) == 0)
-			return multistate_ptr[i].value;
-	}
+	if (multistate_lookup(arg, multistate_ptr, &i) == 0)
+		return i;
 	return -1;
 }
 
