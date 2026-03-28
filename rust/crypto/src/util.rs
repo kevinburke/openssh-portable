@@ -410,6 +410,19 @@ pub(crate) fn multistate_lookup(
     })
 }
 
+pub(crate) fn multistate_name(
+    value: c_int,
+    entries: *const MultistateEntry,
+    nentries: usize,
+) -> Option<usize> {
+    if nentries == 0 {
+        return None;
+    }
+    let entries = unsafe { entries.as_ref() }
+        .map(|_| unsafe { slice::from_raw_parts(entries, nentries) })?;
+    entries.iter().position(|entry| entry.value == value)
+}
+
 pub(crate) fn parse_convtime_double(input: *const u8, input_len: usize) -> Option<f64> {
     let input = read_slice(input, input_len)?;
     if input.is_empty() {
@@ -1810,7 +1823,7 @@ mod tests {
     use super::{
         a2port, atoi_err, argv_split_parse, argv_split_write, host_hash_write,
         hpdelim2_parse_in_place, match_hashed_host, parse_convtime_double,
-        multistate_lookup, parse_forward_field_in_place, parse_absolute_time,
+        multistate_lookup, multistate_name, parse_forward_field_in_place, parse_absolute_time,
         parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
         parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
         strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
@@ -2452,6 +2465,37 @@ mod tests {
         assert_eq!(multistate_lookup(core::ptr::null(), 0, entries.as_ptr(), 1), None);
         assert_eq!(multistate_lookup(b"maybe".as_ptr(), 5, entries.as_ptr(), 1), None);
         assert_eq!(multistate_lookup(b"yes".as_ptr(), 3, core::ptr::null(), 1), None);
+    }
+
+    #[test]
+    fn multistate_name_handles_basic_forms() {
+        let yes = CString::new("yes").unwrap();
+        let no = CString::new("no").unwrap();
+        let entries = [
+            MultistateEntry {
+                key: yes.as_ptr(),
+                value: 1,
+            },
+            MultistateEntry {
+                key: no.as_ptr(),
+                value: 0,
+            },
+        ];
+
+        assert_eq!(multistate_name(1, entries.as_ptr(), entries.len()), Some(0));
+        assert_eq!(multistate_name(0, entries.as_ptr(), entries.len()), Some(1));
+    }
+
+    #[test]
+    fn multistate_name_rejects_bad_forms() {
+        let yes = CString::new("yes").unwrap();
+        let entries = [MultistateEntry {
+            key: yes.as_ptr(),
+            value: 1,
+        }];
+
+        assert_eq!(multistate_name(2, entries.as_ptr(), entries.len()), None);
+        assert_eq!(multistate_name(1, core::ptr::null(), 1), None);
     }
 
     #[test]
