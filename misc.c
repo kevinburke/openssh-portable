@@ -687,6 +687,15 @@ a2tun(const char *s, int *remote)
 double
 convtime_double(const char *s)
 {
+#ifdef WITH_RUST_CRYPTO
+	double out;
+
+	if (s == NULL)
+		return -1.0;
+	if (ossh_rust_convtime_double((const uint8_t *)s, strlen(s), &out) == 0)
+		return out;
+	return -1.0;
+#else
 	double val, total_sec = 0.0, multiplier;
 	const char *p, *start_p;
 	char *endp;
@@ -753,6 +762,7 @@ convtime_double(const char *s)
 			p++;
 	}
 	return total_sec;
+#endif
 }
 
 /*

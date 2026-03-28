@@ -9,7 +9,7 @@ mod private_pem;
 mod rsa;
 mod util;
 
-use core::ffi::{c_char, c_int, c_void};
+use core::ffi::{c_char, c_double, c_int, c_void};
 use core::slice;
 
 use cert::parse_cert_body;
@@ -51,13 +51,14 @@ use rsa::{
 };
 use util::{
     a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
-    parse_forward_field_in_place, parse_forward_in_place, parse_hostfile_line, parse_ipqos,
-    parse_jump, parse_pattern_interval, read_slice, strdelim_parse_in_place, valid_domain,
-    valid_env_name, validate_permit, write_prefix, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
-    DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID,
+    parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
+    parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval, read_slice,
+    strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit, write_prefix,
+    DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS,
+    DOMAIN_STATUS_START_INVALID,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 32;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 33;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -846,6 +847,24 @@ pub extern "C" fn ossh_rust_parse_absolute_time(
     };
     unsafe {
         *tp = parsed;
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_convtime_double(
+    input: *const u8,
+    input_len: usize,
+    out: *mut c_double,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(parsed) = parse_convtime_double(input, input_len) else {
+        return -1;
+    };
+    unsafe {
+        *out = parsed;
     }
     0
 }

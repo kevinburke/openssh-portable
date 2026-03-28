@@ -345,6 +345,105 @@ pub(crate) fn a2port(input: *const u8, input_len: usize) -> Option<i32> {
     parse_port_token(input)
 }
 
+pub(crate) fn parse_convtime_double(input: *const u8, input_len: usize) -> Option<f64> {
+    let input = read_slice(input, input_len)?;
+    if input.is_empty() {
+        return None;
+    }
+
+    let mut total = 0.0f64;
+    let mut i = 0usize;
+    let mut seen_seconds = false;
+
+    while i < input.len() {
+        let start = i;
+        let mut seen_dot = false;
+        while i < input.len() && (input[i].is_ascii_digit() || input[i] == b'.') {
+            if input[i] == b'.' {
+                if seen_dot {
+                    return None;
+                }
+                seen_dot = true;
+            }
+            i += 1;
+        }
+        if start == i {
+            return None;
+        }
+        let token = &input[start..i];
+        let value = parse_convtime_number(token)?;
+        let multiplier = match input.get(i).copied() {
+            None | Some(b's') | Some(b'S') => {
+                if seen_seconds {
+                    return None;
+                }
+                seen_seconds = true;
+                1.0
+            }
+            Some(b'm') | Some(b'M') => 60.0,
+            Some(b'h') | Some(b'H') => 60.0 * 60.0,
+            Some(b'd') | Some(b'D') => 24.0 * 60.0 * 60.0,
+            Some(b'w') | Some(b'W') => 7.0 * 24.0 * 60.0 * 60.0,
+            Some(_) => return None,
+        };
+        if seen_dot && multiplier > 1.0 {
+            return None;
+        }
+        total += value * multiplier;
+        if !total.is_finite() {
+            return None;
+        }
+        if i < input.len() {
+            i += 1;
+        }
+    }
+    Some(total)
+}
+
+fn parse_convtime_number(input: &[u8]) -> Option<f64> {
+    if input.is_empty() {
+        return None;
+    }
+    let mut parts = input.splitn(2, |byte| *byte == b'.');
+    let int_part = parts.next()?;
+    let frac_part = parts.next();
+    if int_part.is_empty() && frac_part.is_none() {
+        return None;
+    }
+    if !int_part.iter().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let whole = if int_part.is_empty() {
+        0u64
+    } else {
+        parse_u64_decimal(int_part)?
+    };
+    let mut out = whole as f64;
+    if let Some(frac) = frac_part {
+        if frac.is_empty() || !frac.iter().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        let frac_value = parse_u64_decimal(frac)? as f64;
+        let scale = 10f64.powi(i32::try_from(frac.len()).ok()?);
+        out += frac_value / scale;
+    }
+    Some(out)
+}
+
+fn parse_u64_decimal(input: &[u8]) -> Option<u64> {
+    if input.is_empty() {
+        return None;
+    }
+    let mut out = 0u64;
+    for byte in input {
+        if !byte.is_ascii_digit() {
+            return None;
+        }
+        out = out.checked_mul(10)?.checked_add(u64::from(byte - b'0'))?;
+    }
+    Some(out)
+}
+
 fn parse_decimal_component(input: &[u8]) -> Option<i32> {
     if input.is_empty() || !input.iter().all(|byte| byte.is_ascii_digit()) {
         return None;
@@ -1645,12 +1744,12 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 mod tests {
     use super::{
         a2port, argv_split_parse, argv_split_write, host_hash_write, hpdelim2_parse_in_place,
-        match_hashed_host, parse_forward_field_in_place, parse_absolute_time, parse_forward_in_place,
-        parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval, parse_uri,
-        parse_user_host_path, parse_user_host_port, strdelim_parse_in_place, valid_domain,
-        valid_env_name, validate_permit, ForwardParse, HostfileLineParse, JumpParse,
-        PatternIntervalParse, UriParse, UserHostPathParse, UserHostPortParse,
-        DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
+        match_hashed_host, parse_convtime_double, parse_forward_field_in_place,
+        parse_absolute_time, parse_forward_in_place, parse_hostfile_line, parse_ipqos,
+        parse_jump, parse_pattern_interval, parse_uri, parse_user_host_path,
+        parse_user_host_port, strdelim_parse_in_place, valid_domain, valid_env_name,
+        validate_permit, ForwardParse, HostfileLineParse, JumpParse, PatternIntervalParse,
+        UriParse, UserHostPathParse, UserHostPortParse, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
         DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID,
         IPQOS_AF21, IPQOS_CS6, IPQOS_NONE,
     };
@@ -2227,6 +2326,33 @@ mod tests {
         assert_eq!(a2port(b"-1".as_ptr(), 2), None);
         assert_eq!(a2port(b"65536".as_ptr(), 5), None);
         assert_eq!(a2port(b"no-such-service".as_ptr(), 15), None);
+    }
+
+    #[test]
+    fn parse_convtime_double_handles_basic_forms() {
+        assert_eq!(parse_convtime_double(b"0".as_ptr(), 1), Some(0.0));
+        assert_eq!(parse_convtime_double(b"1".as_ptr(), 1), Some(1.0));
+        assert_eq!(parse_convtime_double(b"2s".as_ptr(), 2), Some(2.0));
+        assert_eq!(parse_convtime_double(b"3m".as_ptr(), 2), Some(180.0));
+        assert_eq!(parse_convtime_double(b"1m30s".as_ptr(), 5), Some(90.0));
+        assert_eq!(parse_convtime_double(b"1.5s".as_ptr(), 4), Some(1.5));
+        assert_eq!(parse_convtime_double(b".5s".as_ptr(), 3), Some(0.5));
+        assert_eq!(parse_convtime_double(b"1m.5s".as_ptr(), 5), Some(60.5));
+        assert_eq!(parse_convtime_double(b"1w2d3h4m5s".as_ptr(), 10), Some(788645.0));
+    }
+
+    #[test]
+    fn parse_convtime_double_rejects_bad_forms() {
+        assert_eq!(parse_convtime_double(core::ptr::null(), 0), None);
+        assert_eq!(parse_convtime_double(b"".as_ptr(), 0), None);
+        assert_eq!(parse_convtime_double(b"trout".as_ptr(), 5), None);
+        assert_eq!(parse_convtime_double(b"1.s".as_ptr(), 3), None);
+        assert_eq!(parse_convtime_double(b"0x1".as_ptr(), 3), None);
+        assert_eq!(parse_convtime_double(b"-1".as_ptr(), 2), None);
+        assert_eq!(parse_convtime_double(b"3.w0.5s".as_ptr(), 7), None);
+        assert_eq!(parse_convtime_double(b"1.0d0.5s".as_ptr(), 8), None);
+        assert_eq!(parse_convtime_double(b"1.5m".as_ptr(), 4), None);
+        assert_eq!(parse_convtime_double(b"1s1.5".as_ptr(), 5), None);
     }
 
     #[test]
