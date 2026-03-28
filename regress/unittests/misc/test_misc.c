@@ -576,6 +576,26 @@ test_multistate_lookup(void)
 }
 
 static void
+test_multistate_name(void)
+{
+	static const struct multistate yesnoask[] = {
+		{ "yes", 1 },
+		{ "no", 0 },
+		{ "ask", 2 },
+		{ NULL, -1 }
+	};
+
+	TEST_START("multistate name basic");
+	ASSERT_STRING_EQ(multistate_name(1, yesnoask), "yes");
+	ASSERT_STRING_EQ(multistate_name(2, yesnoask), "ask");
+	TEST_DONE();
+
+	TEST_START("multistate name rejects unknown");
+	ASSERT_STRING_EQ(multistate_name(7, yesnoask), "UNKNOWN");
+	TEST_DONE();
+}
+
+static void
 test_valid_domain(void)
 {
 	char *s;
@@ -673,6 +693,7 @@ test_misc(void)
 	test_valid_env_name();
 	test_atoi_err();
 	test_multistate_lookup();
+	test_multistate_name();
 	test_valid_domain();
 	test_parse_pattern_interval();
 }
