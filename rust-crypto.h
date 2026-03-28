@@ -288,6 +288,17 @@ int ossh_rust_curve25519_public_from_secret(uint8_t *public_key,
 int ossh_rust_curve25519_shared_secret(uint8_t *shared_secret,
     size_t shared_secret_len, const uint8_t *secret_key, size_t secret_key_len,
     const uint8_t *public_key, size_t public_key_len);
+int ossh_rust_mlkem768x25519_keypair(uint8_t *client_blob,
+    size_t client_blob_len, uint8_t *mlkem_secret, size_t mlkem_secret_len,
+    uint8_t *curve25519_secret, size_t curve25519_secret_len);
+int ossh_rust_mlkem768x25519_enc(const uint8_t *client_blob,
+    size_t client_blob_len, uint8_t *server_blob, size_t server_blob_len,
+    uint8_t *shared_hash, size_t shared_hash_len);
+int ossh_rust_mlkem768x25519_dec(const uint8_t *server_blob,
+    size_t server_blob_len, const uint8_t *mlkem_secret,
+    size_t mlkem_secret_len, const uint8_t *curve25519_secret,
+    size_t curve25519_secret_len, uint8_t *shared_hash,
+    size_t shared_hash_len);
 int ossh_rust_ecdh_keypair(int curve_id, uint8_t *secret_key,
     size_t secret_key_len, uint8_t *public_key, size_t public_key_len);
 int ossh_rust_ecdh_shared_secret(int curve_id, const uint8_t *secret_key,
