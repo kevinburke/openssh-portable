@@ -25,7 +25,166 @@
 
 #include "includes.h"
 
-#ifdef USE_SNTRUP761X25519
+#if defined(WITH_RUST_CRYPTO) || defined(USE_SNTRUP761X25519)
+
+#include <sys/types.h>
+
+#include <stdio.h>
+#include <string.h>
+#include <signal.h>
+
+#include "sshkey.h"
+#include "kex.h"
+#include "sshbuf.h"
+#include "digest.h"
+#include "ssherr.h"
+
+#endif
+
+#ifdef WITH_RUST_CRYPTO
+
+#include "rust-crypto.h"
+
+int
+kex_kem_sntrup761x25519_keypair(struct kex *kex)
+{
+	struct sshbuf *buf = NULL;
+	u_char *cp = NULL;
+	size_t need;
+	int r = SSH_ERR_INTERNAL_ERROR;
+
+	if ((buf = sshbuf_new()) == NULL)
+		return SSH_ERR_ALLOC_FAIL;
+	need = crypto_kem_sntrup761_PUBLICKEYBYTES + CURVE25519_SIZE;
+	if ((r = sshbuf_reserve(buf, need, &cp)) != 0)
+		goto out;
+	if (ossh_rust_sntrup761x25519_keypair(cp, need, kex->sntrup761_client_key,
+	    sizeof(kex->sntrup761_client_key), kex->c25519_client_key,
+	    sizeof(kex->c25519_client_key)) != 0) {
+		r = SSH_ERR_LIBCRYPTO_ERROR;
+		goto out;
+	}
+#ifdef DEBUG_KEXECDH
+	dump_digest("client public key sntrup761:", cp,
+	    crypto_kem_sntrup761_PUBLICKEYBYTES);
+	dump_digest("client public key c25519:",
+	    cp + crypto_kem_sntrup761_PUBLICKEYBYTES, CURVE25519_SIZE);
+#endif
+	r = 0;
+	kex->client_pub = buf;
+	buf = NULL;
+ out:
+	sshbuf_free(buf);
+	return r;
+}
+
+int
+kex_kem_sntrup761x25519_enc(struct kex *kex,
+   const struct sshbuf *client_blob, struct sshbuf **server_blobp,
+   struct sshbuf **shared_secretp)
+{
+	struct sshbuf *server_blob = NULL;
+	struct sshbuf *shared_secret = NULL;
+	u_char *server_blob_ptr = NULL;
+	u_char shared_hash[SSH_DIGEST_MAX_LENGTH];
+	size_t server_blob_len, shared_hash_len;
+	int r = SSH_ERR_INTERNAL_ERROR;
+
+	*server_blobp = NULL;
+	*shared_secretp = NULL;
+	server_blob_len = crypto_kem_sntrup761_CIPHERTEXTBYTES + CURVE25519_SIZE;
+	shared_hash_len = ssh_digest_bytes(kex->hash_alg);
+	if (sshbuf_len(client_blob) != crypto_kem_sntrup761_PUBLICKEYBYTES +
+	    CURVE25519_SIZE ||
+	    shared_hash_len != ssh_digest_bytes(SSH_DIGEST_SHA512)) {
+		r = SSH_ERR_SIGNATURE_INVALID;
+		goto out;
+	}
+	if ((server_blob = sshbuf_new()) == NULL ||
+	    (shared_secret = sshbuf_new()) == NULL) {
+		r = SSH_ERR_ALLOC_FAIL;
+		goto out;
+	}
+	if ((r = sshbuf_reserve(server_blob, server_blob_len, &server_blob_ptr)) != 0)
+		goto out;
+	if (ossh_rust_sntrup761x25519_enc(sshbuf_ptr(client_blob),
+	    sshbuf_len(client_blob), server_blob_ptr, server_blob_len,
+	    shared_hash, shared_hash_len) != 0) {
+		r = SSH_ERR_SIGNATURE_INVALID;
+		goto out;
+	}
+	if ((r = sshbuf_put_string(shared_secret, shared_hash, shared_hash_len)) != 0)
+		goto out;
+#ifdef DEBUG_KEXECDH
+	dump_digest("server cipher text:", server_blob_ptr,
+	    crypto_kem_sntrup761_CIPHERTEXTBYTES);
+	dump_digest("server public key 25519:",
+	    server_blob_ptr + crypto_kem_sntrup761_CIPHERTEXTBYTES,
+	    CURVE25519_SIZE);
+	dump_digest("encoded shared secret:", sshbuf_ptr(shared_secret),
+	    sshbuf_len(shared_secret));
+#endif
+	r = 0;
+	*server_blobp = server_blob;
+	*shared_secretp = shared_secret;
+	server_blob = NULL;
+	shared_secret = NULL;
+ out:
+	explicit_bzero(shared_hash, sizeof(shared_hash));
+	sshbuf_free(server_blob);
+	sshbuf_free(shared_secret);
+	return r;
+}
+
+int
+kex_kem_sntrup761x25519_dec(struct kex *kex,
+    const struct sshbuf *server_blob, struct sshbuf **shared_secretp)
+{
+	struct sshbuf *shared_secret = NULL;
+	u_char shared_hash[SSH_DIGEST_MAX_LENGTH];
+	size_t shared_hash_len, server_blob_len;
+	int r = SSH_ERR_INTERNAL_ERROR;
+
+	*shared_secretp = NULL;
+	server_blob_len = crypto_kem_sntrup761_CIPHERTEXTBYTES + CURVE25519_SIZE;
+	shared_hash_len = ssh_digest_bytes(kex->hash_alg);
+	if (sshbuf_len(server_blob) != server_blob_len ||
+	    shared_hash_len != ssh_digest_bytes(SSH_DIGEST_SHA512)) {
+		r = SSH_ERR_SIGNATURE_INVALID;
+		goto out;
+	}
+	if ((shared_secret = sshbuf_new()) == NULL) {
+		r = SSH_ERR_ALLOC_FAIL;
+		goto out;
+	}
+	if (ossh_rust_sntrup761x25519_dec(sshbuf_ptr(server_blob),
+	    sshbuf_len(server_blob), kex->sntrup761_client_key,
+	    sizeof(kex->sntrup761_client_key), kex->c25519_client_key,
+	    sizeof(kex->c25519_client_key), shared_hash, shared_hash_len) != 0) {
+		r = SSH_ERR_SIGNATURE_INVALID;
+		goto out;
+	}
+	if ((r = sshbuf_put_string(shared_secret, shared_hash, shared_hash_len)) != 0)
+		goto out;
+#ifdef DEBUG_KEXECDH
+	dump_digest("server cipher text:", sshbuf_ptr(server_blob),
+	    crypto_kem_sntrup761_CIPHERTEXTBYTES);
+	dump_digest("server public key c25519:",
+	    (const u_char *)sshbuf_ptr(server_blob) +
+	    crypto_kem_sntrup761_CIPHERTEXTBYTES, CURVE25519_SIZE);
+	dump_digest("encoded shared secret:", sshbuf_ptr(shared_secret),
+	    sshbuf_len(shared_secret));
+#endif
+	r = 0;
+	*shared_secretp = shared_secret;
+	shared_secret = NULL;
+ out:
+	explicit_bzero(shared_hash, sizeof(shared_hash));
+	sshbuf_free(shared_secret);
+	return r;
+}
+
+#elif defined(USE_SNTRUP761X25519)
 
 #include <sys/types.h>
 

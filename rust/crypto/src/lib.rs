@@ -34,7 +34,8 @@ use ecdsa::{
 use kex::{
     curve25519_public_from_secret, curve25519_shared_secret, ed25519_parse_public_blob,
     ed25519_public_from_seed, ed25519_sign, ed25519_verify, mlkem768x25519_dec,
-    mlkem768x25519_enc, mlkem768x25519_keypair, EcdhCurve,
+    mlkem768x25519_enc, mlkem768x25519_keypair, sntrup761x25519_dec,
+    sntrup761x25519_enc, sntrup761x25519_keypair, EcdhCurve,
 };
 use openssh_key::{
     openssh_private2_decode_len, openssh_private2_decode_write, openssh_private2_parse,
@@ -54,7 +55,7 @@ use util::{
     read_slice, strdelim_parse_in_place, validate_permit, write_prefix,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 28;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 29;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -1032,6 +1033,67 @@ pub extern "C" fn ossh_rust_mlkem768x25519_dec(
         server_blob_len,
         mlkem_secret,
         mlkem_secret_len,
+        curve25519_secret,
+        curve25519_secret_len,
+        shared_hash,
+        shared_hash_len,
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sntrup761x25519_keypair(
+    client_blob: *mut u8,
+    client_blob_len: usize,
+    sntrup_secret: *mut u8,
+    sntrup_secret_len: usize,
+    curve25519_secret: *mut u8,
+    curve25519_secret_len: usize,
+) -> c_int {
+    sntrup761x25519_keypair(
+        client_blob,
+        client_blob_len,
+        sntrup_secret,
+        sntrup_secret_len,
+        curve25519_secret,
+        curve25519_secret_len,
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sntrup761x25519_enc(
+    client_blob: *const u8,
+    client_blob_len: usize,
+    server_blob: *mut u8,
+    server_blob_len: usize,
+    shared_hash: *mut u8,
+    shared_hash_len: usize,
+) -> c_int {
+    sntrup761x25519_enc(
+        client_blob,
+        client_blob_len,
+        server_blob,
+        server_blob_len,
+        shared_hash,
+        shared_hash_len,
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sntrup761x25519_dec(
+    server_blob: *const u8,
+    server_blob_len: usize,
+    sntrup_secret: *const u8,
+    sntrup_secret_len: usize,
+    curve25519_secret: *const u8,
+    curve25519_secret_len: usize,
+    shared_hash: *mut u8,
+    shared_hash_len: usize,
+) -> c_int {
+    sntrup761x25519_dec(
+        server_blob,
+        server_blob_len,
+        sntrup_secret,
+        sntrup_secret_len,
         curve25519_secret,
         curve25519_secret_len,
         shared_hash,

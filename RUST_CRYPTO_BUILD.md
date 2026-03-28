@@ -98,7 +98,7 @@ Rust-backed today:
   (`diffie-hellman-group-exchange-sha1`,
   `diffie-hellman-group-exchange-sha256`)
 - full `mlkem768x25519-sha256` hybrid KEX path
-- the X25519 portion of the `sntrup761x25519-sha512` hybrid KEX path
+- full `sntrup761x25519-sha512` hybrid KEX path
 - AES-CTR transport cipher (`aes128-ctr`, `aes192-ctr`, `aes256-ctr`)
 - ChaCha20-Poly1305 transport cipher (`chacha20-poly1305@openssh.com`)
 - standalone Rust fuzz targets for:
@@ -109,7 +109,6 @@ Rust-backed today:
 Still on the existing C path today:
 
 - MD5 and SHA1 digest support
-- SNTRUP761 KEM code
 - PKCS#11 and security-key code paths
 - SK / FIDO private-key deserialization inside decrypted
   `openssh-key-v1` private sections
@@ -135,6 +134,7 @@ around OpenSSL.
 | `rsa` | RSA key generation plus PKCS#1 v1.5 signing and verification for `ssh-rsa`, `rsa-sha2-256`, and `rsa-sha2-512` | <https://github.com/RustCrypto/RSA> | <https://crates.io/crates/rsa> |
 | `ed25519-dalek` | Ed25519 key generation, signing, and verification | <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek> | <https://crates.io/crates/ed25519-dalek> |
 | `fips203` | ML-KEM-768 encapsulation and decapsulation for the Rust `mlkem768x25519-sha256` hybrid KEX path | <https://github.com/integritychain/fips203> | <https://crates.io/crates/fips203> |
+| `sntrup761` | SNTRUP761 encapsulation and decapsulation for the Rust `sntrup761x25519-sha512` hybrid KEX path | <https://github.com/mikelodder7/sntrup761> | <https://crates.io/crates/sntrup761> |
 | `x25519-dalek` | X25519 key exchange for `curve25519-sha256*` and the X25519 half of hybrid KEX | <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/x25519-dalek> | <https://crates.io/crates/x25519-dalek> |
 | `p256` | NIST P-256 ECDH plus ECDSA support for `ecdh-sha2-nistp256` and `ecdsa-sha2-nistp256` | <https://github.com/RustCrypto/elliptic-curves/tree/master/p256> | <https://crates.io/crates/p256> |
 | `p384` | NIST P-384 ECDH plus ECDSA support for `ecdh-sha2-nistp384` and `ecdsa-sha2-nistp384` | <https://github.com/RustCrypto/elliptic-curves/tree/master/p384> | <https://crates.io/crates/p384> |

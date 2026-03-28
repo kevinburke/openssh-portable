@@ -9,7 +9,15 @@ use p256::{PublicKey as P256PublicKey, SecretKey as P256SecretKey};
 use p384::{PublicKey as P384PublicKey, SecretKey as P384SecretKey};
 use p521::{PublicKey as P521PublicKey, SecretKey as P521SecretKey};
 use rand_core::{OsRng, RngCore};
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256, Sha512};
+use sntrup761::{
+    generate_key as sntrup761_generate_key, Ciphertext as Sntrup761Ciphertext,
+    DecapsulationKey as Sntrup761DecapsulationKey, EncapsulationKey as Sntrup761EncapsulationKey,
+    CIPHERTEXT_SIZE as SNTRUP761_CIPHERTEXT_LENGTH,
+    PUBLIC_KEY_SIZE as SNTRUP761_PUBLIC_KEY_LENGTH,
+    SECRET_KEY_SIZE as SNTRUP761_SECRET_KEY_LENGTH,
+    SHARED_SECRET_SIZE as SNTRUP761_SHARED_SECRET_LENGTH,
+};
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 
 use crate::util::{read_array, read_slice, write_prefix, SshWireReader};
@@ -29,6 +37,8 @@ const MLKEM768_CIPHERTEXT_LENGTH: usize = ml_kem_768::CT_LEN;
 const MLKEM768_SHARED_SECRET_LENGTH: usize = 32;
 const MLKEM768X25519_CLIENT_BLOB_LENGTH: usize = MLKEM768_PUBLIC_KEY_LENGTH + CURVE25519_KEY_LENGTH;
 const MLKEM768X25519_SERVER_BLOB_LENGTH: usize = MLKEM768_CIPHERTEXT_LENGTH + CURVE25519_KEY_LENGTH;
+const SNTRUP761X25519_CLIENT_BLOB_LENGTH: usize = SNTRUP761_PUBLIC_KEY_LENGTH + CURVE25519_KEY_LENGTH;
+const SNTRUP761X25519_SERVER_BLOB_LENGTH: usize = SNTRUP761_CIPHERTEXT_LENGTH + CURVE25519_KEY_LENGTH;
 const ECDH_NISTP256_SECRET_LENGTH: usize = 32;
 const ECDH_NISTP256_PUBLIC_LENGTH: usize = 65;
 const ECDH_NISTP384_SECRET_LENGTH: usize = 48;
@@ -314,6 +324,24 @@ fn hash_mlkem768x25519_shared(mlkem_shared: &[u8], x25519_shared: &[u8], out: &m
     Ok(())
 }
 
+fn hash_sntrup761x25519_shared(
+    sntrup_shared: &[u8],
+    x25519_shared: &[u8],
+    out: &mut [u8],
+) -> Result<(), ()> {
+    if sntrup_shared.len() != SNTRUP761_SHARED_SECRET_LENGTH
+        || x25519_shared.len() != CURVE25519_KEY_LENGTH
+        || out.len() != 64
+    {
+        return Err(());
+    }
+    let mut digest = Sha512::new();
+    digest.update(sntrup_shared);
+    digest.update(x25519_shared);
+    out.copy_from_slice(&digest.finalize());
+    Ok(())
+}
+
 pub(crate) fn mlkem768x25519_keypair(
     client_blob: *mut u8,
     client_blob_len: usize,
@@ -462,6 +490,142 @@ pub(crate) fn mlkem768x25519_dec(
     0
 }
 
+pub(crate) fn sntrup761x25519_keypair(
+    client_blob: *mut u8,
+    client_blob_len: usize,
+    sntrup_secret: *mut u8,
+    sntrup_secret_len: usize,
+    curve25519_secret: *mut u8,
+    curve25519_secret_len: usize,
+) -> c_int {
+    if client_blob.is_null() || sntrup_secret.is_null() || curve25519_secret.is_null() {
+        return -1;
+    }
+    if client_blob_len != SNTRUP761X25519_CLIENT_BLOB_LENGTH
+        || sntrup_secret_len != SNTRUP761_SECRET_KEY_LENGTH
+        || curve25519_secret_len != CURVE25519_KEY_LENGTH
+    {
+        return -1;
+    }
+    let client_blob = unsafe { slice::from_raw_parts_mut(client_blob, client_blob_len) };
+    let sntrup_secret = unsafe { slice::from_raw_parts_mut(sntrup_secret, sntrup_secret_len) };
+    let curve25519_secret =
+        unsafe { slice::from_raw_parts_mut(curve25519_secret, curve25519_secret_len) };
+
+    let (encapsulation_key, decapsulation_key) = sntrup761_generate_key(sntrup761::rand::rng());
+    client_blob[..SNTRUP761_PUBLIC_KEY_LENGTH]
+        .copy_from_slice(encapsulation_key.as_ref());
+    sntrup_secret.copy_from_slice(decapsulation_key.as_ref());
+
+    OsRng.fill_bytes(curve25519_secret);
+    let curve_public = x25519(
+        curve25519_secret.try_into().expect("curve25519 secret length"),
+        X25519_BASEPOINT_BYTES,
+    );
+    client_blob[SNTRUP761_PUBLIC_KEY_LENGTH..].copy_from_slice(&curve_public);
+    0
+}
+
+pub(crate) fn sntrup761x25519_enc(
+    client_blob: *const u8,
+    client_blob_len: usize,
+    server_blob: *mut u8,
+    server_blob_len: usize,
+    shared_hash: *mut u8,
+    shared_hash_len: usize,
+) -> c_int {
+    if client_blob.is_null() || server_blob.is_null() || shared_hash.is_null() {
+        return -1;
+    }
+    if client_blob_len != SNTRUP761X25519_CLIENT_BLOB_LENGTH
+        || server_blob_len != SNTRUP761X25519_SERVER_BLOB_LENGTH
+        || shared_hash_len != 64
+    {
+        return -1;
+    }
+    let client_blob = unsafe { slice::from_raw_parts(client_blob, client_blob_len) };
+    let server_blob = unsafe { slice::from_raw_parts_mut(server_blob, server_blob_len) };
+    let shared_hash = unsafe { slice::from_raw_parts_mut(shared_hash, shared_hash_len) };
+    let (sntrup_public, curve25519_public) = client_blob.split_at(SNTRUP761_PUBLIC_KEY_LENGTH);
+
+    let encapsulation_key: Sntrup761EncapsulationKey =
+        match sntrup_public.try_into() {
+            Ok(key) => key,
+            Err(_) => return -1,
+        };
+    let (ciphertext, sntrup_shared) = encapsulation_key.encapsulate(sntrup761::rand::rng());
+    server_blob[..SNTRUP761_CIPHERTEXT_LENGTH].copy_from_slice(ciphertext.as_ref());
+
+    let server_curve_secret = {
+        let mut secret = [0u8; CURVE25519_KEY_LENGTH];
+        OsRng.fill_bytes(&mut secret);
+        secret
+    };
+    let server_curve_public = x25519(server_curve_secret, X25519_BASEPOINT_BYTES);
+    server_blob[SNTRUP761_CIPHERTEXT_LENGTH..].copy_from_slice(&server_curve_public);
+
+    let x25519_shared =
+        match checked_x25519_shared_secret(&server_curve_secret, curve25519_public) {
+            Ok(shared) => shared,
+            Err(_) => return -1,
+        };
+    if hash_sntrup761x25519_shared(sntrup_shared.as_ref(), &x25519_shared, shared_hash).is_err() {
+        return -1;
+    }
+    0
+}
+
+pub(crate) fn sntrup761x25519_dec(
+    server_blob: *const u8,
+    server_blob_len: usize,
+    sntrup_secret: *const u8,
+    sntrup_secret_len: usize,
+    curve25519_secret: *const u8,
+    curve25519_secret_len: usize,
+    shared_hash: *mut u8,
+    shared_hash_len: usize,
+) -> c_int {
+    if server_blob.is_null()
+        || sntrup_secret.is_null()
+        || curve25519_secret.is_null()
+        || shared_hash.is_null()
+    {
+        return -1;
+    }
+    if server_blob_len != SNTRUP761X25519_SERVER_BLOB_LENGTH
+        || sntrup_secret_len != SNTRUP761_SECRET_KEY_LENGTH
+        || curve25519_secret_len != CURVE25519_KEY_LENGTH
+        || shared_hash_len != 64
+    {
+        return -1;
+    }
+    let server_blob = unsafe { slice::from_raw_parts(server_blob, server_blob_len) };
+    let sntrup_secret = unsafe { slice::from_raw_parts(sntrup_secret, sntrup_secret_len) };
+    let curve25519_secret =
+        unsafe { slice::from_raw_parts(curve25519_secret, curve25519_secret_len) };
+    let shared_hash = unsafe { slice::from_raw_parts_mut(shared_hash, shared_hash_len) };
+    let (ciphertext, server_curve_public) = server_blob.split_at(SNTRUP761_CIPHERTEXT_LENGTH);
+
+    let decapsulation_key: Sntrup761DecapsulationKey = match sntrup_secret.try_into() {
+        Ok(key) => key,
+        Err(_) => return -1,
+    };
+    let ciphertext: Sntrup761Ciphertext = match ciphertext.try_into() {
+        Ok(ct) => ct,
+        Err(_) => return -1,
+    };
+    let sntrup_shared = decapsulation_key.decapsulate(&ciphertext);
+    let x25519_shared =
+        match checked_x25519_shared_secret(curve25519_secret, server_curve_public) {
+            Ok(shared) => shared,
+            Err(_) => return -1,
+        };
+    if hash_sntrup761x25519_shared(sntrup_shared.as_ref(), &x25519_shared, shared_hash).is_err() {
+        return -1;
+    }
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use ed25519_dalek::Signer;
@@ -470,11 +634,14 @@ mod tests {
     use super::{
         ed25519_parse_public_blob, ed25519_public_from_seed, ed25519_sign, ed25519_verify,
         curve25519_public_from_secret, curve25519_shared_secret, mlkem768x25519_dec,
-        mlkem768x25519_enc, mlkem768x25519_keypair, x25519, EcdhCurve,
+        mlkem768x25519_enc, mlkem768x25519_keypair, sntrup761x25519_dec,
+        sntrup761x25519_enc, sntrup761x25519_keypair, x25519, EcdhCurve,
         OSSH_RUST_ECDH_NISTP256, OSSH_RUST_ECDH_NISTP384, OSSH_RUST_ECDH_NISTP521,
         CURVE25519_KEY_LENGTH,
         Signature, SigningKey, VerifyingKey, MLKEM768_SECRET_KEY_LENGTH,
+        SNTRUP761_SECRET_KEY_LENGTH,
         MLKEM768X25519_CLIENT_BLOB_LENGTH, MLKEM768X25519_SERVER_BLOB_LENGTH,
+        SNTRUP761X25519_CLIENT_BLOB_LENGTH, SNTRUP761X25519_SERVER_BLOB_LENGTH,
         X25519_BASEPOINT_BYTES,
     };
 
@@ -807,6 +974,53 @@ mod tests {
                 server_blob.len(),
                 client_mlkem_secret.as_ptr(),
                 client_mlkem_secret.len(),
+                client_curve_secret.as_ptr(),
+                client_curve_secret.len(),
+                client_shared.as_mut_ptr(),
+                client_shared.len(),
+            ),
+            0
+        );
+        assert_eq!(client_shared, server_shared);
+    }
+
+    #[test]
+    fn sntrup761x25519_roundtrip() {
+        let mut client_blob = [0u8; SNTRUP761X25519_CLIENT_BLOB_LENGTH];
+        let mut client_sntrup_secret = [0u8; SNTRUP761_SECRET_KEY_LENGTH];
+        let mut client_curve_secret = [0u8; CURVE25519_KEY_LENGTH];
+        let mut server_blob = [0u8; SNTRUP761X25519_SERVER_BLOB_LENGTH];
+        let mut server_shared = [0u8; 64];
+        let mut client_shared = [0u8; 64];
+
+        assert_eq!(
+            sntrup761x25519_keypair(
+                client_blob.as_mut_ptr(),
+                client_blob.len(),
+                client_sntrup_secret.as_mut_ptr(),
+                client_sntrup_secret.len(),
+                client_curve_secret.as_mut_ptr(),
+                client_curve_secret.len(),
+            ),
+            0
+        );
+        assert_eq!(
+            sntrup761x25519_enc(
+                client_blob.as_ptr(),
+                client_blob.len(),
+                server_blob.as_mut_ptr(),
+                server_blob.len(),
+                server_shared.as_mut_ptr(),
+                server_shared.len(),
+            ),
+            0
+        );
+        assert_eq!(
+            sntrup761x25519_dec(
+                server_blob.as_ptr(),
+                server_blob.len(),
+                client_sntrup_secret.as_ptr(),
+                client_sntrup_secret.len(),
                 client_curve_secret.as_ptr(),
                 client_curve_secret.len(),
                 client_shared.as_mut_ptr(),

@@ -40,6 +40,8 @@ poly1305 = { version = "0.8.0", default-features = false }
 rsa = { version = "0.9.8", default-features = false, features = ["pem"] }
 # Releases: https://crates.io/crates/sec1
 sec1 = { version = "0.7.3", default-features = false, features = ["pem"] }
+# Releases: https://crates.io/crates/sntrup761
+sntrup761 = { version = "0.4.0", default-features = false, features = ["kgen", "ecap", "dcap", "std"] }
 # Releases: https://crates.io/crates/num-bigint-dig
 num-bigint-dig = { version = "0.8.6", default-features = false }
 # Releases: https://crates.io/crates/rand_core
