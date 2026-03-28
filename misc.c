@@ -2941,6 +2941,33 @@ multistate_lookup(const char *arg, const struct multistate *multistate_ptr,
 }
 
 const char *
+multistate_name(int value, const struct multistate *multistate_ptr)
+{
+#ifdef WITH_RUST_CRYPTO
+	size_t index, nentries;
+
+	if (multistate_ptr == NULL)
+		return "UNKNOWN";
+	nentries = multistate_nentries(multistate_ptr);
+	if (ossh_rust_multistate_name(value,
+	    (const struct ossh_rust_multistate_entry *)multistate_ptr,
+	    nentries, &index) == 0 && index < nentries)
+		return multistate_ptr[index].key;
+	return "UNKNOWN";
+#else
+	size_t i;
+
+	if (multistate_ptr == NULL)
+		return "UNKNOWN";
+	for (i = 0; multistate_ptr[i].key != NULL; i++) {
+		if (multistate_ptr[i].value == value)
+			return multistate_ptr[i].key;
+	}
+	return "UNKNOWN";
+#endif
+}
+
+const char *
 atoi_err(const char *nptr, int *val)
 {
 #ifdef WITH_RUST_CRYPTO
