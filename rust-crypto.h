@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 36U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 37U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -30,6 +30,11 @@ extern "C" {
 #define OSSH_RUST_ATOI_STATUS_TOO_LARGE 4
 
 struct ossh_rust_multistate_entry {
+	const char *key;
+	int value;
+};
+
+struct ossh_rust_keyword_entry {
 	const char *key;
 	int value;
 };
@@ -280,6 +285,9 @@ int ossh_rust_multistate_lookup(const uint8_t *input, size_t input_len,
 int ossh_rust_multistate_name(int value,
     const struct ossh_rust_multistate_entry *entries, size_t nentries,
     size_t *out_index);
+int ossh_rust_keyword_lookup(const uint8_t *input, size_t input_len,
+    const struct ossh_rust_keyword_entry *entries, size_t nentries,
+    int ignore_case, int *out);
 int ossh_rust_valid_env_name(const uint8_t *input, size_t input_len);
 int ossh_rust_valid_domain(uint8_t *input, size_t input_len, int makelower,
     int *status);

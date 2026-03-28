@@ -51,17 +51,18 @@ use rsa::{
 };
 use util::{
     a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
-    atoi_err, multistate_lookup, multistate_name, parse_convtime_double,
-    parse_forward_field_in_place, parse_forward_in_place, parse_hostfile_line,
-    parse_ipqos, parse_jump, parse_pattern_interval, read_slice,
-    strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
-    write_prefix, ATOI_STATUS_INVALID, ATOI_STATUS_MISSING,
+    atoi_err, keyword_lookup, multistate_lookup, multistate_name,
+    parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
+    parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval,
+    read_slice, strdelim_parse_in_place, valid_domain, valid_env_name,
+    validate_permit, write_prefix, ATOI_STATUS_INVALID, ATOI_STATUS_MISSING,
     ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL,
     DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
     DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID, MultistateEntry,
+    KeywordEntry,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 36;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 37;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -125,6 +126,7 @@ pub struct RustCertBodyParse {
 }
 
 pub type RustMultistateEntry = MultistateEntry;
+pub type RustKeywordEntry = KeywordEntry;
 
 #[repr(C)]
 pub struct RustPrivate2HeaderParse {
@@ -873,6 +875,29 @@ pub extern "C" fn ossh_rust_multistate_name(
         Some(index) => {
             unsafe {
                 *out_index = index;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_keyword_lookup(
+    input: *const u8,
+    input_len: usize,
+    entries: *const RustKeywordEntry,
+    nentries: usize,
+    ignore_case: c_int,
+    out: *mut c_int,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match keyword_lookup(input, input_len, entries, nentries, ignore_case != 0) {
+        Some(parsed) => {
+            unsafe {
+                *out = parsed;
             }
             0
         }
