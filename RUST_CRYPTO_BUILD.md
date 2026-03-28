@@ -115,6 +115,10 @@ Rust-backed today:
   - `command=`, `principals=`, `permitopen=`, and similar auth-option fields
   - `sshsig` option parsing like `namespaces=`, `valid-after=`, and `valid-before=`
   - case-insensitive `name=` matching that advances the caller input pointer
+- `opt_dequote()` parsing used by:
+  - quoted auth-option values like `command="..."` and `principals="..."`
+  - quoted `sshsig` option values like `namespaces="..."`
+  - escaped `\"` handling plus shared `missing start/end quote` validation
 - client config keyword lookup used by:
   - `readconf.c` option-name parsing before per-option semantics
   - `ssh -G` and normal client config loading
@@ -282,6 +286,9 @@ helpers used by `lookup_env_in_list()` and `lookup_setenv_in_list()`.
 
 It also includes direct coverage for the shared Rust-backed `opt_match()`
 path used by `name=` style auth-option and `sshsig` field parsing.
+
+It also includes direct coverage for the shared Rust-backed `opt_dequote()`
+path used by quoted auth-option and `sshsig` values.
 
 It also includes direct Rust coverage for the client keyword lookup helper and
 `ssh -G` smoke coverage for accepted and rejected client config options.
