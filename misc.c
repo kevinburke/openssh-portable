@@ -2901,12 +2901,30 @@ valid_env_name(const char *name)
 const char *
 atoi_err(const char *nptr, int *val)
 {
+#ifdef WITH_RUST_CRYPTO
+	int status = OSSH_RUST_PARSE_STATUS_OK;
+
+	if (ossh_rust_atoi_err((const u_char *)nptr,
+	    nptr == NULL ? 0 : strlen(nptr), val, &status) == 0)
+		return NULL;
+	switch (status) {
+	case OSSH_RUST_ATOI_STATUS_MISSING:
+		return "missing";
+	case OSSH_RUST_ATOI_STATUS_TOO_SMALL:
+		return "too small";
+	case OSSH_RUST_ATOI_STATUS_TOO_LARGE:
+		return "too large";
+	default:
+		return "invalid";
+	}
+#else
 	const char *errstr = NULL;
 
 	if (nptr == NULL || *nptr == '\0')
 		return "missing";
 	*val = strtonum(nptr, 0, INT_MAX, &errstr);
 	return errstr;
+#endif
 }
 
 int
