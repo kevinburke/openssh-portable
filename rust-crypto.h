@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 39U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 40U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -297,6 +297,9 @@ int ossh_rust_lookup_env_in_list(const uint8_t *env, size_t env_len,
 int ossh_rust_lookup_setenv_in_list(const uint8_t *env, size_t env_len,
     const char * const *envs, size_t nenvs, size_t *out_index,
     size_t *out_value_offset);
+int ossh_rust_opt_match(const uint8_t *term, size_t term_len,
+    const uint8_t *input, size_t input_len, size_t *out_offset,
+    int *out_result);
 int ossh_rust_valid_env_name(const uint8_t *input, size_t input_len);
 int ossh_rust_valid_domain(uint8_t *input, size_t input_len, int makelower,
     int *status);
