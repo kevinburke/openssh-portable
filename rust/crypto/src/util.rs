@@ -155,6 +155,13 @@ pub(crate) struct HostfileLineParse {
     pub(crate) keytype_len: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PatternIntervalParse {
+    pub(crate) type_len: usize,
+    pub(crate) interval_offset: usize,
+    pub(crate) interval_len: usize,
+}
+
 const HOSTFILE_LINE_KIND_COMMENT: u32 = 1;
 const HOSTFILE_LINE_KIND_ENTRY: u32 = 2;
 const HOSTFILE_LINE_KIND_INVALID_MARKER: u32 = 3;
@@ -318,6 +325,19 @@ pub(crate) fn valid_domain(
         input[input.len() - 1] = 0;
     }
     Ok(())
+}
+
+pub(crate) fn parse_pattern_interval(input: *const u8, input_len: usize) -> Option<PatternIntervalParse> {
+    let input = read_slice(input, input_len)?;
+    let eq = input.iter().position(|byte| *byte == b'=')?;
+    if eq == 0 || eq + 1 >= input.len() {
+        return None;
+    }
+    Some(PatternIntervalParse {
+        type_len: eq,
+        interval_offset: eq + 1,
+        interval_len: input.len() - eq - 1,
+    })
 }
 
 fn parse_decimal_component(input: &[u8]) -> Option<i32> {
@@ -1621,10 +1641,11 @@ mod tests {
     use super::{
         argv_split_parse, argv_split_write, host_hash_write, hpdelim2_parse_in_place,
         match_hashed_host, parse_forward_field_in_place, parse_absolute_time, parse_forward_in_place,
-        parse_hostfile_line, parse_ipqos, parse_jump, parse_uri, parse_user_host_path,
-        parse_user_host_port, strdelim_parse_in_place, valid_domain, valid_env_name,
-        validate_permit, ForwardParse, HostfileLineParse, JumpParse, UriParse,
-        UserHostPathParse, UserHostPortParse, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
+        parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval, parse_uri,
+        parse_user_host_path, parse_user_host_port, strdelim_parse_in_place, valid_domain,
+        valid_env_name, validate_permit, ForwardParse, HostfileLineParse, JumpParse,
+        PatternIntervalParse, UriParse, UserHostPathParse, UserHostPortParse,
+        DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
         DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID,
         IPQOS_AF21, IPQOS_CS6, IPQOS_NONE,
     };
@@ -2155,6 +2176,35 @@ mod tests {
             valid_domain(bad_chars.as_mut_ptr(), bad_chars.len(), 1),
             Err(DOMAIN_STATUS_INVALID_CHARS)
         );
+    }
+
+    #[test]
+    fn parse_pattern_interval_handles_basic_forms() {
+        assert_eq!(
+            parse_pattern_interval(b"session:command=1m".as_ptr(), 18),
+            Some(PatternIntervalParse {
+                type_len: 15,
+                interval_offset: 16,
+                interval_len: 2,
+            })
+        );
+        assert_eq!(
+            parse_pattern_interval(b"global=10".as_ptr(), 9),
+            Some(PatternIntervalParse {
+                type_len: 6,
+                interval_offset: 7,
+                interval_len: 2,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_pattern_interval_rejects_bad_forms() {
+        assert_eq!(parse_pattern_interval(core::ptr::null(), 0), None);
+        assert_eq!(parse_pattern_interval(b"".as_ptr(), 0), None);
+        assert_eq!(parse_pattern_interval(b"session".as_ptr(), 7), None);
+        assert_eq!(parse_pattern_interval(b"=1m".as_ptr(), 3), None);
+        assert_eq!(parse_pattern_interval(b"session=".as_ptr(), 8), None);
     }
 
     #[test]

@@ -87,6 +87,9 @@ Rust-backed today:
   - `parse_ipqos()` for `IPQoS`
   - `valid_env_name()` for legacy `$ENV` option handling and auth env lists
   - `valid_domain()` for canonical-domain and related hostname validation
+- `parse_pattern_interval()` parsing used by:
+  - `ChannelTimeout`
+  - similar `pattern=interval` config semantics shared by client/server code
 - RSA and ECDSA private-key loading for:
   - legacy PEM
   - PKCS#8
