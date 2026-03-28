@@ -50,14 +50,14 @@ use rsa::{
     rsa_private_pem_len, rsa_private_pem_write, rsa_sign_prehashed, rsa_verify_prehashed,
 };
 use util::{
-    argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
+    a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
     parse_forward_field_in_place, parse_forward_in_place, parse_hostfile_line, parse_ipqos,
     parse_jump, parse_pattern_interval, read_slice, strdelim_parse_in_place, valid_domain,
     valid_env_name, validate_permit, write_prefix, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
     DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 31;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 32;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -770,6 +770,24 @@ pub extern "C" fn ossh_rust_parse_ipqos(
         return -1;
     }
     let Some(parsed) = parse_ipqos(input, input_len) else {
+        return -1;
+    };
+    unsafe {
+        *out = parsed;
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_a2port(
+    input: *const u8,
+    input_len: usize,
+    out: *mut c_int,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    let Some(parsed) = a2port(input, input_len) else {
         return -1;
     };
     unsafe {
