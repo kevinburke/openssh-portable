@@ -753,6 +753,7 @@ static struct {
 	{ NULL, sBadOption, 0 }
 };
 
+#ifdef WITH_RUST_CRYPTO
 static size_t
 keyword_nentries(void)
 {
@@ -762,6 +763,7 @@ keyword_nentries(void)
 		i++;
 	return i;
 }
+#endif
 
 static struct {
 	int val;
@@ -804,10 +806,10 @@ static ServerOpCodes
 parse_token(const char *cp, const char *filename,
 	    int linenum, u_int *flags)
 {
+#ifdef WITH_RUST_CRYPTO
 	int opcode;
 	size_t i;
 
-#ifdef WITH_RUST_CRYPTO
 	if (ossh_rust_keyword_lookup((const u_char *)cp,
 	    cp == NULL ? 0 : strlen(cp),
 	    (const struct ossh_rust_keyword_entry *)keywords, keyword_nentries(),
