@@ -8,6 +8,7 @@ The two most useful cases for this branch are:
 - `openssl-noec`
 - `without-openssl`
 - `rust-crypto`
+- `gcc-12-Werror` on Ubuntu 22.04
 
 All examples assume you start from the `openssh-portable/` repo root.
 
@@ -15,6 +16,9 @@ If you want the shortest path, use the provided Dockerfile and helper script:
 
 ```sh
 docker build -t openssh-ci-repro -f docker/ci-repro.Dockerfile .
+
+docker build --build-arg UBUNTU_VERSION=22.04 \
+  -t openssh-ci-repro-ubuntu22 -f docker/ci-repro.Dockerfile .
 docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro \
   ./contrib/ci-repro.sh openssl-noec
 ```
@@ -31,6 +35,9 @@ or:
 ```sh
 docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro \
   ./contrib/ci-repro.sh rust-crypto
+
+docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro-ubuntu22 \
+  ./contrib/ci-repro.sh gcc-12-Werror
 ```
 
 The helper script creates a throwaway worktree, configures the requested CI
