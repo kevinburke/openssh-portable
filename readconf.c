@@ -3894,6 +3894,21 @@ dump_cfg_strarray(OpCodes code, u_int count, char **vals)
 static void
 dump_cfg_strarray_oneline(OpCodes code, u_int count, char **vals)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_strarray_oneline_parse parsed;
+	char *buf;
+
+	if (ossh_rust_strarray_oneline_parse((const char * const *)vals, count,
+	    &parsed) != 0)
+		fatal_f("rust strarray parse failed");
+	buf = xmalloc(parsed.output_len + 1);
+	if (ossh_rust_strarray_oneline_write((const char * const *)vals, count,
+	    (u_char *)buf, parsed.output_len) != 0)
+		fatal_f("rust strarray write failed");
+	buf[parsed.output_len] = '\0';
+	printf("%s%s\n", lookup_opcode_name(code), buf);
+	free(buf);
+#else
 	u_int i;
 
 	printf("%s", lookup_opcode_name(code));
@@ -3902,6 +3917,7 @@ dump_cfg_strarray_oneline(OpCodes code, u_int count, char **vals)
 	for (i = 0; i < count; i++)
 		printf(" %s",  vals[i]);
 	printf("\n");
+#endif
 }
 
 static void

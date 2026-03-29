@@ -120,6 +120,11 @@ pub(crate) struct ForwardFormatParse {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct StrarrayOnelineParse {
+    pub(crate) output_len: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StrdelimParse {
     pub(crate) next_offset: usize,
     pub(crate) next_is_null: u32,
@@ -597,6 +602,49 @@ pub(crate) fn forward_format_write(
         append_forward_endpoint(&mut formatted, connect_host, connect_port, connect_path)?;
     }
     out.copy_from_slice(&formatted);
+    Some(())
+}
+
+pub(crate) fn strarray_oneline_parse(
+    vals: *const *const c_char,
+    nvals: usize,
+) -> Option<StrarrayOnelineParse> {
+    let vals = read_ptr_slice(vals, nvals)?;
+    let mut output_len = 0usize;
+    if nvals == 0 {
+        output_len += 5;
+    } else {
+        for val in vals {
+            output_len += 1 + read_cstr_bytes(*val)?.len();
+        }
+    }
+    Some(StrarrayOnelineParse { output_len })
+}
+
+pub(crate) fn strarray_oneline_write(
+    vals: *const *const c_char,
+    nvals: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = strarray_oneline_parse(vals, nvals)?;
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let vals = read_ptr_slice(vals, nvals)?;
+    let mut pos = 0usize;
+    if nvals == 0 {
+        out.copy_from_slice(b" none");
+        return Some(());
+    }
+    for val in vals {
+        let bytes = read_cstr_bytes(*val)?;
+        out[pos] = b' ';
+        pos += 1;
+        out[pos..pos + bytes.len()].copy_from_slice(bytes);
+        pos += bytes.len();
+    }
     Some(())
 }
 
@@ -2420,6 +2468,7 @@ mod tests {
         FMT_INTARG_LITERAL_NO, FMT_INTARG_LITERAL_UNSET, FMT_INTARG_LITERAL_UNKNOWN,
         FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
         FmtIntArgParse, ForwardFormatParse,
+        StrarrayOnelineParse, strarray_oneline_parse, strarray_oneline_write,
         ExpandEntry, expand_parse, expand_write,
         ForwardParse, HostfileLineParse, JumpParse,
         KeywordEntry, MultistateEntry, OptDequoteParse, OPT_DEQUOTE_MISSING_END,
@@ -3276,6 +3325,40 @@ mod tests {
             Some(())
         );
         assert_eq!(&out, b" [host]:8080 [dest]:80");
+    }
+
+    #[test]
+    fn strarray_oneline_parse_handles_basic_forms() {
+        let one = CString::new("one").unwrap();
+        let two = CString::new("two").unwrap();
+        let vals = [one.as_ptr(), two.as_ptr()];
+
+        assert_eq!(
+            strarray_oneline_parse(vals.as_ptr(), vals.len()),
+            Some(StrarrayOnelineParse {
+                output_len: " one two".len(),
+            })
+        );
+        assert_eq!(
+            strarray_oneline_parse(core::ptr::null(), 0),
+            Some(StrarrayOnelineParse {
+                output_len: " none".len(),
+            })
+        );
+    }
+
+    #[test]
+    fn strarray_oneline_write_handles_basic_forms() {
+        let one = CString::new("one").unwrap();
+        let two = CString::new("two").unwrap();
+        let vals = [one.as_ptr(), two.as_ptr()];
+        let mut out = vec![0u8; " one two".len()];
+
+        assert_eq!(
+            strarray_oneline_write(vals.as_ptr(), vals.len(), out.as_mut_ptr(), out.len()),
+            Some(())
+        );
+        assert_eq!(&out, b" one two");
     }
 
     #[test]
