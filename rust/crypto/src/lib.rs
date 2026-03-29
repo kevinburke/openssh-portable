@@ -58,7 +58,8 @@ use util::{
     multistate_name, opt_dequote_parse, opt_dequote_write, opt_flag_parse,
     opt_match_parse, parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
     parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval, read_slice,
-    strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit, write_prefix, ATOI_STATUS_INVALID,
+    strarray_oneline_parse, strarray_oneline_write, strdelim_parse_in_place,
+    valid_domain, valid_env_name, validate_permit, write_prefix, ATOI_STATUS_INVALID,
     ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL,
     DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
     DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID, DOLLAR_EXPAND_INVALID,
@@ -66,7 +67,7 @@ use util::{
     OPT_DEQUOTE_MISSING_START,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 43;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 44;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -326,6 +327,11 @@ pub struct RustFmtIntArgParse {
 pub struct RustForwardFormatParse {
     output_len: usize,
     emit: u32,
+}
+
+#[repr(C)]
+pub struct RustStrarrayOnelineParse {
+    output_len: usize,
 }
 
 #[unsafe(no_mangle)]
@@ -1000,6 +1006,42 @@ pub extern "C" fn ossh_rust_forward_format_write(
     )
     .is_some()
     {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_strarray_oneline_parse(
+    vals: *const *const c_char,
+    nvals: usize,
+    out: *mut RustStrarrayOnelineParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match strarray_oneline_parse(vals, nvals) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustStrarrayOnelineParse {
+                    output_len: parsed.output_len,
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_strarray_oneline_write(
+    vals: *const *const c_char,
+    nvals: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if strarray_oneline_write(vals, nvals, out, out_len).is_some() {
         0
     } else {
         -1
