@@ -327,6 +327,7 @@ static struct {
 	{ NULL, oBadOption }
 };
 
+#ifdef WITH_RUST_CRYPTO
 static size_t
 keyword_nentries(void)
 {
@@ -336,6 +337,7 @@ keyword_nentries(void)
 		i++;
 	return i;
 }
+#endif
 
 static const char *lookup_opcode_name(OpCodes code);
 
@@ -972,9 +974,9 @@ static OpCodes
 parse_token(const char *cp, const char *filename, int linenum,
     const char *ignored_unknown)
 {
+#ifdef WITH_RUST_CRYPTO
 	int opcode;
 
-#ifdef WITH_RUST_CRYPTO
 	if (ossh_rust_keyword_lookup((const u_char *)cp,
 	    cp == NULL ? 0 : strlen(cp),
 	    (const struct ossh_rust_keyword_entry *)keywords, keyword_nentries(),
@@ -3930,7 +3932,9 @@ dump_cfg_forwards(OpCodes code, u_int count, const struct Forward *fwds)
 #endif
 	const struct Forward *fwd;
 	u_int i;
+#ifdef WITH_RUST_CRYPTO
 	char *buf;
+#endif
 
 	/* oDynamicForward */
 	for (i = 0; i < count; i++) {
