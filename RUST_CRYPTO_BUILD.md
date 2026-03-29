@@ -147,6 +147,12 @@ Rust-backed today:
   - `dump_cfg_strarray_oneline()` in `readconf.c`
   - `ssh -G` output for options like `CanonicalDomains` and `PermitRemoteOpen`
   - space-joined list rendering and `none` formatting for empty client lists
+- server one-line list formatting used by:
+  - `dump_cfg_strarray_oneline()` in `servconf.c`
+  - `sshd -T` output for options like `AuthorizedKeysFile`,
+    `AuthenticationMethods`, and `ChannelTimeout`
+  - space-joined list rendering plus `any` / `none` formatting for the
+    server-side empty-list special cases
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers
@@ -330,6 +336,10 @@ It also includes direct Rust coverage for client forward output formatting plus
 
 It also includes direct Rust coverage for client one-line list formatting plus
 `ssh -G` smoke coverage for `CanonicalDomains` and `PermitRemoteOpen`.
+
+It also includes direct Rust coverage for server one-line list formatting plus
+`sshd -T` smoke coverage for `AuthorizedKeysFile`, `AuthenticationMethods`,
+and `ChannelTimeout`.
 
 The existing OpenSSH `test_convtime` coverage now also exercises the
 Rust-backed `convtime()` / `convtime_double()` path.

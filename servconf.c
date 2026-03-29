@@ -3107,6 +3107,8 @@ parse_server_config(ServerOptions *options, const char *filename,
 }
 
 #ifdef WITH_RUST_CRYPTO
+static uint32_t strarray_oneline_empty_mode(ServerOpCodes);
+
 static size_t
 multistate_nentries(const struct multistate *m)
 {
@@ -3233,6 +3235,21 @@ fmt_intarg(ServerOpCodes code, int val)
 #endif
 }
 
+#ifdef WITH_RUST_CRYPTO
+static uint32_t
+strarray_oneline_empty_mode(ServerOpCodes code)
+{
+	switch (code) {
+	case sAuthenticationMethods:
+		return OSSH_RUST_STRARRAY_EMPTY_ANY;
+	case sChannelTimeout:
+		return OSSH_RUST_STRARRAY_EMPTY_NONE;
+	default:
+		return OSSH_RUST_STRARRAY_EMPTY_SKIP;
+	}
+}
+#endif
+
 static void
 dump_cfg_int(ServerOpCodes code, int val)
 {
@@ -3274,6 +3291,24 @@ dump_cfg_strarray(ServerOpCodes code, u_int count, char **vals)
 static void
 dump_cfg_strarray_oneline(ServerOpCodes code, u_int count, char **vals)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_strarray_oneline_parse parsed;
+	uint32_t empty_mode = strarray_oneline_empty_mode(code);
+	char *buf;
+
+	if (ossh_rust_strarray_oneline_parse((const char * const *)vals, count,
+	    empty_mode, &parsed) != 0)
+		fatal_f("rust strarray parse failed");
+	if (!parsed.emit)
+		return;
+	buf = xmalloc(parsed.output_len + 1);
+	if (ossh_rust_strarray_oneline_write((const char * const *)vals, count,
+	    empty_mode, (u_char *)buf, parsed.output_len) != 0)
+		fatal_f("rust strarray write failed");
+	buf[parsed.output_len] = '\0';
+	printf("%s%s\n", lookup_opcode_name(code), buf);
+	free(buf);
+#else
 	u_int i;
 
 	switch (code) {
@@ -3294,6 +3329,7 @@ dump_cfg_strarray_oneline(ServerOpCodes code, u_int count, char **vals)
 	else if (code == sChannelTimeout && count == 0)
 		printf(" none");
 	printf("\n");
+#endif
 }
 
 static char *
