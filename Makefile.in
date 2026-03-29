@@ -83,7 +83,7 @@ RUST_CRYPTO_TARGET_DIR=$(BUILDDIR)/rust/crypto-target
 RUST_CRYPTO_LIB=$(RUST_CRYPTO_TARGET_DIR)/release/librust_crypto.a
 RUST_CRYPTO_SRCS=$(wildcard $(srcdir)/rust/crypto/src/*.rs)
 
-.SUFFIXES: .lo
+.SUFFIXES: .c .lo
 
 TARGETS=ssh$(EXEEXT) sshd$(EXEEXT) sshd-session$(EXEEXT) sshd-auth$(EXEEXT) ssh-add$(EXEEXT) ssh-keygen$(EXEEXT) ssh-keyscan${EXEEXT} ssh-keysign${EXEEXT} ssh-pkcs11-helper$(EXEEXT) ssh-agent$(EXEEXT) scp$(EXEEXT) sftp-server$(EXEEXT) sftp$(EXEEXT) ssh-sk-helper$(EXEEXT) $(SK_STANDALONE)
 
@@ -836,8 +836,11 @@ SK_DUMMY_OBJS=\
 
 SK_DUMMY_LIBRARY=@SK_DUMMY_LIBRARY@
 
-%.lo: %.c Makefile.in config.h
+.c.lo:
 	$(CC) $(CFLAGS_NOPIE) $(PICFLAG) $(CPPFLAGS) -c $< -o $@
+
+$(LIBSSH_PIC_OBJS) regress/misc/sk-dummy/sk-dummy.lo \
+    regress/misc/sk-dummy/fatal.lo: Makefile.in config.h
 
 regress/misc/sk-dummy/sk-dummy.so: $(SK_DUMMY_OBJS) $(RUST_CRYPTO_BUILD_DEPS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(PICFLAG) -shared -o $@ $(SK_DUMMY_OBJS) \
