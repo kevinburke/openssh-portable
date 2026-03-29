@@ -2470,7 +2470,7 @@ valid_permit(const char *s, int allow_bare_port)
 	    allow_bare_port);
 #else
 	char *tmp = NULL, *cp = NULL;
-	const char *host;
+	char *host;
 	int ret = -1;
 
 	if (s == NULL || *s == '\0')
@@ -3000,6 +3000,7 @@ valid_env_name(const char *name)
 #endif
 }
 
+#ifdef WITH_RUST_CRYPTO
 static size_t
 multistate_nentries(const struct multistate *multistate_ptr)
 {
@@ -3011,6 +3012,7 @@ multistate_nentries(const struct multistate *multistate_ptr)
 		i++;
 	return i;
 }
+#endif
 
 int
 multistate_lookup(const char *arg, const struct multistate *multistate_ptr,
