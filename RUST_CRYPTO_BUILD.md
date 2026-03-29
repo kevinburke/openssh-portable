@@ -153,6 +153,11 @@ Rust-backed today:
     `AuthenticationMethods`, and `ChannelTimeout`
   - space-joined list rendering plus `any` / `none` formatting for the
     server-side empty-list special cases
+- shared multi-line list formatting used by:
+  - `dump_cfg_strarray()` in `readconf.c` / `servconf.c`
+  - `ssh -G` / `sshd -T` output for repeated list-valued options like
+    `HostKeyFile`, `IdentityFile`, `AllowUsers`, and `SetEnv`
+  - repeated `keyword value` line rendering for client and server config dumps
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers
