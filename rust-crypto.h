@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 42U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 43U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -41,6 +41,10 @@ struct ossh_rust_keyword_entry {
 	const char *key;
 	int value;
 };
+struct ossh_rust_expand_entry {
+	const char *key;
+	const char *repl;
+};
 struct ossh_rust_opt_dequote_parse {
 	size_t output_len;
 	size_t next_offset;
@@ -49,6 +53,8 @@ struct ossh_rust_dollar_expand_parse {
 	size_t output_len;
 	uint32_t missing_var;
 };
+#define OSSH_RUST_EXPAND_ENABLE_DOLLAR 1U
+#define OSSH_RUST_EXPAND_ENABLE_PERCENT 2U
 #define OSSH_RUST_PRIVATE2_KDF_NONE 0
 #define OSSH_RUST_PRIVATE2_KDF_BCRYPT 1
 #define OSSH_RUST_PRIVATE2_KEY_UNSUPPORTED 0
@@ -322,6 +328,12 @@ int ossh_rust_dollar_expand_parse(const uint8_t *input, size_t input_len,
     struct ossh_rust_dollar_expand_parse *out, int *status);
 int ossh_rust_dollar_expand_write(const uint8_t *input, size_t input_len,
     uint8_t *out, size_t out_len);
+int ossh_rust_expand_parse(const uint8_t *input, size_t input_len,
+    uint32_t flags, const struct ossh_rust_expand_entry *entries,
+    size_t nentries, struct ossh_rust_dollar_expand_parse *out, int *status);
+int ossh_rust_expand_write(const uint8_t *input, size_t input_len,
+    uint32_t flags, const struct ossh_rust_expand_entry *entries,
+    size_t nentries, uint8_t *out, size_t out_len);
 int ossh_rust_valid_env_name(const uint8_t *input, size_t input_len);
 int ossh_rust_valid_domain(uint8_t *input, size_t input_len, int makelower,
     int *status);

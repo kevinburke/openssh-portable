@@ -66,6 +66,13 @@ pub struct KeywordEntry {
     pub value: c_int,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct ExpandEntry {
+    pub key: *const c_char,
+    pub repl: *const c_char,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ArgvSplitParse {
     pub(crate) argc: usize,
@@ -666,32 +673,127 @@ fn env_bytes(name: &[u8]) -> Option<Vec<u8>> {
     std::env::var_os(OsString::from_vec(name.to_vec())).map(|v| v.as_bytes().to_vec())
 }
 
-pub(crate) fn dollar_expand_parse(
-    input: *const u8,
-    input_len: usize,
+fn percent_expand_bytes(ch: u8, entries: *const ExpandEntry, nentries: usize) -> Option<Vec<u8>> {
+    let entries = read_ptr_slice(entries, nentries)?;
+    for entry in entries {
+        let key = read_cstr_bytes(entry.key)?;
+        if key.contains(&ch) {
+            return Some(read_cstr_bytes(entry.repl)?.to_vec());
+        }
+    }
+    None
+}
+
+fn expand_parse_inner(
+    input: &[u8],
+    flags: u32,
+    entries: *const ExpandEntry,
+    nentries: usize,
 ) -> Result<DollarExpandParse, c_int> {
-    let input = read_slice(input, input_len).ok_or(DOLLAR_EXPAND_INVALID)?;
     let mut i = 0usize;
     let mut output_len = 0usize;
     let mut missing_var = false;
+    let dollar = flags & 1 != 0;
+    let percent = flags & 2 != 0;
+
+    if percent && nentries == 0 {
+        return Err(DOLLAR_EXPAND_INVALID);
+    }
 
     while i < input.len() {
-        if let Some((name, next)) = dollar_expand_var(input, i)? {
-            if let Some(value) = env_bytes(name) {
-                output_len += value.len();
-            } else {
-                missing_var = true;
+        if dollar {
+            if let Some((name, next)) = dollar_expand_var(input, i)? {
+                if let Some(value) = env_bytes(name) {
+                    output_len += value.len();
+                } else {
+                    missing_var = true;
+                }
+                i = next;
+                continue;
             }
-            i = next;
+        }
+        if percent && input[i] == b'%' {
+            i += 1;
+            if i >= input.len() {
+                return Err(DOLLAR_EXPAND_INVALID);
+            }
+            if input[i] == b'%' {
+                output_len += 1;
+                i += 1;
+                continue;
+            }
+            let value = percent_expand_bytes(input[i], entries, nentries)
+                .ok_or(DOLLAR_EXPAND_INVALID)?;
+            output_len += value.len();
+            i += 1;
             continue;
         }
         output_len += 1;
         i += 1;
     }
+
     Ok(DollarExpandParse {
         output_len,
         missing_var,
     })
+}
+
+fn expand_write_inner(
+    input: &[u8],
+    flags: u32,
+    entries: *const ExpandEntry,
+    nentries: usize,
+    out: &mut [u8],
+) -> Option<()> {
+    let parsed = expand_parse_inner(input, flags, entries, nentries).ok()?;
+    if parsed.missing_var || out.len() != parsed.output_len {
+        return None;
+    }
+
+    let mut i = 0usize;
+    let mut j = 0usize;
+    let dollar = flags & 1 != 0;
+    let percent = flags & 2 != 0;
+    while i < input.len() {
+        if dollar {
+            if let Some((name, next)) = dollar_expand_var(input, i).ok()? {
+                let value = env_bytes(name)?;
+                out[j..j + value.len()].copy_from_slice(&value);
+                j += value.len();
+                i = next;
+                continue;
+            }
+        }
+        if percent && input[i] == b'%' {
+            i += 1;
+            if i >= input.len() {
+                return None;
+            }
+            if input[i] == b'%' {
+                out[j] = b'%';
+                j += 1;
+                i += 1;
+                continue;
+            }
+            let value = percent_expand_bytes(input[i], entries, nentries)?;
+            out[j..j + value.len()].copy_from_slice(&value);
+            j += value.len();
+            i += 1;
+            continue;
+        }
+        out[j] = input[i];
+        j += 1;
+        i += 1;
+    }
+    Some(())
+}
+
+pub(crate) fn dollar_expand_parse(
+    input: *const u8,
+    input_len: usize,
+) -> Result<DollarExpandParse, c_int> {
+    let input = read_slice(input, input_len).ok_or(DOLLAR_EXPAND_INVALID)?;
+    expand_parse_inner(input, 1, core::ptr::null(), 0)
 }
 
 pub(crate) fn dollar_expand_write(
@@ -702,26 +804,32 @@ pub(crate) fn dollar_expand_write(
 ) -> Option<()> {
     let input = read_slice(input, input_len)?;
     let out = read_slice_mut(out, out_len)?;
-    let parsed = dollar_expand_parse(input.as_ptr(), input.len()).ok()?;
-    if parsed.missing_var || out.len() != parsed.output_len {
-        return None;
-    }
+    expand_write_inner(input, 1, core::ptr::null(), 0, out)
+}
 
-    let mut i = 0usize;
-    let mut j = 0usize;
-    while i < input.len() {
-        if let Some((name, next)) = dollar_expand_var(input, i).ok()? {
-            let value = env_bytes(name)?;
-            out[j..j + value.len()].copy_from_slice(&value);
-            j += value.len();
-            i = next;
-            continue;
-        }
-        out[j] = input[i];
-        j += 1;
-        i += 1;
-    }
-    Some(())
+pub(crate) fn expand_parse(
+    input: *const u8,
+    input_len: usize,
+    flags: u32,
+    entries: *const ExpandEntry,
+    nentries: usize,
+) -> Result<DollarExpandParse, c_int> {
+    let input = read_slice(input, input_len).ok_or(DOLLAR_EXPAND_INVALID)?;
+    expand_parse_inner(input, flags, entries, nentries)
+}
+
+pub(crate) fn expand_write(
+    input: *const u8,
+    input_len: usize,
+    flags: u32,
+    entries: *const ExpandEntry,
+    nentries: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let input = read_slice(input, input_len)?;
+    let out = read_slice_mut(out, out_len)?;
+    expand_write_inner(input, flags, entries, nentries, out)
 }
 
 pub(crate) fn parse_convtime_double(input: *const u8, input_len: usize) -> Option<f64> {
@@ -2134,6 +2242,7 @@ mod tests {
         strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
         ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE,
         ATOI_STATUS_TOO_SMALL, DollarExpandParse, DOLLAR_EXPAND_INVALID,
+        ExpandEntry, expand_parse, expand_write,
         ForwardParse, HostfileLineParse, JumpParse,
         KeywordEntry, MultistateEntry, OptDequoteParse, OPT_DEQUOTE_MISSING_END,
         OPT_DEQUOTE_MISSING_START, PatternIntervalParse, UriParse,
@@ -3075,6 +3184,81 @@ mod tests {
         let mut expected = Vec::from([b'a']);
         expected.extend_from_slice(home.as_bytes());
         expected.push(b'b');
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn expand_parse_handles_percent_and_mixed_forms() {
+        let home = std::env::var_os("HOME").unwrap();
+        let host = CString::new("h").unwrap();
+        let host_repl = CString::new("foo").unwrap();
+        let entries = [ExpandEntry {
+            key: host.as_ptr(),
+            repl: host_repl.as_ptr(),
+        }];
+
+        assert_eq!(
+            expand_parse(b"%h".as_ptr(), 2, 2, entries.as_ptr(), entries.len()),
+            Ok(DollarExpandParse {
+                output_len: 3,
+                missing_var: false,
+            })
+        );
+        assert_eq!(
+            expand_parse(b"%h${HOME}".as_ptr(), 9, 3, entries.as_ptr(), entries.len()),
+            Ok(DollarExpandParse {
+                output_len: 3 + home.as_bytes().len(),
+                missing_var: false,
+            })
+        );
+    }
+
+    #[test]
+    fn expand_parse_rejects_unknown_percent_keys() {
+        let host = CString::new("h").unwrap();
+        let host_repl = CString::new("foo").unwrap();
+        let entries = [ExpandEntry {
+            key: host.as_ptr(),
+            repl: host_repl.as_ptr(),
+        }];
+
+        assert_eq!(
+            expand_parse(b"%x".as_ptr(), 2, 2, entries.as_ptr(), entries.len()),
+            Err(DOLLAR_EXPAND_INVALID)
+        );
+        assert_eq!(
+            expand_parse(b"%".as_ptr(), 1, 2, entries.as_ptr(), entries.len()),
+            Err(DOLLAR_EXPAND_INVALID)
+        );
+    }
+
+    #[test]
+    fn expand_write_handles_percent_and_mixed_forms() {
+        let home = std::env::var_os("HOME").unwrap();
+        let host = CString::new("h").unwrap();
+        let host_repl = CString::new("foo").unwrap();
+        let entries = [ExpandEntry {
+            key: host.as_ptr(),
+            repl: host_repl.as_ptr(),
+        }];
+        let input = b"%h${HOME}";
+        let mut out = vec![0u8; 3 + home.as_bytes().len()];
+
+        assert_eq!(
+            expand_write(
+                input.as_ptr(),
+                input.len(),
+                3,
+                entries.as_ptr(),
+                entries.len(),
+                out.as_mut_ptr(),
+                out.len(),
+            ),
+            Some(())
+        );
+
+        let mut expected = b"foo".to_vec();
+        expected.extend_from_slice(home.as_bytes());
         assert_eq!(out, expected);
     }
 
