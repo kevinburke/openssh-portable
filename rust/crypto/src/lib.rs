@@ -51,18 +51,19 @@ use rsa::{
 };
 use util::{
     a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
-    atoi_err, keyword_lookup, lookup_env_in_list_parse, lookup_setenv_in_list_parse,
-    multistate_lookup, multistate_name, opt_dequote_parse, opt_dequote_write,
-    opt_flag_parse, opt_match_parse, parse_convtime_double, parse_forward_field_in_place,
-    parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval,
-    read_slice, strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit, write_prefix, ATOI_STATUS_INVALID,
+    atoi_err, dollar_expand_parse, dollar_expand_write, keyword_lookup,
+    lookup_env_in_list_parse, lookup_setenv_in_list_parse, multistate_lookup,
+    multistate_name, opt_dequote_parse, opt_dequote_write, opt_flag_parse,
+    opt_match_parse, parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
+    parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval, read_slice,
+    strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit, write_prefix, ATOI_STATUS_INVALID,
     ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL,
     DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
-    DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID, KeywordEntry,
-    MultistateEntry, OPT_DEQUOTE_MISSING_END, OPT_DEQUOTE_MISSING_START,
+    DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID, DOLLAR_EXPAND_INVALID,
+    KeywordEntry, MultistateEntry, OPT_DEQUOTE_MISSING_END, OPT_DEQUOTE_MISSING_START,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 41;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 42;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -78,6 +79,7 @@ const OSSH_RUST_ATOI_STATUS_TOO_SMALL: c_int = ATOI_STATUS_TOO_SMALL;
 const OSSH_RUST_ATOI_STATUS_TOO_LARGE: c_int = ATOI_STATUS_TOO_LARGE;
 const OSSH_RUST_OPT_DEQUOTE_MISSING_START: c_int = OPT_DEQUOTE_MISSING_START;
 const OSSH_RUST_OPT_DEQUOTE_MISSING_END: c_int = OPT_DEQUOTE_MISSING_END;
+const OSSH_RUST_DOLLAR_EXPAND_INVALID: c_int = DOLLAR_EXPAND_INVALID;
 static BACKEND_LABEL: &[u8] = b"Rust crypto backend\0";
 
 fn store_parse_status(status: *mut c_int, value: c_int) {
@@ -302,6 +304,12 @@ pub struct RustPatternIntervalParse {
 pub struct RustOptDequoteParse {
     output_len: usize,
     next_offset: usize,
+}
+
+#[repr(C)]
+pub struct RustDollarExpandParse {
+    output_len: usize,
+    missing_var: u32,
 }
 
 #[unsafe(no_mangle)]
@@ -1050,6 +1058,48 @@ pub extern "C" fn ossh_rust_opt_dequote_write(
     out_len: usize,
 ) -> c_int {
     if opt_dequote_write(input, input_len, out, out_len).is_some() {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_dollar_expand_parse(
+    input: *const u8,
+    input_len: usize,
+    out: *mut RustDollarExpandParse,
+    status: *mut c_int,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match dollar_expand_parse(input, input_len) {
+        Ok(parsed) => {
+            store_parse_status(status, OSSH_RUST_PARSE_STATUS_OK);
+            unsafe {
+                *out = RustDollarExpandParse {
+                    output_len: parsed.output_len,
+                    missing_var: parsed.missing_var.into(),
+                };
+            }
+            0
+        }
+        Err(_) => {
+            store_parse_status(status, OSSH_RUST_DOLLAR_EXPAND_INVALID);
+            -1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_dollar_expand_write(
+    input: *const u8,
+    input_len: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if dollar_expand_write(input, input_len, out, out_len).is_some() {
         0
     } else {
         -1
