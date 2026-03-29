@@ -52,6 +52,7 @@ use rsa::{
 use util::{
     a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
     atoi_err, dollar_expand_parse, dollar_expand_write, expand_parse, expand_write,
+    fmt_intarg_parse,
     keyword_lookup, keyword_name,
     lookup_env_in_list_parse, lookup_setenv_in_list_parse, multistate_lookup,
     multistate_name, opt_dequote_parse, opt_dequote_write, opt_flag_parse,
@@ -313,6 +314,12 @@ pub struct RustOptDequoteParse {
 pub struct RustDollarExpandParse {
     output_len: usize,
     missing_var: u32,
+}
+
+#[repr(C)]
+pub struct RustFmtIntArgParse {
+    literal: c_int,
+    index: usize,
 }
 
 #[unsafe(no_mangle)]
@@ -894,6 +901,31 @@ pub extern "C" fn ossh_rust_multistate_name(
         Some(index) => {
             unsafe {
                 *out_index = index;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_fmt_intarg(
+    value: c_int,
+    mode: c_int,
+    entries: *const RustMultistateEntry,
+    nentries: usize,
+    out: *mut RustFmtIntArgParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match fmt_intarg_parse(value, mode, entries, nentries) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustFmtIntArgParse {
+                    literal: parsed.literal,
+                    index: parsed.index,
+                };
             }
             0
         }

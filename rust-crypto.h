@@ -31,6 +31,19 @@ extern "C" {
 #define OSSH_RUST_OPT_DEQUOTE_MISSING_START 1
 #define OSSH_RUST_OPT_DEQUOTE_MISSING_END 2
 #define OSSH_RUST_DOLLAR_EXPAND_INVALID 1
+#define OSSH_RUST_FMT_INTARG_MULTISTATE 1
+#define OSSH_RUST_FMT_INTARG_YESNO 2
+#define OSSH_RUST_FMT_INTARG_DIGEST 3
+#define OSSH_RUST_FMT_INTARG_LITERAL_UNSET 1
+#define OSSH_RUST_FMT_INTARG_LITERAL_NO 2
+#define OSSH_RUST_FMT_INTARG_LITERAL_YES 3
+#define OSSH_RUST_FMT_INTARG_LITERAL_UNKNOWN 4
+#define OSSH_RUST_FMT_INTARG_LITERAL_MULTISTATE 5
+#define OSSH_RUST_FMT_INTARG_LITERAL_MD5 6
+#define OSSH_RUST_FMT_INTARG_LITERAL_SHA1 7
+#define OSSH_RUST_FMT_INTARG_LITERAL_SHA256 8
+#define OSSH_RUST_FMT_INTARG_LITERAL_SHA384 9
+#define OSSH_RUST_FMT_INTARG_LITERAL_SHA512 10
 
 struct ossh_rust_multistate_entry {
 	const char *key;
@@ -52,6 +65,10 @@ struct ossh_rust_opt_dequote_parse {
 struct ossh_rust_dollar_expand_parse {
 	size_t output_len;
 	uint32_t missing_var;
+};
+struct ossh_rust_fmt_intarg_parse {
+	int literal;
+	size_t index;
 };
 #define OSSH_RUST_EXPAND_ENABLE_DOLLAR 1U
 #define OSSH_RUST_EXPAND_ENABLE_PERCENT 2U
@@ -302,6 +319,9 @@ int ossh_rust_multistate_lookup(const uint8_t *input, size_t input_len,
 int ossh_rust_multistate_name(int value,
     const struct ossh_rust_multistate_entry *entries, size_t nentries,
     size_t *out_index);
+int ossh_rust_fmt_intarg(int value, int mode,
+    const struct ossh_rust_multistate_entry *entries, size_t nentries,
+    struct ossh_rust_fmt_intarg_parse *out);
 int ossh_rust_keyword_lookup(const uint8_t *input, size_t input_len,
     const struct ossh_rust_keyword_entry *entries, size_t nentries,
     int ignore_case, int *out);
