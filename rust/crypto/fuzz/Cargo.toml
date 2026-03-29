@@ -56,5 +56,12 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "config_helpers"
+path = "fuzz_targets/config_helpers.rs"
+test = false
+doc = false
+bench = false
+
 [workspace]
 members = ["."]
