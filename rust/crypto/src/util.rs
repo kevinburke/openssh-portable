@@ -475,6 +475,19 @@ pub(crate) fn keyword_lookup(
     })
 }
 
+pub(crate) fn keyword_name(
+    value: c_int,
+    entries: *const KeywordEntry,
+    nentries: usize,
+) -> Option<usize> {
+    if nentries == 0 {
+        return None;
+    }
+    let entries = unsafe { entries.as_ref() }
+        .map(|_| unsafe { slice::from_raw_parts(entries, nentries) })?;
+    entries.iter().position(|entry| entry.value == value)
+}
+
 fn has_ascii_prefix_ignore_case(input: &[u8], prefix: &[u8]) -> bool {
     input.len() >= prefix.len() && input[..prefix.len()].eq_ignore_ascii_case(prefix)
 }
@@ -2110,7 +2123,8 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 mod tests {
     use super::{
         a2port, atoi_err, argv_split_parse, argv_split_write, host_hash_write,
-        hpdelim2_parse_in_place, keyword_lookup, lookup_env_in_list_parse,
+        hpdelim2_parse_in_place, keyword_lookup, keyword_name,
+        lookup_env_in_list_parse,
         lookup_setenv_in_list_parse, match_hashed_host, multistate_lookup,
         multistate_name, dollar_expand_parse, dollar_expand_write,
         opt_dequote_parse, opt_dequote_write, opt_flag_parse, opt_match_parse,
@@ -2831,6 +2845,37 @@ mod tests {
         );
         assert_eq!(keyword_lookup(core::ptr::null(), 0, entries.as_ptr(), 1, false), None);
         assert_eq!(keyword_lookup(b"user".as_ptr(), 4, core::ptr::null(), 1, false), None);
+    }
+
+    #[test]
+    fn keyword_name_handles_basic_forms() {
+        let user = CString::new("user").unwrap();
+        let hostname = CString::new("hostname").unwrap();
+        let entries = [
+            KeywordEntry {
+                key: user.as_ptr(),
+                value: 1,
+            },
+            KeywordEntry {
+                key: hostname.as_ptr(),
+                value: 2,
+            },
+        ];
+
+        assert_eq!(keyword_name(1, entries.as_ptr(), entries.len()), Some(0));
+        assert_eq!(keyword_name(2, entries.as_ptr(), entries.len()), Some(1));
+    }
+
+    #[test]
+    fn keyword_name_rejects_bad_forms() {
+        let user = CString::new("user").unwrap();
+        let entries = [KeywordEntry {
+            key: user.as_ptr(),
+            value: 1,
+        }];
+
+        assert_eq!(keyword_name(2, entries.as_ptr(), entries.len()), None);
+        assert_eq!(keyword_name(1, core::ptr::null(), 1), None);
     }
 
     #[test]
