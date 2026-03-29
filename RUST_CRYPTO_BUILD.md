@@ -186,6 +186,11 @@ Rust-backed today:
   - Ed25519 verification
   - NIST ECDH peer/public input handling
   - ChaCha20-Poly1305 packet decrypt/auth failure handling
+  - shared config/parser helper ABI coverage including:
+    `argv_split`, forwarding spec parsing, `ProxyJump`, hostfile lines,
+    user/host targets, permit validation, keyword/multistate lookups,
+    option dequoting, `%` / `${}` expansion, domain/env validation,
+    absolute-time parsing, and `ChannelTimeout`-style interval parsing
 
 Still on the existing C path today:
 
