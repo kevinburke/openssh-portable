@@ -299,6 +299,9 @@ int ossh_rust_multistate_name(int value,
 int ossh_rust_keyword_lookup(const uint8_t *input, size_t input_len,
     const struct ossh_rust_keyword_entry *entries, size_t nentries,
     int ignore_case, int *out);
+int ossh_rust_keyword_name(int value,
+    const struct ossh_rust_keyword_entry *entries, size_t nentries,
+    size_t *out_index);
 int ossh_rust_opt_flag(const uint8_t *opt, size_t opt_len,
     int allow_negate, const uint8_t *input, size_t input_len,
     size_t *out_offset, int *out_result);
