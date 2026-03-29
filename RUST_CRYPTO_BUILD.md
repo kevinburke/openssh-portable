@@ -119,6 +119,10 @@ Rust-backed today:
   - quoted auth-option values like `command="..."` and `principals="..."`
   - quoted `sshsig` option values like `namespaces="..."`
   - escaped `\"` handling plus shared `missing start/end quote` validation
+- `dollar_expand()` parsing and expansion used by:
+  - `${VAR}` expansion in shared config/string helper paths
+  - parse-vs-missing-variable distinction without reparsing in C
+  - shared bounded expansion with preserved `parseerr` behavior
 - client config keyword lookup used by:
   - `readconf.c` option-name parsing before per-option semantics
   - `ssh -G` and normal client config loading
@@ -289,6 +293,9 @@ path used by `name=` style auth-option and `sshsig` field parsing.
 
 It also includes direct coverage for the shared Rust-backed `opt_dequote()`
 path used by quoted auth-option and `sshsig` values.
+
+It also includes direct coverage for the shared Rust-backed
+`dollar_expand()` path via the combined `test_misc` expansion tests.
 
 It also includes direct Rust coverage for the client keyword lookup helper and
 `ssh -G` smoke coverage for accepted and rejected client config options.

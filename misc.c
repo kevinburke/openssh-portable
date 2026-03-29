@@ -1702,6 +1702,29 @@ vdollar_percent_expand(int *parseerror, int dollar, int percent,
 char *
 dollar_expand(int *parseerr, const char *string, ...)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_dollar_expand_parse parsed;
+	int err = 1;
+	char *ret = NULL;
+
+	if (ossh_rust_dollar_expand_parse((const u_char *)string, strlen(string),
+	    &parsed, &err) == 0) {
+		if (parseerr != NULL)
+			*parseerr = 0;
+		if (parsed.missing_var)
+			return NULL;
+		if ((ret = malloc(parsed.output_len + 1)) == NULL)
+			fatal_f("malloc failed");
+		if (ossh_rust_dollar_expand_write((const u_char *)string,
+		    strlen(string), (u_char *)ret, parsed.output_len) != 0)
+			fatal_f("rust dollar expand write failed");
+		ret[parsed.output_len] = '\0';
+		return ret;
+	}
+	if (parseerr != NULL)
+		*parseerr = err != 0;
+	return NULL;
+#else
 	char *ret;
 	int err;
 	va_list ap;
@@ -1712,6 +1735,7 @@ dollar_expand(int *parseerr, const char *string, ...)
 	if (parseerr != NULL)
 		*parseerr = err;
 	return ret;
+#endif
 }
 
 /*
