@@ -165,10 +165,9 @@ case "$config" in
 rust-crypto)
 	cargo test --manifest-path rust/crypto/Cargo.toml
 	cargo build --manifest-path rust/crypto/fuzz/Cargo.toml
-	cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin ed25519_verify -- -runs=1
-	cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin dh_peer -- -runs=1
-	cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin ecdsa_parse -- -runs=1
-	cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin rsa_parse -- -runs=1
+	for target in ed25519_verify ecdh_peer dh_peer ecdsa_parse rsa_parse chachapoly_decrypt config_helpers; do
+		cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin "$target" -- -runs=1
+	done
 	;;
 esac
 
