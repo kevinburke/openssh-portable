@@ -44,6 +44,9 @@ extern "C" {
 #define OSSH_RUST_FMT_INTARG_LITERAL_SHA256 8
 #define OSSH_RUST_FMT_INTARG_LITERAL_SHA384 9
 #define OSSH_RUST_FMT_INTARG_LITERAL_SHA512 10
+#define OSSH_RUST_FORWARD_FMT_LOCAL 1
+#define OSSH_RUST_FORWARD_FMT_DYNAMIC 2
+#define OSSH_RUST_FORWARD_FMT_REMOTE 3
 
 struct ossh_rust_multistate_entry {
 	const char *key;
@@ -69,6 +72,10 @@ struct ossh_rust_dollar_expand_parse {
 struct ossh_rust_fmt_intarg_parse {
 	int literal;
 	size_t index;
+};
+struct ossh_rust_forward_format_parse {
+	size_t output_len;
+	uint32_t emit;
 };
 #define OSSH_RUST_EXPAND_ENABLE_DOLLAR 1U
 #define OSSH_RUST_EXPAND_ENABLE_PERCENT 2U
@@ -322,6 +329,14 @@ int ossh_rust_multistate_name(int value,
 int ossh_rust_fmt_intarg(int value, int mode,
     const struct ossh_rust_multistate_entry *entries, size_t nentries,
     struct ossh_rust_fmt_intarg_parse *out);
+int ossh_rust_forward_format_parse(int mode,
+    const char *listen_host, int listen_port, const char *listen_path,
+    const char *connect_host, int connect_port, const char *connect_path,
+    struct ossh_rust_forward_format_parse *out);
+int ossh_rust_forward_format_write(int mode,
+    const char *listen_host, int listen_port, const char *listen_path,
+    const char *connect_host, int connect_port, const char *connect_path,
+    uint8_t *out, size_t out_len);
 int ossh_rust_keyword_lookup(const uint8_t *input, size_t input_len,
     const struct ossh_rust_keyword_entry *entries, size_t nentries,
     int ignore_case, int *out);
