@@ -5,6 +5,7 @@ Linux container instead of trying to mirror them directly on macOS.
 
 The two most useful cases for this branch are:
 
+- `default`
 - `openssl-noec`
 - `without-openssl`
 - `rust-crypto`
@@ -33,6 +34,9 @@ docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro \
 or:
 
 ```sh
+docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro \
+  ./contrib/ci-repro.sh default
+
 docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro \
   ./contrib/ci-repro.sh rust-crypto
 
@@ -92,6 +96,23 @@ without disturbing the main checkout:
 git worktree add --detach /tmp/openssh-ci HEAD
 cd /tmp/openssh-ci
 autoreconf -fi
+```
+
+## Reproducing `default`
+
+This config gives you a cheap baseline OpenSSL build on Ubuntu with the normal
+default configuration and `unit` coverage.
+
+```sh
+docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro \
+  ./contrib/ci-repro.sh default
+```
+
+To keep it fast and match the pre-push gate:
+
+```sh
+docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro \
+  env MAKE_TARGETS=unit ./contrib/ci-repro.sh default
 ```
 
 ## Reproducing `openssl-noec`
