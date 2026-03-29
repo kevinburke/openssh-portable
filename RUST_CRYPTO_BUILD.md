@@ -139,6 +139,10 @@ Rust-backed today:
   - `fmt_intarg()` in `readconf.c`
   - `fmt_intarg()` in `servconf.c`
   - `ssh -G` / `sshd -T` style enum and digest-name output formatting
+- client forward output formatting used by:
+  - `dump_cfg_forwards()` in `readconf.c`
+  - `ssh -G` output for `DynamicForward`, `LocalForward`, and `RemoteForward`
+  - streamlocal and host/port forward display formatting
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers
@@ -316,6 +320,9 @@ It also includes direct Rust coverage for reverse keyword lookup plus
 
 It also includes direct Rust coverage for shared config integer formatting plus
 `ssh -G` / `sshd -T` smoke coverage for formatted enum and digest-name output.
+
+It also includes direct Rust coverage for client forward output formatting plus
+`ssh -G` smoke coverage for dynamic, local, remote, and streamlocal forwards.
 
 The existing OpenSSH `test_convtime` coverage now also exercises the
 Rust-backed `convtime()` / `convtime_double()` path.
