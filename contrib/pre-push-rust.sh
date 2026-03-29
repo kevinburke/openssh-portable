@@ -16,6 +16,11 @@ if ! docker image inspect openssh-ci-repro >/dev/null 2>&1; then
 	echo "==> building missing Docker image openssh-ci-repro"
 	docker build -t openssh-ci-repro -f docker/ci-repro.Dockerfile .
 fi
+if ! docker image inspect openssh-ci-repro-ubuntu22 >/dev/null 2>&1; then
+	echo "==> building missing Docker image openssh-ci-repro-ubuntu22"
+	docker build --build-arg UBUNTU_VERSION=22.04 \
+		-t openssh-ci-repro-ubuntu22 -f docker/ci-repro.Dockerfile .
+fi
 
 echo "==> cargo test"
 cargo test --manifest-path rust/crypto/Cargo.toml
@@ -31,6 +36,10 @@ docker run --rm -v "$repo_root:/src" -w /src openssh-ci-repro \
 echo "==> docker without-openssl unit"
 docker run --rm -v "$repo_root:/src" -w /src openssh-ci-repro \
 	env MAKE_TARGETS=unit ./contrib/ci-repro.sh without-openssl
+
+echo "==> docker gcc-12-Werror unit"
+docker run --rm -v "$repo_root:/src" -w /src openssh-ci-repro-ubuntu22 \
+	env MAKE_TARGETS=unit ./contrib/ci-repro.sh gcc-12-Werror
 
 ltests="$(./contrib/select-rust-ltests.sh)"
 if [ -n "$ltests" ]; then
