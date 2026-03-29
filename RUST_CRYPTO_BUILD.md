@@ -135,6 +135,10 @@ Rust-backed today:
   - `lookup_opcode_name()` in `readconf.c`
   - `lookup_opcode_name()` in `servconf.c`
   - `ssh -G` / `sshd -T` style option-name formatting
+- shared config integer formatting used by:
+  - `fmt_intarg()` in `readconf.c`
+  - `fmt_intarg()` in `servconf.c`
+  - `ssh -G` / `sshd -T` style enum and digest-name output formatting
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers
@@ -309,6 +313,9 @@ server config options through the Rust-backed keyword lookup path.
 
 It also includes direct Rust coverage for reverse keyword lookup plus
 `ssh -G` / `sshd -T` smoke coverage for config output formatting.
+
+It also includes direct Rust coverage for shared config integer formatting plus
+`ssh -G` / `sshd -T` smoke coverage for formatted enum and digest-name output.
 
 The existing OpenSSH `test_convtime` coverage now also exercises the
 Rust-backed `convtime()` / `convtime_double()` path.
