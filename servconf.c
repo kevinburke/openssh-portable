@@ -602,6 +602,8 @@ parse_token(const char *cp, const char *filename,
 		}
 	}
 #else
+	size_t i;
+
 	for (i = 0; keywords[i].name; i++)
 		if (strcasecmp(cp, keywords[i].name) == 0) {
 			*flags = keywords[i].flags;
