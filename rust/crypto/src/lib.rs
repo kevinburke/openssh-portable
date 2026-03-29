@@ -67,7 +67,7 @@ use util::{
     OPT_DEQUOTE_MISSING_START,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 44;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 45;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -332,6 +332,7 @@ pub struct RustForwardFormatParse {
 #[repr(C)]
 pub struct RustStrarrayOnelineParse {
     output_len: usize,
+    emit: u32,
 }
 
 #[unsafe(no_mangle)]
@@ -1016,16 +1017,18 @@ pub extern "C" fn ossh_rust_forward_format_write(
 pub extern "C" fn ossh_rust_strarray_oneline_parse(
     vals: *const *const c_char,
     nvals: usize,
+    empty_mode: u32,
     out: *mut RustStrarrayOnelineParse,
 ) -> c_int {
     if out.is_null() {
         return -1;
     }
-    match strarray_oneline_parse(vals, nvals) {
+    match strarray_oneline_parse(vals, nvals, empty_mode) {
         Some(parsed) => {
             unsafe {
                 *out = RustStrarrayOnelineParse {
                     output_len: parsed.output_len,
+                    emit: if parsed.emit { 1 } else { 0 },
                 };
             }
             0
@@ -1038,10 +1041,11 @@ pub extern "C" fn ossh_rust_strarray_oneline_parse(
 pub extern "C" fn ossh_rust_strarray_oneline_write(
     vals: *const *const c_char,
     nvals: usize,
+    empty_mode: u32,
     out: *mut u8,
     out_len: usize,
 ) -> c_int {
-    if strarray_oneline_write(vals, nvals, out, out_len).is_some() {
+    if strarray_oneline_write(vals, nvals, empty_mode, out, out_len).is_some() {
         0
     } else {
         -1
