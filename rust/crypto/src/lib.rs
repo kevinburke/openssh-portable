@@ -52,7 +52,7 @@ use rsa::{
 use util::{
     a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
     atoi_err, dollar_expand_parse, dollar_expand_write, expand_parse, expand_write,
-    fmt_intarg_parse,
+    fmt_intarg_parse, forward_format_parse, forward_format_write,
     keyword_lookup, keyword_name,
     lookup_env_in_list_parse, lookup_setenv_in_list_parse, multistate_lookup,
     multistate_name, opt_dequote_parse, opt_dequote_write, opt_flag_parse,
@@ -320,6 +320,12 @@ pub struct RustDollarExpandParse {
 pub struct RustFmtIntArgParse {
     literal: c_int,
     index: usize,
+}
+
+#[repr(C)]
+pub struct RustForwardFormatParse {
+    output_len: usize,
+    emit: u32,
 }
 
 #[unsafe(no_mangle)]
@@ -930,6 +936,73 @@ pub extern "C" fn ossh_rust_fmt_intarg(
             0
         }
         None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_forward_format_parse(
+    mode: c_int,
+    listen_host: *const c_char,
+    listen_port: c_int,
+    listen_path: *const c_char,
+    connect_host: *const c_char,
+    connect_port: c_int,
+    connect_path: *const c_char,
+    out: *mut RustForwardFormatParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match forward_format_parse(
+        mode,
+        listen_host,
+        listen_port,
+        listen_path,
+        connect_host,
+        connect_port,
+        connect_path,
+    ) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustForwardFormatParse {
+                    output_len: parsed.output_len,
+                    emit: u32::from(parsed.emit),
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_forward_format_write(
+    mode: c_int,
+    listen_host: *const c_char,
+    listen_port: c_int,
+    listen_path: *const c_char,
+    connect_host: *const c_char,
+    connect_port: c_int,
+    connect_path: *const c_char,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if forward_format_write(
+        mode,
+        listen_host,
+        listen_port,
+        listen_path,
+        connect_host,
+        connect_port,
+        connect_path,
+        out,
+        out_len,
+    )
+    .is_some()
+    {
+        0
+    } else {
+        -1
     }
 }
 
