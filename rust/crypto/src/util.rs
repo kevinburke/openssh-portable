@@ -126,6 +126,12 @@ pub(crate) struct StrarrayOnelineParse {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct StrarrayLinesParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StrdelimParse {
     pub(crate) next_offset: usize,
     pub(crate) next_is_null: u32,
@@ -665,6 +671,61 @@ pub(crate) fn strarray_oneline_write(
         pos += 1;
         out[pos..pos + bytes.len()].copy_from_slice(bytes);
         pos += bytes.len();
+    }
+    Some(())
+}
+
+pub(crate) fn strarray_lines_parse(
+    prefix: *const c_char,
+    vals: *const *const c_char,
+    nvals: usize,
+) -> Option<StrarrayLinesParse> {
+    let prefix = read_cstr_bytes(prefix)?;
+    let vals = read_ptr_slice(vals, nvals)?;
+    if nvals == 0 {
+        return Some(StrarrayLinesParse {
+            output_len: 0,
+            emit: false,
+        });
+    }
+    let mut output_len = 0usize;
+    for val in vals {
+        output_len += prefix.len() + 1 + read_cstr_bytes(*val)?.len() + 1;
+    }
+    Some(StrarrayLinesParse {
+        output_len,
+        emit: true,
+    })
+}
+
+pub(crate) fn strarray_lines_write(
+    prefix: *const c_char,
+    vals: *const *const c_char,
+    nvals: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = strarray_lines_parse(prefix, vals, nvals)?;
+    if !parsed.emit {
+        return if out_len == 0 { Some(()) } else { None };
+    }
+    let prefix = read_cstr_bytes(prefix)?;
+    let vals = read_ptr_slice(vals, nvals)?;
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut pos = 0usize;
+    for val in vals {
+        let bytes = read_cstr_bytes(*val)?;
+        out[pos..pos + prefix.len()].copy_from_slice(prefix);
+        pos += prefix.len();
+        out[pos] = b' ';
+        pos += 1;
+        out[pos..pos + bytes.len()].copy_from_slice(bytes);
+        pos += bytes.len();
+        out[pos] = b'\n';
+        pos += 1;
     }
     Some(())
 }
@@ -2489,7 +2550,8 @@ mod tests {
         FMT_INTARG_LITERAL_NO, FMT_INTARG_LITERAL_UNSET, FMT_INTARG_LITERAL_UNKNOWN,
         FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
         FmtIntArgParse, ForwardFormatParse,
-        StrarrayOnelineParse, strarray_oneline_parse, strarray_oneline_write,
+        StrarrayLinesParse, StrarrayOnelineParse, strarray_lines_parse,
+        strarray_lines_write, strarray_oneline_parse, strarray_oneline_write,
         ExpandEntry, expand_parse, expand_write,
         ForwardParse, HostfileLineParse, JumpParse,
         KeywordEntry, MultistateEntry, OptDequoteParse, OPT_DEQUOTE_MISSING_END,
@@ -3410,6 +3472,54 @@ mod tests {
         assert_eq!(&any_out, b" any");
         assert_eq!(
             strarray_oneline_write(core::ptr::null(), 0, 0, core::ptr::null_mut(), 0),
+            Some(())
+        );
+    }
+
+    #[test]
+    fn strarray_lines_parse_handles_basic_forms() {
+        let one = CString::new("one").unwrap();
+        let two = CString::new("two").unwrap();
+        let prefix = CString::new("userknownhostsfile").unwrap();
+        let vals = [one.as_ptr(), two.as_ptr()];
+
+        assert_eq!(
+            strarray_lines_parse(prefix.as_ptr(), vals.as_ptr(), vals.len()),
+            Some(StrarrayLinesParse {
+                output_len: "userknownhostsfile one\nuserknownhostsfile two\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            strarray_lines_parse(prefix.as_ptr(), core::ptr::null(), 0),
+            Some(StrarrayLinesParse {
+                output_len: 0,
+                emit: false,
+            })
+        );
+    }
+
+    #[test]
+    fn strarray_lines_write_handles_basic_forms() {
+        let one = CString::new("one").unwrap();
+        let two = CString::new("two").unwrap();
+        let prefix = CString::new("userknownhostsfile").unwrap();
+        let vals = [one.as_ptr(), two.as_ptr()];
+        let mut out = vec![0u8; "userknownhostsfile one\nuserknownhostsfile two\n".len()];
+
+        assert_eq!(
+            strarray_lines_write(
+                prefix.as_ptr(),
+                vals.as_ptr(),
+                vals.len(),
+                out.as_mut_ptr(),
+                out.len()
+            ),
+            Some(())
+        );
+        assert_eq!(&out, b"userknownhostsfile one\nuserknownhostsfile two\n");
+        assert_eq!(
+            strarray_lines_write(prefix.as_ptr(), core::ptr::null(), 0, core::ptr::null_mut(), 0),
             Some(())
         );
     }
