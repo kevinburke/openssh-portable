@@ -58,7 +58,8 @@ use util::{
     multistate_name, opt_dequote_parse, opt_dequote_write, opt_flag_parse,
     opt_match_parse, parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
     parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval, read_slice,
-    strarray_oneline_parse, strarray_oneline_write, strdelim_parse_in_place,
+    strarray_lines_parse, strarray_lines_write, strarray_oneline_parse,
+    strarray_oneline_write, strdelim_parse_in_place,
     valid_domain, valid_env_name, validate_permit, write_prefix, ATOI_STATUS_INVALID,
     ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL,
     DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
@@ -331,6 +332,12 @@ pub struct RustForwardFormatParse {
 
 #[repr(C)]
 pub struct RustStrarrayOnelineParse {
+    output_len: usize,
+    emit: u32,
+}
+
+#[repr(C)]
+pub struct RustStrarrayLinesParse {
     output_len: usize,
     emit: u32,
 }
@@ -1046,6 +1053,45 @@ pub extern "C" fn ossh_rust_strarray_oneline_write(
     out_len: usize,
 ) -> c_int {
     if strarray_oneline_write(vals, nvals, empty_mode, out, out_len).is_some() {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_strarray_lines_parse(
+    prefix: *const c_char,
+    vals: *const *const c_char,
+    nvals: usize,
+    out: *mut RustStrarrayLinesParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match strarray_lines_parse(prefix, vals, nvals) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustStrarrayLinesParse {
+                    output_len: parsed.output_len,
+                    emit: if parsed.emit { 1 } else { 0 },
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_strarray_lines_write(
+    prefix: *const c_char,
+    vals: *const *const c_char,
+    nvals: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if strarray_lines_write(prefix, vals, nvals, out, out_len).is_some() {
         0
     } else {
         -1
