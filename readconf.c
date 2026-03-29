@@ -3899,11 +3899,12 @@ dump_cfg_strarray_oneline(OpCodes code, u_int count, char **vals)
 	char *buf;
 
 	if (ossh_rust_strarray_oneline_parse((const char * const *)vals, count,
-	    &parsed) != 0)
+	    OSSH_RUST_STRARRAY_EMPTY_NONE, &parsed) != 0)
 		fatal_f("rust strarray parse failed");
 	buf = xmalloc(parsed.output_len + 1);
 	if (ossh_rust_strarray_oneline_write((const char * const *)vals, count,
-	    (u_char *)buf, parsed.output_len) != 0)
+	    OSSH_RUST_STRARRAY_EMPTY_NONE, (u_char *)buf,
+	    parsed.output_len) != 0)
 		fatal_f("rust strarray write failed");
 	buf[parsed.output_len] = '\0';
 	printf("%s%s\n", lookup_opcode_name(code), buf);
