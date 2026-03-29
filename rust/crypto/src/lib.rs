@@ -51,7 +51,8 @@ use rsa::{
 };
 use util::{
     a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
-    atoi_err, dollar_expand_parse, dollar_expand_write, keyword_lookup, keyword_name,
+    atoi_err, dollar_expand_parse, dollar_expand_write, expand_parse, expand_write,
+    keyword_lookup, keyword_name,
     lookup_env_in_list_parse, lookup_setenv_in_list_parse, multistate_lookup,
     multistate_name, opt_dequote_parse, opt_dequote_write, opt_flag_parse,
     opt_match_parse, parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
@@ -60,10 +61,11 @@ use util::{
     ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL,
     DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
     DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID, DOLLAR_EXPAND_INVALID,
-    KeywordEntry, MultistateEntry, OPT_DEQUOTE_MISSING_END, OPT_DEQUOTE_MISSING_START,
+    ExpandEntry, KeywordEntry, MultistateEntry, OPT_DEQUOTE_MISSING_END,
+    OPT_DEQUOTE_MISSING_START,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 42;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 43;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -131,6 +133,7 @@ pub struct RustCertBodyParse {
 
 pub type RustMultistateEntry = MultistateEntry;
 pub type RustKeywordEntry = KeywordEntry;
+pub type RustExpandEntry = ExpandEntry;
 
 #[repr(C)]
 pub struct RustPrivate2HeaderParse {
@@ -1121,6 +1124,55 @@ pub extern "C" fn ossh_rust_dollar_expand_write(
     out_len: usize,
 ) -> c_int {
     if dollar_expand_write(input, input_len, out, out_len).is_some() {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_expand_parse(
+    input: *const u8,
+    input_len: usize,
+    flags: u32,
+    entries: *const RustExpandEntry,
+    nentries: usize,
+    out: *mut RustDollarExpandParse,
+    status: *mut c_int,
+) -> c_int {
+    if out.is_null() {
+        store_parse_status(status, OSSH_RUST_DOLLAR_EXPAND_INVALID);
+        return -1;
+    }
+    match expand_parse(input, input_len, flags, entries, nentries) {
+        Ok(parsed) => {
+            unsafe {
+                *out = RustDollarExpandParse {
+                    output_len: parsed.output_len,
+                    missing_var: u32::from(parsed.missing_var),
+                };
+            }
+            store_parse_status(status, OSSH_RUST_PARSE_STATUS_OK);
+            0
+        }
+        Err(err) => {
+            store_parse_status(status, err);
+            -1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_expand_write(
+    input: *const u8,
+    input_len: usize,
+    flags: u32,
+    entries: *const RustExpandEntry,
+    nentries: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if expand_write(input, input_len, flags, entries, nentries, out, out_len).is_some() {
         0
     } else {
         -1
