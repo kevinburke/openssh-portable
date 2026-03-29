@@ -7,6 +7,7 @@ usage() {
 usage: contrib/ci-repro.sh <config>
 
 Supported configs:
+  default
   gcc-12-Werror
   openssl-noec
   without-openssl
@@ -63,7 +64,7 @@ fi
 config="$1"
 
 case "$config" in
-gcc-12-Werror|openssl-noec|without-openssl|rust-crypto)
+default|gcc-12-Werror|openssl-noec|without-openssl|rust-crypto)
 	;;
 *)
 	echo "unsupported config: $config" >&2
@@ -110,6 +111,13 @@ mkdir -p "$privsep_dir"
 autoreconf -fi
 
 case "$config" in
+default)
+	./configure \
+	  --prefix="$PWD/local" \
+	  --with-privsep-user=root \
+	  --with-privsep-path="$privsep_dir"
+	make_targets="${MAKE_TARGETS:-unit}"
+	;;
 gcc-12-Werror)
 	CC=gcc-12 \
 	CFLAGS="-O2 -Wno-format-truncation -Wimplicit-fallthrough=4 -Wno-unused-parameter -Wno-unused-result" \
