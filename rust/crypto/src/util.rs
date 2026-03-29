@@ -64,6 +64,9 @@ pub(crate) const FMT_INTARG_LITERAL_SHA1: c_int = 7;
 pub(crate) const FMT_INTARG_LITERAL_SHA256: c_int = 8;
 pub(crate) const FMT_INTARG_LITERAL_SHA384: c_int = 9;
 pub(crate) const FMT_INTARG_LITERAL_SHA512: c_int = 10;
+pub(crate) const FORWARD_FMT_LOCAL: c_int = 1;
+pub(crate) const FORWARD_FMT_DYNAMIC: c_int = 2;
+pub(crate) const FORWARD_FMT_REMOTE: c_int = 3;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -108,6 +111,12 @@ pub(crate) struct DollarExpandParse {
 pub(crate) struct FmtIntArgParse {
     pub(crate) literal: c_int,
     pub(crate) index: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ForwardFormatParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -512,6 +521,85 @@ pub(crate) fn fmt_intarg_parse(
     }
 }
 
+pub(crate) fn forward_format_parse(
+    mode: c_int,
+    listen_host: *const c_char,
+    listen_port: c_int,
+    listen_path: *const c_char,
+    connect_host: *const c_char,
+    connect_port: c_int,
+    connect_path: *const c_char,
+) -> Option<ForwardFormatParse> {
+    let listen_host = read_cstr_bytes(listen_host);
+    let listen_path = read_cstr_bytes(listen_path);
+    let connect_host = read_cstr_bytes(connect_host);
+    let connect_path = read_cstr_bytes(connect_path);
+
+    let emit = match mode {
+        FORWARD_FMT_DYNAMIC => connect_host.is_none_or(|host| host == b"socks"),
+        FORWARD_FMT_LOCAL => connect_host != Some(b"socks".as_slice()),
+        FORWARD_FMT_REMOTE => true,
+        _ => return None,
+    };
+    if !emit {
+        return Some(ForwardFormatParse {
+            output_len: 0,
+            emit: false,
+        });
+    }
+
+    let mut out = Vec::new();
+    append_forward_endpoint(&mut out, listen_host, listen_port, listen_path)?;
+    if mode != FORWARD_FMT_DYNAMIC {
+        append_forward_endpoint(&mut out, connect_host, connect_port, connect_path)?;
+    }
+    Some(ForwardFormatParse {
+        output_len: out.len(),
+        emit: true,
+    })
+}
+
+pub(crate) fn forward_format_write(
+    mode: c_int,
+    listen_host: *const c_char,
+    listen_port: c_int,
+    listen_path: *const c_char,
+    connect_host: *const c_char,
+    connect_port: c_int,
+    connect_path: *const c_char,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = forward_format_parse(
+        mode,
+        listen_host,
+        listen_port,
+        listen_path,
+        connect_host,
+        connect_port,
+        connect_path,
+    )?;
+    if !parsed.emit {
+        return Some(());
+    }
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+
+    let listen_host = read_cstr_bytes(listen_host);
+    let listen_path = read_cstr_bytes(listen_path);
+    let connect_host = read_cstr_bytes(connect_host);
+    let connect_path = read_cstr_bytes(connect_path);
+    let mut formatted = Vec::with_capacity(parsed.output_len);
+    append_forward_endpoint(&mut formatted, listen_host, listen_port, listen_path)?;
+    if mode != FORWARD_FMT_DYNAMIC {
+        append_forward_endpoint(&mut formatted, connect_host, connect_port, connect_path)?;
+    }
+    out.copy_from_slice(&formatted);
+    Some(())
+}
+
 pub(crate) fn keyword_lookup(
     input: *const u8,
     input_len: usize,
@@ -599,6 +687,31 @@ fn read_ptr_slice<'a, T>(ptr: *const T, len: usize) -> Option<&'a [T]> {
     } else {
         Some(unsafe { slice::from_raw_parts(ptr, len) })
     }
+}
+
+fn append_decimal(out: &mut Vec<u8>, value: c_int) {
+    out.extend_from_slice(value.to_string().as_bytes());
+}
+
+fn append_forward_endpoint(
+    out: &mut Vec<u8>,
+    host: Option<&[u8]>,
+    port: c_int,
+    path: Option<&[u8]>,
+) -> Option<()> {
+    if port == -2 {
+        out.push(b' ');
+        out.extend_from_slice(path?);
+    } else if let Some(host) = host {
+        out.extend_from_slice(b" [");
+        out.extend_from_slice(host);
+        out.extend_from_slice(b"]:");
+        append_decimal(out, port);
+    } else {
+        out.push(b' ');
+        append_decimal(out, port);
+    }
+    Some(())
 }
 
 fn lookup_env_bytes(env: &[u8], envs: *const *const c_char, nenvs: usize) -> Option<(usize, usize)> {
@@ -2290,7 +2403,8 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 mod tests {
     use super::{
         a2port, atoi_err, argv_split_parse, argv_split_write, host_hash_write,
-        fmt_intarg_parse, hpdelim2_parse_in_place, keyword_lookup, keyword_name,
+        fmt_intarg_parse, forward_format_parse, forward_format_write,
+        hpdelim2_parse_in_place, keyword_lookup, keyword_name,
         lookup_env_in_list_parse,
         lookup_setenv_in_list_parse, match_hashed_host, multistate_lookup,
         multistate_name, dollar_expand_parse, dollar_expand_write,
@@ -2301,10 +2415,11 @@ mod tests {
         strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
         ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE,
         ATOI_STATUS_TOO_SMALL, DollarExpandParse, DOLLAR_EXPAND_INVALID,
+        FORWARD_FMT_DYNAMIC, FORWARD_FMT_LOCAL, FORWARD_FMT_REMOTE,
         FMT_INTARG_DIGEST, FMT_INTARG_LITERAL_MD5, FMT_INTARG_LITERAL_MULTISTATE,
         FMT_INTARG_LITERAL_NO, FMT_INTARG_LITERAL_UNSET, FMT_INTARG_LITERAL_UNKNOWN,
         FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
-        FmtIntArgParse,
+        FmtIntArgParse, ForwardFormatParse,
         ExpandEntry, expand_parse, expand_write,
         ForwardParse, HostfileLineParse, JumpParse,
         KeywordEntry, MultistateEntry, OptDequoteParse, OPT_DEQUOTE_MISSING_END,
@@ -3047,6 +3162,120 @@ mod tests {
             fmt_intarg_parse(1, 99, core::ptr::null(), 0),
             None
         );
+    }
+
+    #[test]
+    fn forward_format_parse_handles_basic_forms() {
+        let listen_host = CString::new("host").unwrap();
+        let connect_host = CString::new("dest").unwrap();
+        let socks = CString::new("socks").unwrap();
+        let sock_path = CString::new("/tmp/a.sock").unwrap();
+
+        assert_eq!(
+            forward_format_parse(
+                FORWARD_FMT_LOCAL,
+                listen_host.as_ptr(),
+                8080,
+                core::ptr::null(),
+                connect_host.as_ptr(),
+                80,
+                core::ptr::null(),
+            ),
+            Some(ForwardFormatParse {
+                output_len: " [host]:8080 [dest]:80".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            forward_format_parse(
+                FORWARD_FMT_DYNAMIC,
+                core::ptr::null(),
+                1080,
+                core::ptr::null(),
+                socks.as_ptr(),
+                0,
+                core::ptr::null(),
+            ),
+            Some(ForwardFormatParse {
+                output_len: " 1080".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            forward_format_parse(
+                FORWARD_FMT_REMOTE,
+                core::ptr::null(),
+                -2,
+                sock_path.as_ptr(),
+                core::ptr::null(),
+                -2,
+                sock_path.as_ptr(),
+            ),
+            Some(ForwardFormatParse {
+                output_len: " /tmp/a.sock /tmp/a.sock".len(),
+                emit: true,
+            })
+        );
+    }
+
+    #[test]
+    fn forward_format_parse_skips_non_matching_modes() {
+        let connect_host = CString::new("dest").unwrap();
+        let socks = CString::new("socks").unwrap();
+
+        assert_eq!(
+            forward_format_parse(
+                FORWARD_FMT_DYNAMIC,
+                core::ptr::null(),
+                1080,
+                core::ptr::null(),
+                connect_host.as_ptr(),
+                80,
+                core::ptr::null(),
+            ),
+            Some(ForwardFormatParse {
+                output_len: 0,
+                emit: false,
+            })
+        );
+        assert_eq!(
+            forward_format_parse(
+                FORWARD_FMT_LOCAL,
+                core::ptr::null(),
+                1080,
+                core::ptr::null(),
+                socks.as_ptr(),
+                0,
+                core::ptr::null(),
+            ),
+            Some(ForwardFormatParse {
+                output_len: 0,
+                emit: false,
+            })
+        );
+    }
+
+    #[test]
+    fn forward_format_write_handles_basic_forms() {
+        let listen_host = CString::new("host").unwrap();
+        let connect_host = CString::new("dest").unwrap();
+        let mut out = vec![0u8; " [host]:8080 [dest]:80".len()];
+
+        assert_eq!(
+            forward_format_write(
+                FORWARD_FMT_LOCAL,
+                listen_host.as_ptr(),
+                8080,
+                core::ptr::null(),
+                connect_host.as_ptr(),
+                80,
+                core::ptr::null(),
+                out.as_mut_ptr(),
+                out.len(),
+            ),
+            Some(())
+        );
+        assert_eq!(&out, b" [host]:8080 [dest]:80");
     }
 
     #[test]

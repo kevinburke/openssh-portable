@@ -3907,12 +3907,48 @@ dump_cfg_strarray_oneline(OpCodes code, u_int count, char **vals)
 static void
 dump_cfg_forwards(OpCodes code, u_int count, const struct Forward *fwds)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_forward_format_parse parsed;
+	int mode;
+#endif
 	const struct Forward *fwd;
 	u_int i;
+	char *buf;
 
 	/* oDynamicForward */
 	for (i = 0; i < count; i++) {
 		fwd = &fwds[i];
+#ifdef WITH_RUST_CRYPTO
+		switch (code) {
+		case oDynamicForward:
+			mode = OSSH_RUST_FORWARD_FMT_DYNAMIC;
+			break;
+		case oLocalForward:
+			mode = OSSH_RUST_FORWARD_FMT_LOCAL;
+			break;
+		case oRemoteForward:
+			mode = OSSH_RUST_FORWARD_FMT_REMOTE;
+			break;
+		default:
+			continue;
+		}
+		if (ossh_rust_forward_format_parse(mode,
+		    fwd->listen_host, fwd->listen_port, fwd->listen_path,
+		    fwd->connect_host, fwd->connect_port, fwd->connect_path,
+		    &parsed) != 0)
+			fatal_f("rust forward format parse failed");
+		if (parsed.emit == 0)
+			continue;
+		buf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_forward_format_write(mode,
+		    fwd->listen_host, fwd->listen_port, fwd->listen_path,
+		    fwd->connect_host, fwd->connect_port, fwd->connect_path,
+		    (u_char *)buf, parsed.output_len) != 0)
+			fatal_f("rust forward format write failed");
+		buf[parsed.output_len] = '\0';
+		printf("%s%s\n", lookup_opcode_name(code), buf);
+		free(buf);
+#else
 		if (code == oDynamicForward && fwd->connect_host != NULL &&
 		    strcmp(fwd->connect_host, "socks") != 0)
 			continue;
@@ -3939,6 +3975,7 @@ dump_cfg_forwards(OpCodes code, u_int count, const struct Forward *fwds)
 			}
 		}
 		printf("\n");
+#endif
 	}
 }
 
