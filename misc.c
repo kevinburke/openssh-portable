@@ -1583,6 +1583,7 @@ tilde_expand_filename(const char *filename, uid_t uid)
  * by a NULL escape_char. Returns replaced string in memory allocated by
  * xmalloc which the caller must free.
  */
+#ifndef WITH_RUST_CRYPTO
 static char *
 vdollar_percent_expand(int *parseerror, int dollar, int percent,
     const char *string, va_list ap)
@@ -1692,6 +1693,7 @@ vdollar_percent_expand(int *parseerror, int dollar, int percent,
 	return *parseerror ? NULL : ret;
 #undef EXPAND_MAX_KEYS
 }
+#endif
 
 /*
  * Expand only environment variables.
@@ -1738,6 +1740,49 @@ dollar_expand(int *parseerr, const char *string, ...)
 #endif
 }
 
+#ifdef WITH_RUST_CRYPTO
+static char *
+rust_percent_expand(int dollar, const char *string, va_list ap)
+{
+#define EXPAND_MAX_KEYS 64
+	struct ossh_rust_expand_entry entries[EXPAND_MAX_KEYS];
+	struct ossh_rust_dollar_expand_parse parsed;
+	uint32_t flags = OSSH_RUST_EXPAND_ENABLE_PERCENT;
+	u_int nentries = 0;
+	char *ret = NULL;
+	int err = 1;
+
+	if (dollar)
+		flags |= OSSH_RUST_EXPAND_ENABLE_DOLLAR;
+	for (nentries = 0; nentries < EXPAND_MAX_KEYS; nentries++) {
+		entries[nentries].key = va_arg(ap, char *);
+		if (entries[nentries].key == NULL)
+			break;
+		entries[nentries].repl = va_arg(ap, char *);
+		if (entries[nentries].repl == NULL) {
+			fatal_f("NULL replacement for token %s",
+			    entries[nentries].key);
+		}
+	}
+	if (nentries == EXPAND_MAX_KEYS && va_arg(ap, char *) != NULL)
+		fatal_f("too many keys");
+	if (nentries == 0)
+		fatal_f("percent expansion without token list");
+
+	if (ossh_rust_expand_parse((const u_char *)string, strlen(string), flags,
+	    entries, nentries, &parsed, &err) != 0 || parsed.missing_var)
+		fatal_f("failed");
+	if ((ret = malloc(parsed.output_len + 1)) == NULL)
+		fatal_f("malloc failed");
+	if (ossh_rust_expand_write((const u_char *)string, strlen(string), flags,
+	    entries, nentries, (u_char *)ret, parsed.output_len) != 0)
+		fatal_f("rust expand write failed");
+	ret[parsed.output_len] = '\0';
+	return ret;
+#undef EXPAND_MAX_KEYS
+}
+#endif
+
 /*
  * Returns expanded string or NULL if a specified environment variable is
  * not defined, or calls fatal if the string is invalid.
@@ -1745,6 +1790,15 @@ dollar_expand(int *parseerr, const char *string, ...)
 char *
 percent_expand(const char *string, ...)
 {
+#ifdef WITH_RUST_CRYPTO
+	char *ret;
+	va_list ap;
+
+	va_start(ap, string);
+	ret = rust_percent_expand(0, string, ap);
+	va_end(ap);
+	return ret;
+#else
 	char *ret;
 	int err;
 	va_list ap;
@@ -1755,6 +1809,7 @@ percent_expand(const char *string, ...)
 	if (err)
 		fatal_f("failed");
 	return ret;
+#endif
 }
 
 /*
@@ -1764,6 +1819,15 @@ percent_expand(const char *string, ...)
 char *
 percent_dollar_expand(const char *string, ...)
 {
+#ifdef WITH_RUST_CRYPTO
+	char *ret;
+	va_list ap;
+
+	va_start(ap, string);
+	ret = rust_percent_expand(1, string, ap);
+	va_end(ap);
+	return ret;
+#else
 	char *ret;
 	int err;
 	va_list ap;
@@ -1774,6 +1838,7 @@ percent_dollar_expand(const char *string, ...)
 	if (err)
 		fatal_f("failed");
 	return ret;
+#endif
 }
 
 int
