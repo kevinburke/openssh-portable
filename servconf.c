@@ -587,6 +587,7 @@ parse_token(const char *cp, const char *filename,
 	int opcode;
 	size_t i;
 
+#ifdef WITH_RUST_CRYPTO
 	if (ossh_rust_keyword_lookup((const u_char *)cp,
 	    cp == NULL ? 0 : strlen(cp),
 	    (const struct ossh_rust_keyword_entry *)keywords, keyword_nentries(),
@@ -598,6 +599,13 @@ parse_token(const char *cp, const char *filename,
 			}
 		}
 	}
+#else
+	for (i = 0; keywords[i].name; i++)
+		if (strcasecmp(cp, keywords[i].name) == 0) {
+			*flags = keywords[i].flags;
+			return keywords[i].opcode;
+		}
+#endif
 
 	error("%s: line %d: Bad configuration option: %s",
 	    filename, linenum, cp);
