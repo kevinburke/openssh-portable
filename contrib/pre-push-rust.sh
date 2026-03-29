@@ -29,6 +29,10 @@ echo "==> docker rust-crypto unit"
 docker run --rm -v "$repo_root:/src" -w /src openssh-ci-repro \
 	env MAKE_TARGETS=unit ./contrib/ci-repro.sh rust-crypto
 
+echo "==> docker default unit"
+docker run --rm -v "$repo_root:/src" -w /src openssh-ci-repro \
+	env MAKE_TARGETS=unit ./contrib/ci-repro.sh default
+
 echo "==> docker openssl-noec unit"
 docker run --rm -v "$repo_root:/src" -w /src openssh-ci-repro \
 	env MAKE_TARGETS=unit ./contrib/ci-repro.sh openssl-noec
