@@ -122,6 +122,7 @@ pub(crate) struct ForwardFormatParse {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StrarrayOnelineParse {
     pub(crate) output_len: usize,
+    pub(crate) emit: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -605,29 +606,49 @@ pub(crate) fn forward_format_write(
     Some(())
 }
 
+fn strarray_oneline_empty_bytes(empty_mode: u32) -> Option<&'static [u8]> {
+    match empty_mode {
+        0 => Some(b""),
+        1 => Some(b" none"),
+        2 => Some(b" any"),
+        _ => None,
+    }
+}
+
 pub(crate) fn strarray_oneline_parse(
     vals: *const *const c_char,
     nvals: usize,
+    empty_mode: u32,
 ) -> Option<StrarrayOnelineParse> {
     let vals = read_ptr_slice(vals, nvals)?;
-    let mut output_len = 0usize;
     if nvals == 0 {
-        output_len += 5;
-    } else {
-        for val in vals {
-            output_len += 1 + read_cstr_bytes(*val)?.len();
-        }
+        let empty = strarray_oneline_empty_bytes(empty_mode)?;
+        return Some(StrarrayOnelineParse {
+            output_len: empty.len(),
+            emit: !empty.is_empty(),
+        });
     }
-    Some(StrarrayOnelineParse { output_len })
+    let mut output_len = 0usize;
+    for val in vals {
+        output_len += 1 + read_cstr_bytes(*val)?.len();
+    }
+    Some(StrarrayOnelineParse {
+        output_len,
+        emit: true,
+    })
 }
 
 pub(crate) fn strarray_oneline_write(
     vals: *const *const c_char,
     nvals: usize,
+    empty_mode: u32,
     out: *mut u8,
     out_len: usize,
 ) -> Option<()> {
-    let parsed = strarray_oneline_parse(vals, nvals)?;
+    let parsed = strarray_oneline_parse(vals, nvals, empty_mode)?;
+    if !parsed.emit {
+        return if out_len == 0 { Some(()) } else { None };
+    }
     let out = read_slice_mut(out, out_len)?;
     if out.len() != parsed.output_len {
         return None;
@@ -635,7 +656,7 @@ pub(crate) fn strarray_oneline_write(
     let vals = read_ptr_slice(vals, nvals)?;
     let mut pos = 0usize;
     if nvals == 0 {
-        out.copy_from_slice(b" none");
+        out.copy_from_slice(strarray_oneline_empty_bytes(empty_mode)?);
         return Some(());
     }
     for val in vals {
@@ -3334,15 +3355,31 @@ mod tests {
         let vals = [one.as_ptr(), two.as_ptr()];
 
         assert_eq!(
-            strarray_oneline_parse(vals.as_ptr(), vals.len()),
+            strarray_oneline_parse(vals.as_ptr(), vals.len(), 1),
             Some(StrarrayOnelineParse {
                 output_len: " one two".len(),
+                emit: true,
             })
         );
         assert_eq!(
-            strarray_oneline_parse(core::ptr::null(), 0),
+            strarray_oneline_parse(core::ptr::null(), 0, 1),
             Some(StrarrayOnelineParse {
                 output_len: " none".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            strarray_oneline_parse(core::ptr::null(), 0, 2),
+            Some(StrarrayOnelineParse {
+                output_len: " any".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            strarray_oneline_parse(core::ptr::null(), 0, 0),
+            Some(StrarrayOnelineParse {
+                output_len: 0,
+                emit: false,
             })
         );
     }
@@ -3355,10 +3392,26 @@ mod tests {
         let mut out = vec![0u8; " one two".len()];
 
         assert_eq!(
-            strarray_oneline_write(vals.as_ptr(), vals.len(), out.as_mut_ptr(), out.len()),
+            strarray_oneline_write(vals.as_ptr(), vals.len(), 1, out.as_mut_ptr(), out.len()),
             Some(())
         );
         assert_eq!(&out, b" one two");
+        let mut none_out = vec![0u8; " none".len()];
+        assert_eq!(
+            strarray_oneline_write(core::ptr::null(), 0, 1, none_out.as_mut_ptr(), none_out.len()),
+            Some(())
+        );
+        assert_eq!(&none_out, b" none");
+        let mut any_out = vec![0u8; " any".len()];
+        assert_eq!(
+            strarray_oneline_write(core::ptr::null(), 0, 2, any_out.as_mut_ptr(), any_out.len()),
+            Some(())
+        );
+        assert_eq!(&any_out, b" any");
+        assert_eq!(
+            strarray_oneline_write(core::ptr::null(), 0, 0, core::ptr::null_mut(), 0),
+            Some(())
+        );
     }
 
     #[test]

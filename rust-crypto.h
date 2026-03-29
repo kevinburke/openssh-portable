@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 44U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 45U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -79,7 +79,11 @@ struct ossh_rust_forward_format_parse {
 };
 struct ossh_rust_strarray_oneline_parse {
 	size_t output_len;
+	uint32_t emit;
 };
+#define OSSH_RUST_STRARRAY_EMPTY_SKIP 0U
+#define OSSH_RUST_STRARRAY_EMPTY_NONE 1U
+#define OSSH_RUST_STRARRAY_EMPTY_ANY 2U
 #define OSSH_RUST_EXPAND_ENABLE_DOLLAR 1U
 #define OSSH_RUST_EXPAND_ENABLE_PERCENT 2U
 #define OSSH_RUST_PRIVATE2_KDF_NONE 0
@@ -341,9 +345,9 @@ int ossh_rust_forward_format_write(int mode,
     const char *connect_host, int connect_port, const char *connect_path,
     uint8_t *out, size_t out_len);
 int ossh_rust_strarray_oneline_parse(const char * const *vals, size_t nvals,
-    struct ossh_rust_strarray_oneline_parse *out);
+    uint32_t empty_mode, struct ossh_rust_strarray_oneline_parse *out);
 int ossh_rust_strarray_oneline_write(const char * const *vals, size_t nvals,
-    uint8_t *out, size_t out_len);
+    uint32_t empty_mode, uint8_t *out, size_t out_len);
 int ossh_rust_keyword_lookup(const uint8_t *input, size_t input_len,
     const struct ossh_rust_keyword_entry *entries, size_t nentries,
     int ignore_case, int *out);
