@@ -51,6 +51,19 @@ pub(crate) const ATOI_STATUS_TOO_LARGE: c_int = 4;
 pub(crate) const OPT_DEQUOTE_MISSING_START: c_int = 1;
 pub(crate) const OPT_DEQUOTE_MISSING_END: c_int = 2;
 pub(crate) const DOLLAR_EXPAND_INVALID: c_int = 1;
+pub(crate) const FMT_INTARG_MULTISTATE: c_int = 1;
+pub(crate) const FMT_INTARG_YESNO: c_int = 2;
+pub(crate) const FMT_INTARG_DIGEST: c_int = 3;
+pub(crate) const FMT_INTARG_LITERAL_UNSET: c_int = 1;
+pub(crate) const FMT_INTARG_LITERAL_NO: c_int = 2;
+pub(crate) const FMT_INTARG_LITERAL_YES: c_int = 3;
+pub(crate) const FMT_INTARG_LITERAL_UNKNOWN: c_int = 4;
+pub(crate) const FMT_INTARG_LITERAL_MULTISTATE: c_int = 5;
+pub(crate) const FMT_INTARG_LITERAL_MD5: c_int = 6;
+pub(crate) const FMT_INTARG_LITERAL_SHA1: c_int = 7;
+pub(crate) const FMT_INTARG_LITERAL_SHA256: c_int = 8;
+pub(crate) const FMT_INTARG_LITERAL_SHA384: c_int = 9;
+pub(crate) const FMT_INTARG_LITERAL_SHA512: c_int = 10;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -89,6 +102,12 @@ pub(crate) struct OptDequoteParse {
 pub(crate) struct DollarExpandParse {
     pub(crate) output_len: usize,
     pub(crate) missing_var: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct FmtIntArgParse {
+    pub(crate) literal: c_int,
+    pub(crate) index: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -451,6 +470,46 @@ pub(crate) fn multistate_name(
     let entries = unsafe { entries.as_ref() }
         .map(|_| unsafe { slice::from_raw_parts(entries, nentries) })?;
     entries.iter().position(|entry| entry.value == value)
+}
+
+pub(crate) fn fmt_intarg_parse(
+    value: c_int,
+    mode: c_int,
+    entries: *const MultistateEntry,
+    nentries: usize,
+) -> Option<FmtIntArgParse> {
+    if value == -1 {
+        return Some(FmtIntArgParse {
+            literal: FMT_INTARG_LITERAL_UNSET,
+            index: 0,
+        });
+    }
+    match mode {
+        FMT_INTARG_MULTISTATE => Some(FmtIntArgParse {
+            literal: FMT_INTARG_LITERAL_MULTISTATE,
+            index: multistate_name(value, entries, nentries)?,
+        }),
+        FMT_INTARG_YESNO => Some(FmtIntArgParse {
+            literal: match value {
+                0 => FMT_INTARG_LITERAL_NO,
+                1 => FMT_INTARG_LITERAL_YES,
+                _ => FMT_INTARG_LITERAL_UNKNOWN,
+            },
+            index: 0,
+        }),
+        FMT_INTARG_DIGEST => Some(FmtIntArgParse {
+            literal: match value {
+                0 => FMT_INTARG_LITERAL_MD5,
+                1 => FMT_INTARG_LITERAL_SHA1,
+                2 => FMT_INTARG_LITERAL_SHA256,
+                3 => FMT_INTARG_LITERAL_SHA384,
+                4 => FMT_INTARG_LITERAL_SHA512,
+                _ => FMT_INTARG_LITERAL_UNKNOWN,
+            },
+            index: 0,
+        }),
+        _ => None,
+    }
 }
 
 pub(crate) fn keyword_lookup(
@@ -2231,7 +2290,7 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 mod tests {
     use super::{
         a2port, atoi_err, argv_split_parse, argv_split_write, host_hash_write,
-        hpdelim2_parse_in_place, keyword_lookup, keyword_name,
+        fmt_intarg_parse, hpdelim2_parse_in_place, keyword_lookup, keyword_name,
         lookup_env_in_list_parse,
         lookup_setenv_in_list_parse, match_hashed_host, multistate_lookup,
         multistate_name, dollar_expand_parse, dollar_expand_write,
@@ -2242,6 +2301,10 @@ mod tests {
         strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
         ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE,
         ATOI_STATUS_TOO_SMALL, DollarExpandParse, DOLLAR_EXPAND_INVALID,
+        FMT_INTARG_DIGEST, FMT_INTARG_LITERAL_MD5, FMT_INTARG_LITERAL_MULTISTATE,
+        FMT_INTARG_LITERAL_NO, FMT_INTARG_LITERAL_UNSET, FMT_INTARG_LITERAL_UNKNOWN,
+        FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
+        FmtIntArgParse,
         ExpandEntry, expand_parse, expand_write,
         ForwardParse, HostfileLineParse, JumpParse,
         KeywordEntry, MultistateEntry, OptDequoteParse, OPT_DEQUOTE_MISSING_END,
@@ -2913,6 +2976,77 @@ mod tests {
 
         assert_eq!(multistate_name(2, entries.as_ptr(), entries.len()), None);
         assert_eq!(multistate_name(1, core::ptr::null(), 1), None);
+    }
+
+    #[test]
+    fn fmt_intarg_parse_handles_basic_forms() {
+        let yes = CString::new("yes").unwrap();
+        let no = CString::new("no").unwrap();
+        let entries = [
+            MultistateEntry {
+                key: yes.as_ptr(),
+                value: 1,
+            },
+            MultistateEntry {
+                key: no.as_ptr(),
+                value: 0,
+            },
+        ];
+
+        assert_eq!(
+            fmt_intarg_parse(1, FMT_INTARG_MULTISTATE, entries.as_ptr(), entries.len()),
+            Some(FmtIntArgParse {
+                literal: FMT_INTARG_LITERAL_MULTISTATE,
+                index: 0,
+            })
+        );
+        assert_eq!(
+            fmt_intarg_parse(1, FMT_INTARG_YESNO, core::ptr::null(), 0),
+            Some(FmtIntArgParse {
+                literal: FMT_INTARG_LITERAL_YES,
+                index: 0,
+            })
+        );
+        assert_eq!(
+            fmt_intarg_parse(0, FMT_INTARG_YESNO, core::ptr::null(), 0),
+            Some(FmtIntArgParse {
+                literal: FMT_INTARG_LITERAL_NO,
+                index: 0,
+            })
+        );
+        assert_eq!(
+            fmt_intarg_parse(-1, FMT_INTARG_YESNO, core::ptr::null(), 0),
+            Some(FmtIntArgParse {
+                literal: FMT_INTARG_LITERAL_UNSET,
+                index: 0,
+            })
+        );
+        assert_eq!(
+            fmt_intarg_parse(0, FMT_INTARG_DIGEST, core::ptr::null(), 0),
+            Some(FmtIntArgParse {
+                literal: FMT_INTARG_LITERAL_MD5,
+                index: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn fmt_intarg_parse_rejects_bad_forms() {
+        assert_eq!(
+            fmt_intarg_parse(2, FMT_INTARG_MULTISTATE, core::ptr::null(), 0),
+            None
+        );
+        assert_eq!(
+            fmt_intarg_parse(99, FMT_INTARG_DIGEST, core::ptr::null(), 0),
+            Some(FmtIntArgParse {
+                literal: FMT_INTARG_LITERAL_UNKNOWN,
+                index: 0,
+            })
+        );
+        assert_eq!(
+            fmt_intarg_parse(1, 99, core::ptr::null(), 0),
+            None
+        );
     }
 
     #[test]
