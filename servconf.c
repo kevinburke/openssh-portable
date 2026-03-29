@@ -4025,15 +4025,101 @@ parse_server_config(ServerOptions *options, const char *filename,
 		process_queued_listen_addrs(options);
 }
 
+#ifdef WITH_RUST_CRYPTO
+static size_t
+multistate_nentries(const struct multistate *m)
+{
+	size_t i;
+
+	if (m == NULL)
+		return 0;
+	for (i = 0; m[i].key != NULL; i++)
+		;
+	return i;
+}
+
+static const char *
+fmt_intarg_literal(int literal, const struct multistate *m, size_t index)
+{
+	switch (literal) {
+	case OSSH_RUST_FMT_INTARG_LITERAL_UNSET:
+		return "unset";
+	case OSSH_RUST_FMT_INTARG_LITERAL_NO:
+		return "no";
+	case OSSH_RUST_FMT_INTARG_LITERAL_YES:
+		return "yes";
+	case OSSH_RUST_FMT_INTARG_LITERAL_UNKNOWN:
+		return "UNKNOWN";
+	case OSSH_RUST_FMT_INTARG_LITERAL_MULTISTATE:
+		return m[index].key;
+	case OSSH_RUST_FMT_INTARG_LITERAL_MD5:
+		return "MD5";
+	case OSSH_RUST_FMT_INTARG_LITERAL_SHA1:
+		return "SHA1";
+	case OSSH_RUST_FMT_INTARG_LITERAL_SHA256:
+		return "SHA256";
+	case OSSH_RUST_FMT_INTARG_LITERAL_SHA384:
+		return "SHA384";
+	case OSSH_RUST_FMT_INTARG_LITERAL_SHA512:
+		return "SHA512";
+	default:
+		return "UNKNOWN";
+	}
+}
+#else
 static const char *
 fmt_multistate_int(int val, const struct multistate *m)
 {
 	return multistate_name(val, m);
 }
+#endif
 
 static const char *
 fmt_intarg(ServerOpCodes code, int val)
 {
+#ifdef WITH_RUST_CRYPTO
+	const struct multistate *multistate = NULL;
+	struct ossh_rust_fmt_intarg_parse parsed;
+	int mode = OSSH_RUST_FMT_INTARG_YESNO;
+
+	switch (code) {
+	case sAddressFamily:
+		multistate = multistate_addressfamily;
+		mode = OSSH_RUST_FMT_INTARG_MULTISTATE;
+		break;
+	case sPermitRootLogin:
+		multistate = multistate_permitrootlogin;
+		mode = OSSH_RUST_FMT_INTARG_MULTISTATE;
+		break;
+	case sGatewayPorts:
+		multistate = multistate_gatewayports;
+		mode = OSSH_RUST_FMT_INTARG_MULTISTATE;
+		break;
+	case sCompression:
+		multistate = multistate_compression;
+		mode = OSSH_RUST_FMT_INTARG_MULTISTATE;
+		break;
+	case sAllowTcpForwarding:
+	case sAllowStreamLocalForwarding:
+		multistate = multistate_tcpfwd;
+		mode = OSSH_RUST_FMT_INTARG_MULTISTATE;
+		break;
+	case sIgnoreRhosts:
+		multistate = multistate_ignore_rhosts;
+		mode = OSSH_RUST_FMT_INTARG_MULTISTATE;
+		break;
+	case sFingerprintHash:
+		mode = OSSH_RUST_FMT_INTARG_DIGEST;
+		break;
+	default:
+		break;
+	}
+	if (ossh_rust_fmt_intarg(val, mode,
+	    (const struct ossh_rust_multistate_entry *)multistate,
+	    multistate_nentries(multistate), &parsed) == 0)
+		return fmt_intarg_literal(parsed.literal, multistate, parsed.index);
+	return "UNKNOWN";
+#else
 	if (val == -1)
 		return "unset";
 	switch (code) {
@@ -4063,6 +4149,7 @@ fmt_intarg(ServerOpCodes code, int val)
 			return "UNKNOWN";
 		}
 	}
+#endif
 }
 
 static void
