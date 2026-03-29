@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 43U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 44U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -76,6 +76,9 @@ struct ossh_rust_fmt_intarg_parse {
 struct ossh_rust_forward_format_parse {
 	size_t output_len;
 	uint32_t emit;
+};
+struct ossh_rust_strarray_oneline_parse {
+	size_t output_len;
 };
 #define OSSH_RUST_EXPAND_ENABLE_DOLLAR 1U
 #define OSSH_RUST_EXPAND_ENABLE_PERCENT 2U
@@ -336,6 +339,10 @@ int ossh_rust_forward_format_parse(int mode,
 int ossh_rust_forward_format_write(int mode,
     const char *listen_host, int listen_port, const char *listen_path,
     const char *connect_host, int connect_port, const char *connect_path,
+    uint8_t *out, size_t out_len);
+int ossh_rust_strarray_oneline_parse(const char * const *vals, size_t nvals,
+    struct ossh_rust_strarray_oneline_parse *out);
+int ossh_rust_strarray_oneline_write(const char * const *vals, size_t nvals,
     uint8_t *out, size_t out_len);
 int ossh_rust_keyword_lookup(const uint8_t *input, size_t input_len,
     const struct ossh_rust_keyword_entry *entries, size_t nentries,
