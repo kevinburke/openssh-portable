@@ -561,6 +561,14 @@ lookup_opcode_name(ServerOpCodes code)
 {
 	u_int i;
 
+#ifdef WITH_RUST_CRYPTO
+	size_t index;
+
+	if (ossh_rust_keyword_name((int)code,
+	    (const struct ossh_rust_keyword_entry *)keywords, keyword_nentries(),
+	    &index) == 0)
+		return keywords[index].name;
+#endif
 	for (i = 0; keywords[i].name != NULL; i++)
 		if (keywords[i].opcode == code)
 			return(keywords[i].name);
