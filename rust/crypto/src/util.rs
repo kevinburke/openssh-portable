@@ -1,7 +1,8 @@
 use core::mem;
 use core::ffi::{c_char, c_int, CStr};
 use core::slice;
-use std::ffi::CString;
+use std::ffi::{CString, OsString};
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
 use base64ct::{Base64, Encoding};
 use rand_core::{OsRng, RngCore};
@@ -49,6 +50,7 @@ pub(crate) const ATOI_STATUS_TOO_SMALL: c_int = 3;
 pub(crate) const ATOI_STATUS_TOO_LARGE: c_int = 4;
 pub(crate) const OPT_DEQUOTE_MISSING_START: c_int = 1;
 pub(crate) const OPT_DEQUOTE_MISSING_END: c_int = 2;
+pub(crate) const DOLLAR_EXPAND_INVALID: c_int = 1;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -74,6 +76,12 @@ pub(crate) struct ArgvSplitParse {
 pub(crate) struct OptDequoteParse {
     pub(crate) output_len: usize,
     pub(crate) next_offset: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DollarExpandParse {
+    pub(crate) output_len: usize,
+    pub(crate) missing_var: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -618,6 +626,83 @@ pub(crate) fn opt_dequote_write(
     while i < parsed.next_offset - 1 {
         if input[i] == b'\\' && input.get(i + 1) == Some(&b'"') {
             i += 1;
+        }
+        out[j] = input[i];
+        j += 1;
+        i += 1;
+    }
+    Some(())
+}
+
+fn dollar_expand_var(input: &[u8], pos: usize) -> Result<Option<(&[u8], usize)>, c_int> {
+    if input.get(pos) != Some(&b'$') || input.get(pos + 1) != Some(&b'{') {
+        return Ok(None);
+    }
+    let start = pos + 2;
+    let Some(rel_end) = input[start..].iter().position(|&b| b == b'}') else {
+        return Err(DOLLAR_EXPAND_INVALID);
+    };
+    let end = start + rel_end;
+    if end == start {
+        return Err(DOLLAR_EXPAND_INVALID);
+    }
+    Ok(Some((&input[start..end], end + 1)))
+}
+
+fn env_bytes(name: &[u8]) -> Option<Vec<u8>> {
+    std::env::var_os(OsString::from_vec(name.to_vec())).map(|v| v.as_bytes().to_vec())
+}
+
+pub(crate) fn dollar_expand_parse(
+    input: *const u8,
+    input_len: usize,
+) -> Result<DollarExpandParse, c_int> {
+    let input = read_slice(input, input_len).ok_or(DOLLAR_EXPAND_INVALID)?;
+    let mut i = 0usize;
+    let mut output_len = 0usize;
+    let mut missing_var = false;
+
+    while i < input.len() {
+        if let Some((name, next)) = dollar_expand_var(input, i)? {
+            if let Some(value) = env_bytes(name) {
+                output_len += value.len();
+            } else {
+                missing_var = true;
+            }
+            i = next;
+            continue;
+        }
+        output_len += 1;
+        i += 1;
+    }
+    Ok(DollarExpandParse {
+        output_len,
+        missing_var,
+    })
+}
+
+pub(crate) fn dollar_expand_write(
+    input: *const u8,
+    input_len: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let input = read_slice(input, input_len)?;
+    let out = read_slice_mut(out, out_len)?;
+    let parsed = dollar_expand_parse(input.as_ptr(), input.len()).ok()?;
+    if parsed.missing_var || out.len() != parsed.output_len {
+        return None;
+    }
+
+    let mut i = 0usize;
+    let mut j = 0usize;
+    while i < input.len() {
+        if let Some((name, next)) = dollar_expand_var(input, i).ok()? {
+            let value = env_bytes(name)?;
+            out[j..j + value.len()].copy_from_slice(&value);
+            j += value.len();
+            i = next;
+            continue;
         }
         out[j] = input[i];
         j += 1;
@@ -2027,13 +2112,15 @@ mod tests {
         a2port, atoi_err, argv_split_parse, argv_split_write, host_hash_write,
         hpdelim2_parse_in_place, keyword_lookup, lookup_env_in_list_parse,
         lookup_setenv_in_list_parse, match_hashed_host, multistate_lookup,
-        multistate_name, opt_dequote_parse, opt_dequote_write, opt_flag_parse,
-        opt_match_parse, parse_absolute_time, parse_convtime_double,
-        parse_forward_field_in_place, parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
+        multistate_name, dollar_expand_parse, dollar_expand_write,
+        opt_dequote_parse, opt_dequote_write, opt_flag_parse, opt_match_parse,
+        parse_absolute_time, parse_convtime_double, parse_forward_field_in_place,
+        parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
         parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
         strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
         ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE,
-        ATOI_STATUS_TOO_SMALL, ForwardParse, HostfileLineParse, JumpParse,
+        ATOI_STATUS_TOO_SMALL, DollarExpandParse, DOLLAR_EXPAND_INVALID,
+        ForwardParse, HostfileLineParse, JumpParse,
         KeywordEntry, MultistateEntry, OptDequoteParse, OPT_DEQUOTE_MISSING_END,
         OPT_DEQUOTE_MISSING_START, PatternIntervalParse, UriParse,
         UserHostPathParse, UserHostPortParse, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
@@ -2041,6 +2128,7 @@ mod tests {
         IPQOS_AF21, IPQOS_CS6, IPQOS_NONE,
     };
     use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
 
     fn split(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> {
         let parsed = argv_split_parse(input.as_ptr(), input.len(), terminate_on_comment as i32)?;
@@ -2895,6 +2983,54 @@ mod tests {
             Some(())
         );
         assert_eq!(&out, b"hello\"world");
+    }
+
+    #[test]
+    fn dollar_expand_parse_handles_basic_forms() {
+        let home = std::env::var_os("HOME").unwrap();
+        assert_eq!(
+            dollar_expand_parse(b"${HOME}".as_ptr(), 7),
+            Ok(DollarExpandParse {
+                output_len: home.as_bytes().len(),
+                missing_var: false,
+            })
+        );
+        assert_eq!(
+            dollar_expand_parse(b"a${HOME}b".as_ptr(), 9),
+            Ok(DollarExpandParse {
+                output_len: home.as_bytes().len() + 2,
+                missing_var: false,
+            })
+        );
+    }
+
+    #[test]
+    fn dollar_expand_parse_rejects_bad_forms() {
+        let missing = br#"${MISSING_RUST_DOLLAR_EXPAND_TEST_VALUE}"#;
+        assert_eq!(dollar_expand_parse(b"${".as_ptr(), 2), Err(DOLLAR_EXPAND_INVALID));
+        assert_eq!(dollar_expand_parse(b"${}".as_ptr(), 3), Err(DOLLAR_EXPAND_INVALID));
+        assert_eq!(
+            dollar_expand_parse(missing.as_ptr(), missing.len()),
+            Ok(DollarExpandParse {
+                output_len: 0,
+                missing_var: true,
+            })
+        );
+    }
+
+    #[test]
+    fn dollar_expand_write_handles_existing_env() {
+        let input = b"a${HOME}b";
+        let home = std::env::var_os("HOME").unwrap();
+        let mut out = vec![0u8; home.as_bytes().len() + 2];
+        assert_eq!(
+            dollar_expand_write(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len()),
+            Some(())
+        );
+        let mut expected = Vec::from([b'a']);
+        expected.extend_from_slice(home.as_bytes());
+        expected.push(b'b');
+        assert_eq!(out, expected);
     }
 
     #[test]
