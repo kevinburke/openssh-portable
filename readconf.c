@@ -3887,10 +3887,31 @@ dump_cfg_string(OpCodes code, const char *val)
 static void
 dump_cfg_strarray(OpCodes code, u_int count, char **vals)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_strarray_lines_parse parsed;
+	const char *prefix = lookup_opcode_name(code);
+	char *buf;
+#else
 	u_int i;
+#endif
 
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_strarray_lines_parse(prefix, (const char * const *)vals,
+	    count, &parsed) != 0)
+		fatal_f("rust strarray lines parse failed");
+	if (!parsed.emit)
+		return;
+	buf = xmalloc(parsed.output_len + 1);
+	if (ossh_rust_strarray_lines_write(prefix, (const char * const *)vals,
+	    count, (u_char *)buf, parsed.output_len) != 0)
+		fatal_f("rust strarray lines write failed");
+	buf[parsed.output_len] = '\0';
+	printf("%s", buf);
+	free(buf);
+#else
 	for (i = 0; i < count; i++)
 		printf("%s %s\n", lookup_opcode_name(code), vals[i]);
+#endif
 }
 
 static void
