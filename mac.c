@@ -190,11 +190,18 @@ mac_compute(struct sshmac *mac, uint32_t seqno,
 	switch (mac->type) {
 	case SSH_DIGEST:
 #ifdef WITH_RUST_CRYPTO
-		if (mac->rust_ctx == NULL ||
-		    ossh_rust_mac_compute(mac->rust_ctx, seqno, data, datalen,
+		if (mac->rust_ctx == NULL)
+			return SSH_ERR_LIBCRYPTO_ERROR;
+		if (digest == NULL) {
+			if (ossh_rust_mac_compute(mac->rust_ctx, seqno, data,
+			    datalen, u.m, sizeof(u.m)) != 0)
+				return SSH_ERR_LIBCRYPTO_ERROR;
+			break;
+		}
+		if (ossh_rust_mac_compute(mac->rust_ctx, seqno, data, datalen,
 		    digest, dlen) != 0)
 			return SSH_ERR_LIBCRYPTO_ERROR;
-		break;
+		return 0;
 #else
 		put_u32(b, seqno);
 		/* reset HMAC context */
