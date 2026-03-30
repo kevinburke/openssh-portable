@@ -217,6 +217,12 @@ pub(crate) struct ConnectTimeoutLineParse {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PubkeyAuthOptionsLineParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct EscapeCharLineParse {
     pub(crate) output_len: usize,
     pub(crate) emit: bool,
@@ -225,6 +231,8 @@ pub(crate) struct EscapeCharLineParse {
 const SSH_KEYSTROKE_DEFAULT_INTERVAL_MS: i32 = 20;
 const SSH_TUNID_ANY: i32 = 0x7fffffff;
 const SSH_ESCAPECHAR_NONE: i32 = -2;
+const PUBKEYAUTH_TOUCH_REQUIRED: i32 = 1;
+const PUBKEYAUTH_VERIFY_REQUIRED: i32 = 1 << 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StrdelimParse {
@@ -1152,6 +1160,52 @@ pub(crate) fn connecttimeout_line_write(
         formatted.extend_from_slice(b"none");
     } else {
         formatted.extend_from_slice(value.to_string().as_bytes());
+    }
+    formatted.push(b'\n');
+    out.copy_from_slice(&formatted);
+    Some(())
+}
+
+pub(crate) fn pubkeyauthoptions_line_parse(value: i32) -> Option<PubkeyAuthOptionsLineParse> {
+    if value & !(PUBKEYAUTH_TOUCH_REQUIRED | PUBKEYAUTH_VERIFY_REQUIRED) != 0 {
+        return None;
+    }
+    let mut output_len = "pubkeyauthoptions".len() + 1;
+    if value == 0 {
+        output_len += " none".len();
+    }
+    if value & PUBKEYAUTH_TOUCH_REQUIRED != 0 {
+        output_len += " touch-required".len();
+    }
+    if value & PUBKEYAUTH_VERIFY_REQUIRED != 0 {
+        output_len += " verify-required".len();
+    }
+    Some(PubkeyAuthOptionsLineParse {
+        output_len,
+        emit: true,
+    })
+}
+
+pub(crate) fn pubkeyauthoptions_line_write(
+    value: i32,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = pubkeyauthoptions_line_parse(value)?;
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut formatted = Vec::with_capacity(parsed.output_len);
+    formatted.extend_from_slice(b"pubkeyauthoptions");
+    if value == 0 {
+        formatted.extend_from_slice(b" none");
+    }
+    if value & PUBKEYAUTH_TOUCH_REQUIRED != 0 {
+        formatted.extend_from_slice(b" touch-required");
+    }
+    if value & PUBKEYAUTH_VERIFY_REQUIRED != 0 {
+        formatted.extend_from_slice(b" verify-required");
     }
     formatted.push(b'\n');
     out.copy_from_slice(&formatted);
@@ -3408,6 +3462,7 @@ mod tests {
         parse_absolute_time, parse_convtime_double, parse_forward_field_in_place,
         parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
         parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
+        pubkeyauthoptions_line_parse, pubkeyauthoptions_line_write,
         proxyjump_line_parse, proxyjump_line_write,
         connecttimeout_line_parse, connecttimeout_line_write,
         controlpersist_line_parse, controlpersist_line_write,
@@ -3428,6 +3483,7 @@ mod tests {
         ForwardAgentLineParse,
         FmtIntArgParse, ForwardFormatParse, IpqosLineParse,
         ListenaddrLineParse, PermitListLineParse, ProxyJumpLineParse,
+        PubkeyAuthOptionsLineParse,
         RekeyLimitLineParse,
         TunnelDeviceLineParse,
         StrarrayLinesParse, StrarrayOnelineParse, strarray_lines_parse,
@@ -3441,6 +3497,7 @@ mod tests {
         UserHostPathParse, UserHostPortParse, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
         DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID,
         IPQOS_AF21, IPQOS_CS0, IPQOS_CS6, IPQOS_EF, IPQOS_NONE, SSH_TUNID_ANY,
+        PUBKEYAUTH_TOUCH_REQUIRED, PUBKEYAUTH_VERIFY_REQUIRED,
     };
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
@@ -4770,6 +4827,70 @@ mod tests {
             Some(())
         );
         assert_eq!(&num_out, b"connecttimeout 30\n");
+    }
+
+    #[test]
+    fn pubkeyauthoptions_line_parse_handles_basic_forms() {
+        assert_eq!(
+            pubkeyauthoptions_line_parse(0),
+            Some(PubkeyAuthOptionsLineParse {
+                output_len: "pubkeyauthoptions none\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            pubkeyauthoptions_line_parse(PUBKEYAUTH_TOUCH_REQUIRED),
+            Some(PubkeyAuthOptionsLineParse {
+                output_len: "pubkeyauthoptions touch-required\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            pubkeyauthoptions_line_parse(
+                PUBKEYAUTH_TOUCH_REQUIRED | PUBKEYAUTH_VERIFY_REQUIRED
+            ),
+            Some(PubkeyAuthOptionsLineParse {
+                output_len: "pubkeyauthoptions touch-required verify-required\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(pubkeyauthoptions_line_parse(4), None);
+    }
+
+    #[test]
+    fn pubkeyauthoptions_line_write_handles_basic_forms() {
+        let mut none_out = vec![0u8; "pubkeyauthoptions none\n".len()];
+        assert_eq!(
+            pubkeyauthoptions_line_write(0, none_out.as_mut_ptr(), none_out.len()),
+            Some(())
+        );
+        assert_eq!(&none_out, b"pubkeyauthoptions none\n");
+
+        let mut touch_out = vec![0u8; "pubkeyauthoptions touch-required\n".len()];
+        assert_eq!(
+            pubkeyauthoptions_line_write(
+                PUBKEYAUTH_TOUCH_REQUIRED,
+                touch_out.as_mut_ptr(),
+                touch_out.len()
+            ),
+            Some(())
+        );
+        assert_eq!(&touch_out, b"pubkeyauthoptions touch-required\n");
+
+        let mut both_out =
+            vec![0u8; "pubkeyauthoptions touch-required verify-required\n".len()];
+        assert_eq!(
+            pubkeyauthoptions_line_write(
+                PUBKEYAUTH_TOUCH_REQUIRED | PUBKEYAUTH_VERIFY_REQUIRED,
+                both_out.as_mut_ptr(),
+                both_out.len()
+            ),
+            Some(())
+        );
+        assert_eq!(
+            &both_out,
+            b"pubkeyauthoptions touch-required verify-required\n"
+        );
     }
 
     #[test]

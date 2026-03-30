@@ -4739,6 +4739,23 @@ dump_config(ServerOptions *o)
 		    o->permit_user_env_allowlist);
 	}
 
+#ifdef WITH_RUST_CRYPTO
+	{
+		struct ossh_rust_pubkeyauthoptions_line_parse parsed;
+		char *buf;
+
+		if (ossh_rust_pubkeyauthoptions_line_parse(o->pubkey_auth_options,
+		    &parsed) != 0)
+			fatal_f("rust pubkeyauthoptions parse failed");
+		buf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_pubkeyauthoptions_line_write(o->pubkey_auth_options,
+		    (u_char *)buf, parsed.output_len) != 0)
+			fatal_f("rust pubkeyauthoptions write failed");
+		buf[parsed.output_len] = '\0';
+		printf("%s", buf);
+		free(buf);
+	}
+#else
 	printf("PubkeyAuthOptions");
 	if (o->pubkey_auth_options == 0)
 		printf(" none");
@@ -4749,6 +4766,7 @@ dump_config(ServerOptions *o)
 	if (o->max_pubkey_ok != -1)
 		printf(" max-pk-ok:%d", o->max_pubkey_ok);
 	printf("\n");
+#endif
 
 	if (o->per_source_penalty.enabled) {
 		printf("PerSourcePenalties crash:%f authfail:%f noauth:%f "
