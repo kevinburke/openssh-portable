@@ -143,6 +143,12 @@ pub(crate) struct CfgIntParse {
     pub(crate) emit: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ListenaddrLineParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
 const SSH_KEYSTROKE_DEFAULT_INTERVAL_MS: i32 = 20;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -858,6 +864,81 @@ pub(crate) fn cfg_int_write(
     out[prefix.len()] = b' ';
     out[prefix.len() + 1..prefix.len() + 1 + value.len()].copy_from_slice(&value);
     out[prefix.len() + 1 + value.len()] = b'\n';
+    Some(())
+}
+
+pub(crate) fn listenaddr_line_parse(
+    addr: *const c_char,
+    port: *const c_char,
+    rdomain: *const c_char,
+    is_ipv6: bool,
+) -> Option<ListenaddrLineParse> {
+    let addr = read_cstr_bytes(addr)?;
+    let port = read_cstr_bytes(port)?;
+    let rdomain = if rdomain.is_null() {
+        None
+    } else {
+        Some(read_cstr_bytes(rdomain)?)
+    };
+    let mut output_len = "listenaddress ".len() + addr.len() + 1 + port.len() + 1;
+    if is_ipv6 {
+        output_len += 2;
+    }
+    if let Some(rdomain) = rdomain {
+        output_len += " rdomain ".len() + rdomain.len();
+    }
+    Some(ListenaddrLineParse {
+        output_len,
+        emit: true,
+    })
+}
+
+pub(crate) fn listenaddr_line_write(
+    addr: *const c_char,
+    port: *const c_char,
+    rdomain: *const c_char,
+    is_ipv6: bool,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = listenaddr_line_parse(addr, port, rdomain, is_ipv6)?;
+    let addr = read_cstr_bytes(addr)?;
+    let port = read_cstr_bytes(port)?;
+    let rdomain = if rdomain.is_null() {
+        None
+    } else {
+        Some(read_cstr_bytes(rdomain)?)
+    };
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut pos = 0usize;
+    let prefix = b"listenaddress ";
+    out[pos..pos + prefix.len()].copy_from_slice(prefix);
+    pos += prefix.len();
+    if is_ipv6 {
+        out[pos] = b'[';
+        pos += 1;
+    }
+    out[pos..pos + addr.len()].copy_from_slice(addr);
+    pos += addr.len();
+    if is_ipv6 {
+        out[pos] = b']';
+        pos += 1;
+    }
+    out[pos] = b':';
+    pos += 1;
+    out[pos..pos + port.len()].copy_from_slice(port);
+    pos += port.len();
+    if let Some(rdomain) = rdomain {
+        let marker = b" rdomain ";
+        out[pos..pos + marker.len()].copy_from_slice(marker);
+        pos += marker.len();
+        out[pos..pos + rdomain.len()].copy_from_slice(rdomain);
+        pos += rdomain.len();
+    }
+    out[pos] = b'\n';
     Some(())
 }
 
@@ -2665,6 +2746,7 @@ mod tests {
     use super::{
         a2port, atoi_err, argv_split_parse, argv_split_write, cfg_int_parse,
         cfg_int_write, cfg_string_parse, cfg_string_write, host_hash_write,
+        listenaddr_line_parse, listenaddr_line_write,
         fmt_intarg_parse, forward_format_parse, forward_format_write,
         hpdelim2_parse_in_place, keyword_lookup, keyword_name,
         lookup_env_in_list_parse,
@@ -2682,6 +2764,7 @@ mod tests {
         FMT_INTARG_LITERAL_NO, FMT_INTARG_LITERAL_UNSET, FMT_INTARG_LITERAL_UNKNOWN,
         FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
         CfgIntParse, CfgStringParse, FmtIntArgParse, ForwardFormatParse,
+        ListenaddrLineParse,
         StrarrayLinesParse, StrarrayOnelineParse, strarray_lines_parse,
         strarray_lines_write, strarray_oneline_parse, strarray_oneline_write,
         ExpandEntry, expand_parse, expand_write,
@@ -3764,6 +3847,47 @@ mod tests {
             Some(())
         );
         assert_eq!(&octal_out, b"port 0777\n");
+    }
+
+    #[test]
+    fn listenaddr_line_parse_handles_basic_forms() {
+        let addr = CString::new("127.0.0.1").unwrap();
+        let port = CString::new("22").unwrap();
+        let rdomain = CString::new("blue").unwrap();
+        assert_eq!(
+            listenaddr_line_parse(addr.as_ptr(), port.as_ptr(), core::ptr::null(), false),
+            Some(ListenaddrLineParse {
+                output_len: "listenaddress 127.0.0.1:22\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            listenaddr_line_parse(addr.as_ptr(), port.as_ptr(), rdomain.as_ptr(), true),
+            Some(ListenaddrLineParse {
+                output_len: "listenaddress [127.0.0.1]:22 rdomain blue\n".len(),
+                emit: true,
+            })
+        );
+    }
+
+    #[test]
+    fn listenaddr_line_write_handles_basic_forms() {
+        let addr = CString::new("::1").unwrap();
+        let port = CString::new("2222").unwrap();
+        let rdomain = CString::new("blue").unwrap();
+        let mut out = vec![0u8; "listenaddress [::1]:2222 rdomain blue\n".len()];
+        assert_eq!(
+            listenaddr_line_write(
+                addr.as_ptr(),
+                port.as_ptr(),
+                rdomain.as_ptr(),
+                true,
+                out.as_mut_ptr(),
+                out.len()
+            ),
+            Some(())
+        );
+        assert_eq!(&out, b"listenaddress [::1]:2222 rdomain blue\n");
     }
 
     #[test]

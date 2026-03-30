@@ -4317,6 +4317,10 @@ format_listen_addrs(struct listenaddr *la)
 	 * print these in reverse order.
 	 */
 	for (ai = la->addrs; ai; ai = ai->ai_next) {
+#ifdef WITH_RUST_CRYPTO
+		struct ossh_rust_listenaddr_line_parse parsed;
+		char *line;
+#endif
 		if ((r = getnameinfo(ai->ai_addr, ai->ai_addrlen, addr,
 		    sizeof(addr), port, sizeof(port),
 		    NI_NUMERICHOST|NI_NUMERICSERV)) != 0) {
@@ -4324,6 +4328,19 @@ format_listen_addrs(struct listenaddr *la)
 			continue;
 		}
 		laddr2 = laddr1;
+#ifdef WITH_RUST_CRYPTO
+		if (ossh_rust_listenaddr_line_parse(addr, port, la->rdomain,
+		    ai->ai_family == AF_INET6, &parsed) != 0)
+			fatal_f("rust listenaddr parse failed");
+		line = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_listenaddr_line_write(addr, port, la->rdomain,
+		    ai->ai_family == AF_INET6, (u_char *)line,
+		    parsed.output_len) != 0)
+			fatal_f("rust listenaddr write failed");
+		line[parsed.output_len] = '\0';
+		xasprintf(&laddr1, "%s%s", line, laddr2);
+		free(line);
+#else
 		if (ai->ai_family == AF_INET6) {
 			xasprintf(&laddr1, "listenaddress [%s]:%s%s%s\n%s",
 			    addr, port,
@@ -4337,6 +4354,7 @@ format_listen_addrs(struct listenaddr *la)
 			    la->rdomain == NULL ? "" : la->rdomain,
 			    laddr2);
 		}
+#endif
 		free(laddr2);
 	}
 	return laddr1;
