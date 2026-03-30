@@ -148,6 +148,10 @@ struct ossh_rust_pubkeyauthoptions_line_parse {
 	size_t output_len;
 	uint32_t emit;
 };
+struct ossh_rust_permituserenvironment_line_parse {
+	size_t output_len;
+	uint32_t emit;
+};
 struct ossh_rust_escapechar_line_parse {
 	size_t output_len;
 	uint32_t emit;
@@ -501,6 +505,11 @@ int ossh_rust_pubkeyauthoptions_line_parse(int value,
     struct ossh_rust_pubkeyauthoptions_line_parse *out);
 int ossh_rust_pubkeyauthoptions_line_write(int value,
     uint8_t *out, size_t out_len);
+int ossh_rust_permituserenvironment_line_parse(int value,
+    const char *allowlist,
+    struct ossh_rust_permituserenvironment_line_parse *out);
+int ossh_rust_permituserenvironment_line_write(int value,
+    const char *allowlist, uint8_t *out, size_t out_len);
 int ossh_rust_escapechar_line_parse(int value,
     struct ossh_rust_escapechar_line_parse *out);
 int ossh_rust_escapechar_line_write(int value, uint8_t *out, size_t out_len);
