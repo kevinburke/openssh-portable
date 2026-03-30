@@ -4268,10 +4268,28 @@ dump_client_config(Options *o, const char *host)
 #endif
 
 	/* oConnectTimeout */
+#ifdef WITH_RUST_CRYPTO
+	{
+		struct ossh_rust_connecttimeout_line_parse parsed;
+		char *outbuf;
+
+		if (ossh_rust_connecttimeout_line_parse(o->connection_timeout,
+		    &parsed) != 0)
+			fatal_f("rust connecttimeout parse failed");
+		outbuf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_connecttimeout_line_write(o->connection_timeout,
+		    (u_char *)outbuf, parsed.output_len) != 0)
+			fatal_f("rust connecttimeout write failed");
+		outbuf[parsed.output_len] = '\0';
+		printf("%s", outbuf);
+		free(outbuf);
+	}
+#else
 	if (o->connection_timeout == -1)
 		printf("connecttimeout none\n");
 	else
 		dump_cfg_int(oConnectTimeout, o->connection_timeout);
+#endif
 
 	/* oTunnelDevice */
 #ifdef WITH_RUST_CRYPTO
