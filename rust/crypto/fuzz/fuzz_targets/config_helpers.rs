@@ -1,5 +1,4 @@
 #![no_main]
-
 use std::mem::{transmute, MaybeUninit};
 use std::ptr;
 
@@ -127,12 +126,14 @@ fn expand_entries() -> [RustExpandEntry; 3] {
     ]
 }
 
-fn env_list() -> [*const i8; 4] {
+fn env_list() -> [*const u8; 4] {
+    // These helpers expect C-style "name=value\0" entries, so keep the
+    // terminator in the fixture bytes instead of relying on Rust string types.
     [
-        c"TERM=xterm".as_ptr(),
-        c"FOO=bar".as_ptr(),
-        c"EMPTY=".as_ptr(),
-        c"HOME=/tmp".as_ptr(),
+        b"TERM=xterm\0".as_ptr(),
+        b"FOO=bar\0".as_ptr(),
+        b"EMPTY=\0".as_ptr(),
+        b"HOME=/tmp\0".as_ptr(),
     ]
 }
 
@@ -257,7 +258,7 @@ fuzz_target!(|input: Input| {
     let _ = ossh_rust_lookup_env_in_list(
         data_ptr,
         data.len(),
-        envs.as_ptr(),
+        envs.as_ptr().cast(),
         envs.len(),
         &mut offset,
         &mut value_offset,
@@ -265,7 +266,7 @@ fuzz_target!(|input: Input| {
     let _ = ossh_rust_lookup_setenv_in_list(
         data_ptr,
         data.len(),
-        envs.as_ptr(),
+        envs.as_ptr().cast(),
         envs.len(),
         &mut offset,
         &mut value_offset,
