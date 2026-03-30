@@ -165,6 +165,10 @@ Rust-backed today:
   - `dump_cfg_int()` in `readconf.c` / `servconf.c`
   - `dump_cfg_oct()` in `servconf.c`
   - `ssh -G` / `sshd -T` output for decimal, octal, and special-case `yes` / `no` / `none`
+- server `ListenAddress` output formatting used by:
+  - `format_listen_addrs()` in `servconf.c`
+  - `sshd -T` output for IPv4 and IPv6 listen addresses
+  - per-line rendering for `listenaddress ...` output, including bracketed IPv6 formatting
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers
