@@ -172,6 +172,10 @@ Rust-backed today:
 - shared `IPQoS` output formatting used by:
   - `ssh -G` / `sshd -T` output for interactive and bulk QoS values
   - canonical DSCP/legacy token rendering and hex fallback for unknown values
+- shared permit-list output formatting used by:
+  - `PermitRemoteOpen` in `ssh -G`
+  - `PermitOpen` / `PermitListen` in `sshd -T`
+  - `any` fallback and joined permit target rendering
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers

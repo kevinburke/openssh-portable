@@ -4187,11 +4187,34 @@ dump_client_config(Options *o, const char *host)
 	/* Special cases */
 
 	/* PermitRemoteOpen */
+#ifdef WITH_RUST_CRYPTO
+	{
+		struct ossh_rust_permit_list_line_parse parsed;
+		char *buf;
+
+		if (ossh_rust_permit_list_line_parse(
+		    lookup_opcode_name(oPermitRemoteOpen),
+		    (const char * const *)o->permitted_remote_opens,
+		    o->num_permitted_remote_opens, &parsed) != 0)
+			fatal_f("rust permitremoteopen parse failed");
+		buf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_permit_list_line_write(
+		    lookup_opcode_name(oPermitRemoteOpen),
+		    (const char * const *)o->permitted_remote_opens,
+		    o->num_permitted_remote_opens,
+		    (u_char *)buf, parsed.output_len) != 0)
+			fatal_f("rust permitremoteopen write failed");
+		buf[parsed.output_len] = '\0';
+		printf("%s", buf);
+		free(buf);
+	}
+#else
 	if (o->num_permitted_remote_opens == 0)
 		printf("%s any\n", lookup_opcode_name(oPermitRemoteOpen));
 	else
 		dump_cfg_strarray_oneline(oPermitRemoteOpen,
 		    o->num_permitted_remote_opens, o->permitted_remote_opens);
+#endif
 
 	/* AddKeysToAgent */
 	if (o->add_keys_to_agent_lifespan <= 0)

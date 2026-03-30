@@ -4545,6 +4545,40 @@ dump_config(ServerOptions *o)
 	printf("rekeylimit %llu %d\n", (unsigned long long)o->rekey_limit,
 	    o->rekey_interval);
 
+#ifdef WITH_RUST_CRYPTO
+	{
+		struct ossh_rust_permit_list_line_parse parsed;
+		char *buf;
+
+		if (ossh_rust_permit_list_line_parse("permitopen",
+		    (const char * const *)o->permitted_opens,
+		    o->num_permitted_opens, &parsed) != 0)
+			fatal_f("rust permitopen parse failed");
+		buf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_permit_list_line_write("permitopen",
+		    (const char * const *)o->permitted_opens,
+		    o->num_permitted_opens, (u_char *)buf,
+		    parsed.output_len) != 0)
+			fatal_f("rust permitopen write failed");
+		buf[parsed.output_len] = '\0';
+		printf("%s", buf);
+		free(buf);
+
+		if (ossh_rust_permit_list_line_parse("permitlisten",
+		    (const char * const *)o->permitted_listens,
+		    o->num_permitted_listens, &parsed) != 0)
+			fatal_f("rust permitlisten parse failed");
+		buf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_permit_list_line_write("permitlisten",
+		    (const char * const *)o->permitted_listens,
+		    o->num_permitted_listens, (u_char *)buf,
+		    parsed.output_len) != 0)
+			fatal_f("rust permitlisten write failed");
+		buf[parsed.output_len] = '\0';
+		printf("%s", buf);
+		free(buf);
+	}
+#else
 	printf("permitopen");
 	if (o->num_permitted_opens == 0)
 		printf(" any");
@@ -4561,6 +4595,7 @@ dump_config(ServerOptions *o)
 			printf(" %s", o->permitted_listens[i]);
 	}
 	printf("\n");
+#endif
 
 	if (o->permit_user_env_allowlist == NULL) {
 		dump_cfg_fmtint(sPermitUserEnvironment, o->permit_user_env);
