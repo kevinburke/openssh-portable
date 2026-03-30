@@ -199,6 +199,12 @@ pub(crate) struct RekeyLimitLineParse {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ControlPersistLineParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct EscapeCharLineParse {
     pub(crate) output_len: usize,
     pub(crate) emit: bool,
@@ -1012,6 +1018,50 @@ pub(crate) fn rekeylimit_line_write(
     formatted.extend_from_slice(limit.to_string().as_bytes());
     formatted.push(b' ');
     formatted.extend_from_slice(interval.to_string().as_bytes());
+    formatted.push(b'\n');
+    out.copy_from_slice(&formatted);
+    Some(())
+}
+
+pub(crate) fn controlpersist_line_parse(
+    value: i32,
+    timeout: i32,
+) -> Option<ControlPersistLineParse> {
+    if value == 0 || timeout == 0 {
+        let suffix = match value {
+            0 => "no",
+            1 => "yes",
+            _ => return None,
+        };
+        return Some(ControlPersistLineParse {
+            output_len: "controlpersist ".len() + suffix.len() + 1,
+            emit: true,
+        });
+    }
+    Some(ControlPersistLineParse {
+        output_len: "controlpersist ".len() + timeout.to_string().len() + 1,
+        emit: true,
+    })
+}
+
+pub(crate) fn controlpersist_line_write(
+    value: i32,
+    timeout: i32,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = controlpersist_line_parse(value, timeout)?;
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut formatted = Vec::with_capacity(parsed.output_len);
+    formatted.extend_from_slice(b"controlpersist ");
+    if value == 0 || timeout == 0 {
+        formatted.extend_from_slice(if value == 0 { b"no" } else { b"yes" });
+    } else {
+        formatted.extend_from_slice(timeout.to_string().as_bytes());
+    }
     formatted.push(b'\n');
     out.copy_from_slice(&formatted);
     Some(())
@@ -3267,6 +3317,7 @@ mod tests {
         parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
         parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
         proxyjump_line_parse, proxyjump_line_write,
+        controlpersist_line_parse, controlpersist_line_write,
         escapechar_line_parse, escapechar_line_write,
         rekeylimit_line_parse, rekeylimit_line_write,
         strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
@@ -3278,6 +3329,7 @@ mod tests {
         FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
         AddKeysToAgentLineParse, AllowedCnameEntry,
         CanonicalizePermittedCnamesLineParse, CfgIntParse, CfgStringParse,
+        ControlPersistLineParse,
         EscapeCharLineParse,
         FmtIntArgParse, ForwardFormatParse, IpqosLineParse,
         ListenaddrLineParse, PermitListLineParse, ProxyJumpLineParse,
@@ -4485,6 +4537,55 @@ mod tests {
             Some(())
         );
         assert_eq!(&out, b"rekeylimit 1048576 3600\n");
+    }
+
+    #[test]
+    fn controlpersist_line_parse_handles_basic_forms() {
+        assert_eq!(
+            controlpersist_line_parse(0, 300),
+            Some(ControlPersistLineParse {
+                output_len: "controlpersist no\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            controlpersist_line_parse(1, 0),
+            Some(ControlPersistLineParse {
+                output_len: "controlpersist yes\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            controlpersist_line_parse(1, 300),
+            Some(ControlPersistLineParse {
+                output_len: "controlpersist 300\n".len(),
+                emit: true,
+            })
+        );
+    }
+
+    #[test]
+    fn controlpersist_line_write_handles_basic_forms() {
+        let mut no_out = vec![0u8; "controlpersist no\n".len()];
+        assert_eq!(
+            controlpersist_line_write(0, 300, no_out.as_mut_ptr(), no_out.len()),
+            Some(())
+        );
+        assert_eq!(&no_out, b"controlpersist no\n");
+
+        let mut yes_out = vec![0u8; "controlpersist yes\n".len()];
+        assert_eq!(
+            controlpersist_line_write(1, 0, yes_out.as_mut_ptr(), yes_out.len()),
+            Some(())
+        );
+        assert_eq!(&yes_out, b"controlpersist yes\n");
+
+        let mut timeout_out = vec![0u8; "controlpersist 300\n".len()];
+        assert_eq!(
+            controlpersist_line_write(1, 300, timeout_out.as_mut_ptr(), timeout_out.len()),
+            Some(())
+        );
+        assert_eq!(&timeout_out, b"controlpersist 300\n");
     }
 
     #[test]
