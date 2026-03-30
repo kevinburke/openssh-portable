@@ -189,6 +189,9 @@ Rust-backed today:
   - bracketed numeric jump-host rendering and preserved extra jump-chain prefixes
 - client `RekeyLimit` output formatting used by:
   - `rekeylimit <bytes> <seconds>` lines in `ssh -G`
+- client `StreamLocalBindMask` output formatting used by:
+  - `streamlocalbindmask 0...` lines in `ssh -G`
+  - the shared Rust octal formatter already used by server config output
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers
