@@ -4353,8 +4353,26 @@ dump_client_config(Options *o, const char *host)
 #endif
 
 	/* oRekeyLimit */
+#ifdef WITH_RUST_CRYPTO
+	{
+		struct ossh_rust_rekeylimit_line_parse parsed;
+		char *buf;
+
+		if (ossh_rust_rekeylimit_line_parse(o->rekey_limit,
+		    o->rekey_interval, &parsed) != 0)
+			fatal_f("rust rekeylimit parse failed");
+		buf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_rekeylimit_line_write(o->rekey_limit,
+		    o->rekey_interval, (u_char *)buf, parsed.output_len) != 0)
+			fatal_f("rust rekeylimit write failed");
+		buf[parsed.output_len] = '\0';
+		printf("%s", buf);
+		free(buf);
+	}
+#else
 	printf("rekeylimit %llu %d\n",
 	    (unsigned long long)o->rekey_limit, o->rekey_interval);
+#endif
 
 	/* oStreamLocalBindMask */
 	printf("streamlocalbindmask 0%o\n",
