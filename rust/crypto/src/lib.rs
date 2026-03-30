@@ -50,7 +50,8 @@ use rsa::{
     rsa_private_pem_len, rsa_private_pem_write, rsa_sign_prehashed, rsa_verify_prehashed,
 };
 use util::{
-    a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
+    a2port, add_keys_to_agent_line_parse, add_keys_to_agent_line_write,
+    argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
     atoi_err, cfg_int_parse, cfg_int_write, cfg_string_parse, cfg_string_write, dollar_expand_parse,
     dollar_expand_write, expand_parse, expand_write, ipqos_line_parse, ipqos_line_write,
     listenaddr_line_parse, listenaddr_line_write,
@@ -378,6 +379,12 @@ pub struct RustIpqosLineParse {
 
 #[repr(C)]
 pub struct RustTunneldeviceLineParse {
+    output_len: usize,
+    emit: u32,
+}
+
+#[repr(C)]
+pub struct RustAddKeysToAgentLineParse {
     output_len: usize,
     emit: u32,
 }
@@ -1364,6 +1371,43 @@ pub extern "C" fn ossh_rust_tunneldevice_line_write(
     out_len: usize,
 ) -> c_int {
     if tunneldevice_line_write(local, remote, out, out_len).is_some() {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_add_keys_to_agent_line_parse(
+    mode: c_int,
+    lifespan: c_int,
+    out: *mut RustAddKeysToAgentLineParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match add_keys_to_agent_line_parse(mode, lifespan) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustAddKeysToAgentLineParse {
+                    output_len: parsed.output_len,
+                    emit: u32::from(parsed.emit),
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_add_keys_to_agent_line_write(
+    mode: c_int,
+    lifespan: c_int,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if add_keys_to_agent_line_write(mode, lifespan, out, out_len).is_some() {
         0
     } else {
         -1
