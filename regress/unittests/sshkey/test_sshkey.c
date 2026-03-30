@@ -492,11 +492,15 @@ sshkey_tests(void)
 
 	TEST_START("metadata lookup helpers");
 	ASSERT_INT_EQ(sshkey_type_from_name("ssh-ed25519"), KEY_ED25519);
-	ASSERT_INT_EQ(sshkey_type_from_name("rsa-sha2-256"), KEY_RSA);
 	ASSERT_INT_EQ(sshkey_type_from_shortname("ED25519"), KEY_ED25519);
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
+	ASSERT_INT_EQ(sshkey_type_from_name("rsa-sha2-256"), KEY_RSA);
 	ASSERT_INT_EQ(sshkey_type_from_shortname("RSA"), KEY_RSA);
+#endif
+#if defined(OPENSSL_HAS_ECC) || defined(WITH_RUST_CRYPTO)
 	ASSERT_INT_EQ(sshkey_ecdsa_nid_from_name("ecdsa-sha2-nistp384"),
 	    NID_secp384r1);
+#endif
 	k1 = sshkey_new(KEY_ED25519);
 	ASSERT_PTR_NE(k1, NULL);
 	ASSERT_STRING_EQ(sshkey_type(k1), "ED25519");
