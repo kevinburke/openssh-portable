@@ -138,6 +138,14 @@ pub(crate) struct CfgStringParse {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CfgIntParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
+const SSH_KEYSTROKE_DEFAULT_INTERVAL_MS: i32 = 20;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StrdelimParse {
     pub(crate) next_offset: usize,
     pub(crate) next_is_null: u32,
@@ -791,6 +799,64 @@ pub(crate) fn cfg_string_write(
     out[..prefix.len()].copy_from_slice(prefix);
     out[prefix.len()] = b' ';
     out[prefix.len() + 1..prefix.len() + 1 + value.len()].copy_from_slice(value);
+    out[prefix.len() + 1 + value.len()] = b'\n';
+    Some(())
+}
+
+fn cfg_int_value_bytes(value: i32, mode: u32) -> Option<Vec<u8>> {
+    match mode {
+        0 => Some(value.to_string().into_bytes()),
+        1 => Some(format!("0{oct:o}", oct = value).into_bytes()),
+        2 => {
+            if value == 0 {
+                Some(b"none".to_vec())
+            } else {
+                Some(value.to_string().into_bytes())
+            }
+        }
+        3 => {
+            if value == 0 {
+                Some(b"no".to_vec())
+            } else if value == SSH_KEYSTROKE_DEFAULT_INTERVAL_MS {
+                Some(b"yes".to_vec())
+            } else {
+                Some(value.to_string().into_bytes())
+            }
+        }
+        _ => None,
+    }
+}
+
+pub(crate) fn cfg_int_parse(
+    prefix: *const c_char,
+    value: i32,
+    mode: u32,
+) -> Option<CfgIntParse> {
+    let prefix = read_cstr_bytes(prefix)?;
+    let value = cfg_int_value_bytes(value, mode)?;
+    Some(CfgIntParse {
+        output_len: prefix.len() + 1 + value.len() + 1,
+        emit: true,
+    })
+}
+
+pub(crate) fn cfg_int_write(
+    prefix: *const c_char,
+    value: i32,
+    mode: u32,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = cfg_int_parse(prefix, value, mode)?;
+    let prefix = read_cstr_bytes(prefix)?;
+    let value = cfg_int_value_bytes(value, mode)?;
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    out[..prefix.len()].copy_from_slice(prefix);
+    out[prefix.len()] = b' ';
+    out[prefix.len() + 1..prefix.len() + 1 + value.len()].copy_from_slice(&value);
     out[prefix.len() + 1 + value.len()] = b'\n';
     Some(())
 }
@@ -2597,8 +2663,8 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 #[cfg(test)]
 mod tests {
     use super::{
-        a2port, atoi_err, argv_split_parse, argv_split_write, cfg_string_parse,
-        cfg_string_write, host_hash_write,
+        a2port, atoi_err, argv_split_parse, argv_split_write, cfg_int_parse,
+        cfg_int_write, cfg_string_parse, cfg_string_write, host_hash_write,
         fmt_intarg_parse, forward_format_parse, forward_format_write,
         hpdelim2_parse_in_place, keyword_lookup, keyword_name,
         lookup_env_in_list_parse,
@@ -2615,7 +2681,7 @@ mod tests {
         FMT_INTARG_DIGEST, FMT_INTARG_LITERAL_MD5, FMT_INTARG_LITERAL_MULTISTATE,
         FMT_INTARG_LITERAL_NO, FMT_INTARG_LITERAL_UNSET, FMT_INTARG_LITERAL_UNKNOWN,
         FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
-        CfgStringParse, FmtIntArgParse, ForwardFormatParse,
+        CfgIntParse, CfgStringParse, FmtIntArgParse, ForwardFormatParse,
         StrarrayLinesParse, StrarrayOnelineParse, strarray_lines_parse,
         strarray_lines_write, strarray_oneline_parse, strarray_oneline_write,
         ExpandEntry, expand_parse, expand_write,
@@ -3647,6 +3713,57 @@ mod tests {
             cfg_string_write(prefix.as_ptr(), core::ptr::null(), 0, core::ptr::null_mut(), 0),
             Some(())
         );
+    }
+
+    #[test]
+    fn cfg_int_parse_handles_basic_forms() {
+        let prefix = CString::new("port").unwrap();
+        assert_eq!(
+            cfg_int_parse(prefix.as_ptr(), 22, 0),
+            Some(CfgIntParse {
+                output_len: "port 22\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            cfg_int_parse(prefix.as_ptr(), 0, 2),
+            Some(CfgIntParse {
+                output_len: "port none\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            cfg_int_parse(prefix.as_ptr(), 20, 3),
+            Some(CfgIntParse {
+                output_len: "port yes\n".len(),
+                emit: true,
+            })
+        );
+    }
+
+    #[test]
+    fn cfg_int_write_handles_basic_forms() {
+        let prefix = CString::new("port").unwrap();
+        let mut out = vec![0u8; "port 22\n".len()];
+        assert_eq!(
+            cfg_int_write(prefix.as_ptr(), 22, 0, out.as_mut_ptr(), out.len()),
+            Some(())
+        );
+        assert_eq!(&out, b"port 22\n");
+
+        let mut none_out = vec![0u8; "port none\n".len()];
+        assert_eq!(
+            cfg_int_write(prefix.as_ptr(), 0, 2, none_out.as_mut_ptr(), none_out.len()),
+            Some(())
+        );
+        assert_eq!(&none_out, b"port none\n");
+
+        let mut octal_out = vec![0u8; "port 0777\n".len()];
+        assert_eq!(
+            cfg_int_write(prefix.as_ptr(), 0o777, 1, octal_out.as_mut_ptr(), octal_out.len()),
+            Some(())
+        );
+        assert_eq!(&octal_out, b"port 0777\n");
     }
 
     #[test]

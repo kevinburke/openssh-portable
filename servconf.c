@@ -4147,17 +4147,53 @@ strarray_oneline_empty_mode(ServerOpCodes code)
 static void
 dump_cfg_int(ServerOpCodes code, int val)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_cfg_int_parse parsed;
+	const char *prefix = lookup_opcode_name(code);
+	uint32_t mode = OSSH_RUST_CFG_INT_DECIMAL;
+	char *buf;
+
+	if (code == sUnusedConnectionTimeout)
+		mode = OSSH_RUST_CFG_INT_NONE_ZERO;
+	if (ossh_rust_cfg_int_parse(prefix, val, mode, &parsed) != 0)
+		fatal_f("rust cfg int parse failed");
+	buf = xmalloc(parsed.output_len + 1);
+	if (ossh_rust_cfg_int_write(prefix, val, mode, (u_char *)buf,
+	    parsed.output_len) != 0)
+		fatal_f("rust cfg int write failed");
+	buf[parsed.output_len] = '\0';
+	printf("%s", buf);
+	free(buf);
+#else
 	if (code == sUnusedConnectionTimeout && val == 0) {
 		printf("%s none\n", lookup_opcode_name(code));
 		return;
 	}
 	printf("%s %d\n", lookup_opcode_name(code), val);
+#endif
 }
 
 static void
 dump_cfg_oct(ServerOpCodes code, int val)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_cfg_int_parse parsed;
+	const char *prefix = lookup_opcode_name(code);
+	char *buf;
+
+	if (ossh_rust_cfg_int_parse(prefix, val, OSSH_RUST_CFG_INT_OCTAL,
+	    &parsed) != 0)
+		fatal_f("rust cfg int parse failed");
+	buf = xmalloc(parsed.output_len + 1);
+	if (ossh_rust_cfg_int_write(prefix, val, OSSH_RUST_CFG_INT_OCTAL,
+	    (u_char *)buf, parsed.output_len) != 0)
+		fatal_f("rust cfg int write failed");
+	buf[parsed.output_len] = '\0';
+	printf("%s", buf);
+	free(buf);
+#else
 	printf("%s 0%o\n", lookup_opcode_name(code), val);
+#endif
 }
 
 static void
