@@ -41,8 +41,9 @@ while IFS= read -r path; do
 		add_test dhgex
 		add_test rekey
 		;;
-	cipher.c|cipher-*.c|mac.c|packet.c|rust/crypto/src/cipher.rs)
+	cipher.c|cipher-*.c|mac.c|hmac.c|packet.c|digest-rust.c|rust/crypto/src/cipher.rs|rust/crypto/src/digest.rs)
 		add_test try-ciphers
+		add_test keygen-knownhosts
 		add_test rekey
 		;;
 	readconf.c|misc.c|servconf.c|auth-options.c|rust/crypto/src/util.rs)
