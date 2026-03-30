@@ -71,6 +71,7 @@ use util::{
     forwardagent_line_parse, forwardagent_line_write,
     fmt_intarg_parse, forward_format_parse, forward_format_write,
     keyword_lookup, keyword_name,
+    permituserenvironment_line_parse, permituserenvironment_line_write,
     permit_list_line_parse, permit_list_line_write,
     pubkeyauthoptions_line_parse, pubkeyauthoptions_line_write,
     proxyjump_line_parse, proxyjump_line_write,
@@ -454,6 +455,12 @@ pub struct RustConnectTimeoutLineParse {
 
 #[repr(C)]
 pub struct RustPubkeyAuthOptionsLineParse {
+    output_len: usize,
+    emit: u32,
+}
+
+#[repr(C)]
+pub struct RustPermitUserEnvironmentLineParse {
     output_len: usize,
     emit: u32,
 }
@@ -1749,6 +1756,43 @@ pub extern "C" fn ossh_rust_pubkeyauthoptions_line_write(
     out_len: usize,
 ) -> c_int {
     if pubkeyauthoptions_line_write(value, out, out_len).is_some() {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_permituserenvironment_line_parse(
+    value: c_int,
+    allowlist: *const c_char,
+    out: *mut RustPermitUserEnvironmentLineParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match permituserenvironment_line_parse(value, allowlist) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustPermitUserEnvironmentLineParse {
+                    output_len: parsed.output_len,
+                    emit: u32::from(parsed.emit),
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_permituserenvironment_line_write(
+    value: c_int,
+    allowlist: *const c_char,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if permituserenvironment_line_write(value, allowlist, out, out_len).is_some() {
         0
     } else {
         -1
