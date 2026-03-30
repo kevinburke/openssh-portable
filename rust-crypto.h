@@ -81,6 +81,10 @@ struct ossh_rust_strarray_oneline_parse {
 	size_t output_len;
 	uint32_t emit;
 };
+struct ossh_rust_permit_list_line_parse {
+	size_t output_len;
+	uint32_t emit;
+};
 
 struct ossh_rust_strarray_lines_parse {
 	size_t output_len;
@@ -377,6 +381,11 @@ int ossh_rust_strarray_oneline_parse(const char * const *vals, size_t nvals,
     uint32_t empty_mode, struct ossh_rust_strarray_oneline_parse *out);
 int ossh_rust_strarray_oneline_write(const char * const *vals, size_t nvals,
     uint32_t empty_mode, uint8_t *out, size_t out_len);
+int ossh_rust_permit_list_line_parse(const char *prefix,
+    const char * const *vals, size_t nvals,
+    struct ossh_rust_permit_list_line_parse *out);
+int ossh_rust_permit_list_line_write(const char *prefix,
+    const char * const *vals, size_t nvals, uint8_t *out, size_t out_len);
 int ossh_rust_strarray_lines_parse(const char *prefix,
     const char * const *vals, size_t nvals,
     struct ossh_rust_strarray_lines_parse *out);
