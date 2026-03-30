@@ -4064,7 +4064,7 @@ void
 dump_client_config(Options *o, const char *host)
 {
 	int r;
-	char buf[8], *all_key;
+	char *all_key;
 
 	/*
 	 * Expand HostKeyAlgorithms name lists. This isn't handled in
@@ -4323,12 +4323,31 @@ dump_client_config(Options *o, const char *host)
 		dump_cfg_int(oControlPersist, o->control_persist_timeout);
 
 	/* oEscapeChar */
+#ifdef WITH_RUST_CRYPTO
+	{
+		struct ossh_rust_escapechar_line_parse parsed;
+		char *outbuf;
+
+		if (ossh_rust_escapechar_line_parse(o->escape_char, &parsed) != 0)
+			fatal_f("rust escapechar parse failed");
+		outbuf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_escapechar_line_write(o->escape_char,
+		    (u_char *)outbuf, parsed.output_len) != 0)
+			fatal_f("rust escapechar write failed");
+		outbuf[parsed.output_len] = '\0';
+		printf("%s", outbuf);
+		free(outbuf);
+	}
+#else
+	char buf[8];
+
 	if (o->escape_char == SSH_ESCAPECHAR_NONE)
 		printf("escapechar none\n");
 	else {
 		vis(buf, o->escape_char, VIS_WHITE, 0);
 		printf("escapechar %s\n", buf);
 	}
+#endif
 
 	/* oIPQoS */
 #ifdef WITH_RUST_CRYPTO
@@ -4423,6 +4442,7 @@ dump_client_config(Options *o, const char *host)
 		free(outbuf);
 #else
 	int is_numeric;
+	char buf[8];
 
 		/* Check for numeric addresses */
 		is_numeric = strchr(o->jump_host, ':') != NULL ||

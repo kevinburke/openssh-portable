@@ -195,6 +195,9 @@ Rust-backed today:
 - client `LogFacility` output formatting used by:
   - `syslogfacility ...` lines in `ssh -G`
   - the shared Rust string formatter already used by server config output
+- client `EscapeChar` output formatting used by:
+  - `escapechar ...` lines in `ssh -G`
+  - `none`, printable characters, and `^X` control rendering
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers
