@@ -4238,6 +4238,23 @@ dump_client_config(Options *o, const char *host)
 		dump_cfg_int(oConnectTimeout, o->connection_timeout);
 
 	/* oTunnelDevice */
+#ifdef WITH_RUST_CRYPTO
+	{
+		struct ossh_rust_tunneldevice_line_parse parsed;
+		char *outbuf;
+
+		if (ossh_rust_tunneldevice_line_parse(o->tun_local,
+		    o->tun_remote, &parsed) != 0)
+			fatal_f("rust tunneldevice parse failed");
+		outbuf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_tunneldevice_line_write(o->tun_local,
+		    o->tun_remote, (u_char *)outbuf, parsed.output_len) != 0)
+			fatal_f("rust tunneldevice write failed");
+		outbuf[parsed.output_len] = '\0';
+		printf("%s", outbuf);
+		free(outbuf);
+	}
+#else
 	printf("tunneldevice");
 	if (o->tun_local == SSH_TUNID_ANY)
 		printf(" any");
@@ -4248,6 +4265,7 @@ dump_client_config(Options *o, const char *host)
 	else
 		printf(":%d", o->tun_remote);
 	printf("\n");
+#endif
 
 	/* oCanonicalizePermittedCNAMEs */
 	printf("canonicalizePermittedcnames");

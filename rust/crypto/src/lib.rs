@@ -57,6 +57,7 @@ use util::{
     fmt_intarg_parse, forward_format_parse, forward_format_write,
     keyword_lookup, keyword_name,
     permit_list_line_parse, permit_list_line_write,
+    tunneldevice_line_parse, tunneldevice_line_write,
     lookup_env_in_list_parse, lookup_setenv_in_list_parse, multistate_lookup,
     multistate_name, opt_dequote_parse, opt_dequote_write, opt_flag_parse,
     opt_match_parse, parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
@@ -371,6 +372,12 @@ pub struct RustListenaddrLineParse {
 
 #[repr(C)]
 pub struct RustIpqosLineParse {
+    output_len: usize,
+    emit: u32,
+}
+
+#[repr(C)]
+pub struct RustTunneldeviceLineParse {
     output_len: usize,
     emit: u32,
 }
@@ -1320,6 +1327,43 @@ pub extern "C" fn ossh_rust_ipqos_line_write(
     out_len: usize,
 ) -> c_int {
     if ipqos_line_write(interactive, bulk, out, out_len).is_some() {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_tunneldevice_line_parse(
+    local: c_int,
+    remote: c_int,
+    out: *mut RustTunneldeviceLineParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match tunneldevice_line_parse(local, remote) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustTunneldeviceLineParse {
+                    output_len: parsed.output_len,
+                    emit: u32::from(parsed.emit),
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_tunneldevice_line_write(
+    local: c_int,
+    remote: c_int,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if tunneldevice_line_write(local, remote, out, out_len).is_some() {
         0
     } else {
         -1
