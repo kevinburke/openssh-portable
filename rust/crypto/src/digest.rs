@@ -1,9 +1,17 @@
 use core::ffi::c_int;
 
+use md5::Digest;
+use md5::Md5;
+use sha1::Sha1;
+
+pub(crate) const SSH_DIGEST_MD5: c_int = 0;
+pub(crate) const SSH_DIGEST_SHA1: c_int = 1;
 pub(crate) const SSH_DIGEST_SHA256: c_int = 2;
 pub(crate) const SSH_DIGEST_SHA384: c_int = 3;
 pub(crate) const SSH_DIGEST_SHA512: c_int = 4;
 
+pub(crate) const MD5_DIGEST_LENGTH: usize = 16;
+pub(crate) const SHA1_DIGEST_LENGTH: usize = 20;
 const SHA256_BLOCK_LENGTH: usize = 64;
 pub(crate) const SHA256_DIGEST_LENGTH: usize = 32;
 pub(crate) const SHA384_DIGEST_LENGTH: usize = 48;
@@ -78,6 +86,8 @@ pub(crate) struct Sha512State {
 
 #[derive(Clone)]
 pub(crate) enum DigestState {
+    Md5(Md5),
+    Sha1(Sha1),
     Sha256(Sha256State),
     Sha384(Sha512State),
     Sha512(Sha512State),
@@ -218,6 +228,8 @@ impl Sha512State {
 impl DigestState {
     pub(crate) fn new(alg: c_int) -> Option<Self> {
         match alg {
+            SSH_DIGEST_MD5 => Some(Self::Md5(Md5::new())),
+            SSH_DIGEST_SHA1 => Some(Self::Sha1(Sha1::new())),
             SSH_DIGEST_SHA256 => Some(Self::Sha256(Sha256State::new())),
             SSH_DIGEST_SHA384 => Some(Self::Sha384(Sha512State::new_sha384())),
             SSH_DIGEST_SHA512 => Some(Self::Sha512(Sha512State::new_sha512())),
@@ -227,6 +239,8 @@ impl DigestState {
 
     pub(crate) fn update(&mut self, data: &[u8]) {
         match self {
+            Self::Md5(state) => md5::Digest::update(state, data),
+            Self::Sha1(state) => sha1::Digest::update(state, data),
             Self::Sha256(state) => state.update(data),
             Self::Sha384(state) | Self::Sha512(state) => state.update(data),
         }
@@ -234,6 +248,20 @@ impl DigestState {
 
     pub(crate) fn finalize_to(&self, out: &mut [u8]) -> Result<(), ()> {
         match self.clone() {
+            Self::Md5(state) => {
+                if out.len() < MD5_DIGEST_LENGTH {
+                    return Err(());
+                }
+                let digest = md5::Digest::finalize(state);
+                out[..MD5_DIGEST_LENGTH].copy_from_slice(&digest);
+            }
+            Self::Sha1(state) => {
+                if out.len() < SHA1_DIGEST_LENGTH {
+                    return Err(());
+                }
+                let digest = sha1::Digest::finalize(state);
+                out[..SHA1_DIGEST_LENGTH].copy_from_slice(&digest);
+            }
             Self::Sha256(state) => {
                 if out.len() < SHA256_DIGEST_LENGTH {
                     return Err(());
@@ -260,6 +288,8 @@ impl DigestState {
 
     pub(crate) fn scrub(&mut self) {
         match self {
+            Self::Md5(state) => *state = Md5::new(),
+            Self::Sha1(state) => *state = Sha1::new(),
             Self::Sha256(state) => {
                 state.state = [0; 8];
                 state.buffer = [0; SHA256_BLOCK_LENGTH];
@@ -428,7 +458,10 @@ fn sha512_compress(state: &mut [u64; 8], block: &[u8; SHA512_BLOCK_LENGTH]) {
 
 #[cfg(test)]
 mod tests {
-    use super::{DigestState, SHA256_DIGEST_LENGTH, SHA384_DIGEST_LENGTH, SHA512_DIGEST_LENGTH};
+    use super::{
+        DigestState, MD5_DIGEST_LENGTH, SHA1_DIGEST_LENGTH, SHA256_DIGEST_LENGTH,
+        SHA384_DIGEST_LENGTH, SHA512_DIGEST_LENGTH,
+    };
 
     fn hex(bytes: &[u8]) -> String {
         let mut out = String::with_capacity(bytes.len() * 2);
@@ -436,6 +469,24 @@ mod tests {
             out.push_str(&format!("{byte:02x}"));
         }
         out
+    }
+
+    #[test]
+    fn md5_matches_known_vector() {
+        let mut out = [0u8; MD5_DIGEST_LENGTH];
+        let mut state = DigestState::new(0).unwrap();
+        state.update(b"abc");
+        state.finalize_to(&mut out).unwrap();
+        assert_eq!(hex(&out), "900150983cd24fb0d6963f7d28e17f72");
+    }
+
+    #[test]
+    fn sha1_matches_known_vector() {
+        let mut out = [0u8; SHA1_DIGEST_LENGTH];
+        let mut state = DigestState::new(1).unwrap();
+        state.update(b"abc");
+        state.finalize_to(&mut out).unwrap();
+        assert_eq!(hex(&out), "a9993e364706816aba3e25717850c26c9cd0d89d");
     }
 
     #[test]

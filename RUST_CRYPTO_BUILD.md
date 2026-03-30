@@ -12,7 +12,7 @@ Rust-backed today:
 
 - backend selection and Rust static library linkage
 - backend label in `ssh -V`
-- SHA-256, SHA-384, and SHA-512 digests
+- MD5, SHA-1, SHA-256, SHA-384, and SHA-512 digests
 - Ed25519 key generation, signing, and verification
 - RSA key generation, signing, verification, and OpenSSH private/public key
   parsing (`ssh-rsa`, `rsa-sha2-256`, `rsa-sha2-512`)
@@ -34,6 +34,9 @@ Rust-backed today:
   - `|1|salt|hash` entry parsing
   - HMAC-SHA1 host matching
   - hashed host re-encoding with existing or fresh salt
+- HMAC consumers layered on `ssh_digest_*`:
+  - `known_hosts` SHA-1 host hashing and matching
+  - packet MACs through `hmac.c` / `mac.c` using Rust-backed digest state
 - OpenSSH `openssh-key-v1` armor and header parsing
 - OpenSSH `openssh-key-v1` decrypted private-section parsing for Ed25519,
   RSA, and ECDSA keys:
