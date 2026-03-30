@@ -4616,10 +4616,46 @@ dump_config(ServerOptions *o)
 #endif
 
 	if (o->permit_user_env_allowlist == NULL) {
+#ifdef WITH_RUST_CRYPTO
+		struct ossh_rust_permituserenvironment_line_parse parsed;
+		char *buf;
+
+		if (ossh_rust_permituserenvironment_line_parse(
+		    o->permit_user_env, o->permit_user_env_allowlist,
+		    &parsed) != 0)
+			fatal_f("rust permituserenvironment parse failed");
+		buf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_permituserenvironment_line_write(
+		    o->permit_user_env, o->permit_user_env_allowlist,
+		    (u_char *)buf, parsed.output_len) != 0)
+			fatal_f("rust permituserenvironment write failed");
+		buf[parsed.output_len] = '\0';
+		printf("%s", buf);
+		free(buf);
+#else
 		dump_cfg_fmtint(sPermitUserEnvironment, o->permit_user_env);
+#endif
 	} else {
+#ifdef WITH_RUST_CRYPTO
+		struct ossh_rust_permituserenvironment_line_parse parsed;
+		char *buf;
+
+		if (ossh_rust_permituserenvironment_line_parse(
+		    o->permit_user_env, o->permit_user_env_allowlist,
+		    &parsed) != 0)
+			fatal_f("rust permituserenvironment parse failed");
+		buf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_permituserenvironment_line_write(
+		    o->permit_user_env, o->permit_user_env_allowlist,
+		    (u_char *)buf, parsed.output_len) != 0)
+			fatal_f("rust permituserenvironment write failed");
+		buf[parsed.output_len] = '\0';
+		printf("%s", buf);
+		free(buf);
+#else
 		printf("permituserenvironment %s\n",
 		    o->permit_user_env_allowlist);
+#endif
 	}
 
 #ifdef WITH_RUST_CRYPTO
