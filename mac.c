@@ -39,6 +39,10 @@
 #include "ssherr.h"
 #include "sshbuf.h"
 
+#ifdef WITH_RUST_CRYPTO
+#include "rust-crypto.h"
+#endif
+
 #include "openbsd-compat/openssl-compat.h"
 
 #define SSH_DIGEST	1	/* SSH_DIGEST_XXX */
@@ -97,14 +101,23 @@ static int
 mac_setup_by_alg(struct sshmac *mac, const struct macalg *macalg)
 {
 	mac->type = macalg->type;
+	mac->rust_ctx = NULL;
 	if (mac->type == SSH_DIGEST) {
+#ifdef WITH_RUST_CRYPTO
+		if ((mac->rust_ctx = ossh_rust_mac_start(macalg->alg,
+		    macalg->truncatebits)) == NULL)
+			return SSH_ERR_ALLOC_FAIL;
+		mac->hmac_ctx = NULL;
+#else
 		if ((mac->hmac_ctx = ssh_hmac_start(macalg->alg)) == NULL)
 			return SSH_ERR_ALLOC_FAIL;
+#endif
 		mac->key_len = mac->mac_len = ssh_hmac_bytes(macalg->alg);
 	} else {
 		mac->mac_len = macalg->len / 8;
 		mac->key_len = macalg->key_len / 8;
 		mac->umac_ctx = NULL;
+		mac->hmac_ctx = NULL;
 	}
 	if (macalg->truncatebits != 0)
 		mac->mac_len = macalg->truncatebits / 8;
@@ -134,9 +147,15 @@ mac_init(struct sshmac *mac)
 		return SSH_ERR_INVALID_ARGUMENT;
 	switch (mac->type) {
 	case SSH_DIGEST:
+#ifdef WITH_RUST_CRYPTO
+		if (mac->rust_ctx == NULL ||
+		    ossh_rust_mac_init(mac->rust_ctx, mac->key, mac->key_len) != 0)
+			return SSH_ERR_INVALID_ARGUMENT;
+#else
 		if (mac->hmac_ctx == NULL ||
 		    ssh_hmac_init(mac->hmac_ctx, mac->key, mac->key_len) < 0)
 			return SSH_ERR_INVALID_ARGUMENT;
+#endif
 		return 0;
 	case SSH_UMAC:
 		if ((mac->umac_ctx = umac_new(mac->key)) == NULL)
@@ -160,7 +179,9 @@ mac_compute(struct sshmac *mac, uint32_t seqno,
 		u_char m[SSH_DIGEST_MAX_LENGTH];
 		uint64_t for_align;
 	} u;
+#ifndef WITH_RUST_CRYPTO
 	u_char b[4];
+#endif
 	u_char nonce[8];
 
 	if (mac->mac_len > sizeof(u))
@@ -168,6 +189,13 @@ mac_compute(struct sshmac *mac, uint32_t seqno,
 
 	switch (mac->type) {
 	case SSH_DIGEST:
+#ifdef WITH_RUST_CRYPTO
+		if (mac->rust_ctx == NULL ||
+		    ossh_rust_mac_compute(mac->rust_ctx, seqno, data, datalen,
+		    digest, dlen) != 0)
+			return SSH_ERR_LIBCRYPTO_ERROR;
+		break;
+#else
 		put_u32(b, seqno);
 		/* reset HMAC context */
 		if (ssh_hmac_init(mac->hmac_ctx, NULL, 0) < 0 ||
@@ -176,6 +204,7 @@ mac_compute(struct sshmac *mac, uint32_t seqno,
 		    ssh_hmac_final(mac->hmac_ctx, u.m, sizeof(u.m)) < 0)
 			return SSH_ERR_LIBCRYPTO_ERROR;
 		break;
+#endif
 	case SSH_UMAC:
 		POKE_U64(nonce, seqno);
 		umac_update(mac->umac_ctx, data, datalen);
@@ -207,6 +236,19 @@ mac_check(struct sshmac *mac, uint32_t seqno,
 
 	if (mac->mac_len > mlen)
 		return SSH_ERR_INVALID_ARGUMENT;
+#ifdef WITH_RUST_CRYPTO
+	if (mac->type == SSH_DIGEST) {
+		if (mac->rust_ctx == NULL)
+			return SSH_ERR_INVALID_ARGUMENT;
+		r = ossh_rust_mac_check(mac->rust_ctx, seqno, data, dlen,
+		    theirmac, mlen);
+		if (r == 0)
+			return 0;
+		if (r > 0)
+			return SSH_ERR_MAC_INVALID;
+		return SSH_ERR_LIBCRYPTO_ERROR;
+	}
+#endif
 	if ((r = mac_compute(mac, seqno, data, dlen,
 	    ourmac, sizeof(ourmac))) != 0)
 		return r;
@@ -224,8 +266,13 @@ mac_clear(struct sshmac *mac)
 	} else if (mac->type == SSH_UMAC128) {
 		if (mac->umac_ctx != NULL)
 			umac128_delete(mac->umac_ctx);
+	} else if (mac->rust_ctx != NULL) {
+#ifdef WITH_RUST_CRYPTO
+		ossh_rust_mac_free(mac->rust_ctx);
+#endif
 	} else if (mac->hmac_ctx != NULL)
 		ssh_hmac_free(mac->hmac_ctx);
+	mac->rust_ctx = NULL;
 	mac->hmac_ctx = NULL;
 	mac->umac_ctx = NULL;
 }

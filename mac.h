@@ -36,6 +36,7 @@ struct sshmac {
 	u_int	key_len;
 	int	type;
 	int	etm;		/* Encrypt-then-MAC */
+	void	*rust_ctx;
 	struct ssh_hmac_ctx	*hmac_ctx;
 	struct umac_ctx		*umac_ctx;
 };
