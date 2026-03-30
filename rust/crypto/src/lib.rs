@@ -51,7 +51,7 @@ use rsa::{
 };
 use util::{
     a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
-    atoi_err, cfg_string_parse, cfg_string_write, dollar_expand_parse,
+    atoi_err, cfg_int_parse, cfg_int_write, cfg_string_parse, cfg_string_write, dollar_expand_parse,
     dollar_expand_write, expand_parse, expand_write,
     fmt_intarg_parse, forward_format_parse, forward_format_write,
     keyword_lookup, keyword_name,
@@ -345,6 +345,12 @@ pub struct RustStrarrayLinesParse {
 
 #[repr(C)]
 pub struct RustCfgStringParse {
+    output_len: usize,
+    emit: u32,
+}
+
+#[repr(C)]
+pub struct RustCfgIntParse {
     output_len: usize,
     emit: u32,
 }
@@ -1138,6 +1144,45 @@ pub extern "C" fn ossh_rust_cfg_string_write(
     out_len: usize,
 ) -> c_int {
     if cfg_string_write(prefix, value, empty_mode, out, out_len).is_some() {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_cfg_int_parse(
+    prefix: *const c_char,
+    value: c_int,
+    mode: u32,
+    out: *mut RustCfgIntParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match cfg_int_parse(prefix, value, mode) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustCfgIntParse {
+                    output_len: parsed.output_len,
+                    emit: u32::from(parsed.emit),
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_cfg_int_write(
+    prefix: *const c_char,
+    value: c_int,
+    mode: u32,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if cfg_int_write(prefix, value, mode, out, out_len).is_some() {
         0
     } else {
         -1
