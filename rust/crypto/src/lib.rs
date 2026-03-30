@@ -67,6 +67,7 @@ use util::{
     dollar_expand_write, expand_parse, expand_write, ipqos_line_parse, ipqos_line_write,
     listenaddr_line_parse, listenaddr_line_write,
     controlpersist_line_parse, controlpersist_line_write,
+    forwardagent_line_parse, forwardagent_line_write,
     fmt_intarg_parse, forward_format_parse, forward_format_write,
     keyword_lookup, keyword_name,
     permit_list_line_parse, permit_list_line_write,
@@ -403,6 +404,12 @@ pub struct RustTunneldeviceLineParse {
 
 #[repr(C)]
 pub struct RustAddKeysToAgentLineParse {
+    output_len: usize,
+    emit: u32,
+}
+
+#[repr(C)]
+pub struct RustForwardAgentLineParse {
     output_len: usize,
     emit: u32,
 }
@@ -1462,6 +1469,43 @@ pub extern "C" fn ossh_rust_add_keys_to_agent_line_write(
     out_len: usize,
 ) -> c_int {
     if add_keys_to_agent_line_write(mode, lifespan, out, out_len).is_some() {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_forwardagent_line_parse(
+    value: c_int,
+    socket_path: *const c_char,
+    out: *mut RustForwardAgentLineParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match forwardagent_line_parse(value, socket_path) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustForwardAgentLineParse {
+                    output_len: parsed.output_len,
+                    emit: u32::from(parsed.emit),
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_forwardagent_line_write(
+    value: c_int,
+    socket_path: *const c_char,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if forwardagent_line_write(value, socket_path, out, out_len).is_some() {
         0
     } else {
         -1
