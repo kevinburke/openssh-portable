@@ -533,18 +533,6 @@ static struct {
 #undef SSHCONF_UNSUPPORTED_STRING
 #undef SSHCONF_ALIAS
 
-#ifdef WITH_RUST_CRYPTO
-static size_t
-keyword_nentries(void)
-{
-	size_t i = 0;
-
-	while (keywords[i].name != NULL)
-		i++;
-	return i;
-}
-#endif
-
 static struct {
 	int val;
 	char *text;
@@ -563,14 +551,6 @@ lookup_opcode_name(ServerOpCodes code)
 {
 	u_int i;
 
-#ifdef WITH_RUST_CRYPTO
-	size_t index;
-
-	if (ossh_rust_keyword_name((int)code,
-	    (const struct ossh_rust_keyword_entry *)keywords, keyword_nentries(),
-	    &index) == 0)
-		return keywords[index].name;
-#endif
 	for (i = 0; keywords[i].name != NULL; i++)
 		if (keywords[i].opcode == code)
 			return(keywords[i].name);
@@ -586,22 +566,6 @@ static ServerOpCodes
 parse_token(const char *cp, const char *filename,
 	    int linenum, u_int *flags)
 {
-#ifdef WITH_RUST_CRYPTO
-	int opcode;
-	size_t i;
-
-	if (ossh_rust_keyword_lookup((const u_char *)cp,
-	    cp == NULL ? 0 : strlen(cp),
-	    (const struct ossh_rust_keyword_entry *)keywords, keyword_nentries(),
-	    1, &opcode) == 0) {
-		for (i = 0; keywords[i].name; i++) {
-			if ((int)keywords[i].opcode == opcode) {
-				*flags = keywords[i].flags;
-				return keywords[i].opcode;
-			}
-		}
-	}
-#else
 	size_t i;
 
 	for (i = 0; keywords[i].name; i++)
@@ -609,7 +573,6 @@ parse_token(const char *cp, const char *filename,
 			*flags = keywords[i].flags;
 			return keywords[i].opcode;
 		}
-#endif
 
 	error("%s: line %d: Bad configuration option: %s",
 	    filename, linenum, cp);
@@ -4206,8 +4169,28 @@ dump_cfg_fmtint(ServerOpCodes code, int val)
 static void
 dump_cfg_string(ServerOpCodes code, const char *val)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ossh_rust_cfg_string_parse parsed;
+	const char *prefix = lookup_opcode_name(code);
+	char *buf;
+
+	if (ossh_rust_cfg_string_parse(prefix, val,
+	    OSSH_RUST_CFG_STRING_EMPTY_NONE, &parsed) != 0)
+		fatal_f("rust cfg string parse failed");
+	if (!parsed.emit)
+		return;
+	buf = xmalloc(parsed.output_len + 1);
+	if (ossh_rust_cfg_string_write(prefix, val,
+	    OSSH_RUST_CFG_STRING_EMPTY_NONE, (u_char *)buf,
+	    parsed.output_len) != 0)
+		fatal_f("rust cfg string write failed");
+	buf[parsed.output_len] = '\0';
+	printf("%s", buf);
+	free(buf);
+#else
 	printf("%s %s\n", lookup_opcode_name(code),
 	    val == NULL ? "none" : val);
+#endif
 }
 
 static void
