@@ -126,6 +126,12 @@ pub(crate) struct StrarrayOnelineParse {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PermitListLineParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StrarrayLinesParse {
     pub(crate) output_len: usize,
     pub(crate) emit: bool,
@@ -821,6 +827,61 @@ pub(crate) fn strarray_lines_write(
         out[pos] = b'\n';
         pos += 1;
     }
+    Some(())
+}
+
+pub(crate) fn permit_list_line_parse(
+    prefix: *const c_char,
+    vals: *const *const c_char,
+    nvals: usize,
+) -> Option<PermitListLineParse> {
+    let prefix = read_cstr_bytes(prefix)?;
+    let vals = read_ptr_slice(vals, nvals)?;
+    let output_len = if nvals == 0 {
+        prefix.len() + b" any\n".len()
+    } else {
+        let mut len = prefix.len() + 1;
+        for val in vals {
+            len += read_cstr_bytes(*val)?.len();
+            len += 1;
+        }
+        len
+    };
+    Some(PermitListLineParse {
+        output_len,
+        emit: true,
+    })
+}
+
+pub(crate) fn permit_list_line_write(
+    prefix: *const c_char,
+    vals: *const *const c_char,
+    nvals: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = permit_list_line_parse(prefix, vals, nvals)?;
+    let prefix = read_cstr_bytes(prefix)?;
+    let vals = read_ptr_slice(vals, nvals)?;
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut pos = 0usize;
+    out[pos..pos + prefix.len()].copy_from_slice(prefix);
+    pos += prefix.len();
+    if nvals == 0 {
+        out[pos..].copy_from_slice(b" any\n");
+        return Some(());
+    }
+    for val in vals {
+        let bytes = read_cstr_bytes(*val)?;
+        out[pos] = b' ';
+        pos += 1;
+        out[pos..pos + bytes.len()].copy_from_slice(bytes);
+        pos += bytes.len();
+    }
+    out[pos] = b'\n';
     Some(())
 }
 
@@ -2838,9 +2899,10 @@ mod tests {
         FMT_INTARG_LITERAL_NO, FMT_INTARG_LITERAL_UNSET, FMT_INTARG_LITERAL_UNKNOWN,
         FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
         CfgIntParse, CfgStringParse, FmtIntArgParse, ForwardFormatParse,
-        IpqosLineParse, ListenaddrLineParse,
+        IpqosLineParse, ListenaddrLineParse, PermitListLineParse,
         StrarrayLinesParse, StrarrayOnelineParse, strarray_lines_parse,
         strarray_lines_write, strarray_oneline_parse, strarray_oneline_write,
+        permit_list_line_parse, permit_list_line_write,
         ExpandEntry, expand_parse, expand_write,
         ForwardParse, HostfileLineParse, JumpParse,
         KeywordEntry, MultistateEntry, OptDequoteParse, OPT_DEQUOTE_MISSING_END,
@@ -3763,6 +3825,63 @@ mod tests {
             strarray_oneline_write(core::ptr::null(), 0, 0, core::ptr::null_mut(), 0),
             Some(())
         );
+    }
+
+    #[test]
+    fn permit_list_line_parse_handles_basic_forms() {
+        let prefix = CString::new("permitopen").unwrap();
+        let one = CString::new("host:22").unwrap();
+        let two = CString::new("example.com:80").unwrap();
+        let vals = [one.as_ptr(), two.as_ptr()];
+
+        assert_eq!(
+            permit_list_line_parse(prefix.as_ptr(), vals.as_ptr(), vals.len()),
+            Some(PermitListLineParse {
+                output_len: "permitopen host:22 example.com:80\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            permit_list_line_parse(prefix.as_ptr(), core::ptr::null(), 0),
+            Some(PermitListLineParse {
+                output_len: "permitopen any\n".len(),
+                emit: true,
+            })
+        );
+    }
+
+    #[test]
+    fn permit_list_line_write_handles_basic_forms() {
+        let prefix = CString::new("permitlisten").unwrap();
+        let one = CString::new("8080").unwrap();
+        let two = CString::new("localhost:2222").unwrap();
+        let vals = [one.as_ptr(), two.as_ptr()];
+        let mut out = vec![0u8; "permitlisten 8080 localhost:2222\n".len()];
+
+        assert_eq!(
+            permit_list_line_write(
+                prefix.as_ptr(),
+                vals.as_ptr(),
+                vals.len(),
+                out.as_mut_ptr(),
+                out.len()
+            ),
+            Some(())
+        );
+        assert_eq!(&out, b"permitlisten 8080 localhost:2222\n");
+
+        let mut any_out = vec![0u8; "permitlisten any\n".len()];
+        assert_eq!(
+            permit_list_line_write(
+                prefix.as_ptr(),
+                core::ptr::null(),
+                0,
+                any_out.as_mut_ptr(),
+                any_out.len()
+            ),
+            Some(())
+        );
+        assert_eq!(&any_out, b"permitlisten any\n");
     }
 
     #[test]
