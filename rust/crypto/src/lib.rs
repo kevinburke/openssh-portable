@@ -56,6 +56,7 @@ use util::{
     listenaddr_line_parse, listenaddr_line_write,
     fmt_intarg_parse, forward_format_parse, forward_format_write,
     keyword_lookup, keyword_name,
+    permit_list_line_parse, permit_list_line_write,
     lookup_env_in_list_parse, lookup_setenv_in_list_parse, multistate_lookup,
     multistate_name, opt_dequote_parse, opt_dequote_write, opt_flag_parse,
     opt_match_parse, parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
@@ -334,6 +335,12 @@ pub struct RustForwardFormatParse {
 
 #[repr(C)]
 pub struct RustStrarrayOnelineParse {
+    output_len: usize,
+    emit: u32,
+}
+
+#[repr(C)]
+pub struct RustPermitListLineParse {
     output_len: usize,
     emit: u32,
 }
@@ -1079,6 +1086,45 @@ pub extern "C" fn ossh_rust_strarray_oneline_write(
     out_len: usize,
 ) -> c_int {
     if strarray_oneline_write(vals, nvals, empty_mode, out, out_len).is_some() {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_permit_list_line_parse(
+    prefix: *const c_char,
+    vals: *const *const c_char,
+    nvals: usize,
+    out: *mut RustPermitListLineParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match permit_list_line_parse(prefix, vals, nvals) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustPermitListLineParse {
+                    output_len: parsed.output_len,
+                    emit: u32::from(parsed.emit),
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_permit_list_line_write(
+    prefix: *const c_char,
+    vals: *const *const c_char,
+    nvals: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if permit_list_line_write(prefix, vals, nvals, out, out_len).is_some() {
         0
     } else {
         -1
