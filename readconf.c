@@ -4375,8 +4375,29 @@ dump_client_config(Options *o, const char *host)
 #endif
 
 	/* oStreamLocalBindMask */
+#ifdef WITH_RUST_CRYPTO
+	{
+		struct ossh_rust_cfg_int_parse parsed;
+		char *buf;
+
+		if (ossh_rust_cfg_int_parse("streamlocalbindmask",
+		    o->fwd_opts.streamlocal_bind_mask,
+		    OSSH_RUST_CFG_INT_OCTAL, &parsed) != 0)
+			fatal_f("rust streamlocalbindmask parse failed");
+		buf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_cfg_int_write("streamlocalbindmask",
+		    o->fwd_opts.streamlocal_bind_mask,
+		    OSSH_RUST_CFG_INT_OCTAL, (u_char *)buf,
+		    parsed.output_len) != 0)
+			fatal_f("rust streamlocalbindmask write failed");
+		buf[parsed.output_len] = '\0';
+		printf("%s", buf);
+		free(buf);
+	}
+#else
 	printf("streamlocalbindmask 0%o\n",
 	    o->fwd_opts.streamlocal_bind_mask);
+#endif
 
 	/* oLogFacility */
 	printf("syslogfacility %s\n", log_facility_name(o->log_facility));
