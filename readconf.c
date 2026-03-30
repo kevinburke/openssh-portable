@@ -4220,9 +4220,26 @@ dump_client_config(Options *o, const char *host)
 	if (o->add_keys_to_agent_lifespan <= 0)
 		dump_cfg_fmtint(oAddKeysToAgent, o->add_keys_to_agent);
 	else {
+#ifdef WITH_RUST_CRYPTO
+		struct ossh_rust_add_keys_to_agent_line_parse parsed;
+		char *buf;
+
+		if (ossh_rust_add_keys_to_agent_line_parse(o->add_keys_to_agent,
+		    o->add_keys_to_agent_lifespan, &parsed) != 0)
+			fatal_f("rust addkeystoagent parse failed");
+		buf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_add_keys_to_agent_line_write(o->add_keys_to_agent,
+		    o->add_keys_to_agent_lifespan, (u_char *)buf,
+		    parsed.output_len) != 0)
+			fatal_f("rust addkeystoagent write failed");
+		buf[parsed.output_len] = '\0';
+		printf("%s", buf);
+		free(buf);
+#else
 		printf("addkeystoagent%s %d\n",
 		    o->add_keys_to_agent == 3 ? " confirm" : "",
 		    o->add_keys_to_agent_lifespan);
+#endif
 	}
 
 	/* oForwardAgent */
