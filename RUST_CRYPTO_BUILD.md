@@ -187,6 +187,8 @@ Rust-backed today:
 - client `ProxyJump` output formatting used by:
   - `proxyjump ...` lines in `ssh -G`
   - bracketed numeric jump-host rendering and preserved extra jump-chain prefixes
+- client `RekeyLimit` output formatting used by:
+  - `rekeylimit <bytes> <seconds>` lines in `ssh -G`
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers

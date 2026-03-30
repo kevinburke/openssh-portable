@@ -192,6 +192,12 @@ pub(crate) struct ProxyJumpLineParse {
     pub(crate) emit: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct RekeyLimitLineParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
 const SSH_KEYSTROKE_DEFAULT_INTERVAL_MS: i32 = 20;
 const SSH_TUNID_ANY: i32 = 0x7fffffff;
 
@@ -971,6 +977,34 @@ pub(crate) fn proxyjump_line_write(
         formatted.push(b':');
         formatted.extend_from_slice(port.to_string().as_bytes());
     }
+    formatted.push(b'\n');
+    out.copy_from_slice(&formatted);
+    Some(())
+}
+
+pub(crate) fn rekeylimit_line_parse(limit: u64, interval: i32) -> Option<RekeyLimitLineParse> {
+    Some(RekeyLimitLineParse {
+        output_len: "rekeylimit ".len() + limit.to_string().len() + 1 + interval.to_string().len() + 1,
+        emit: true,
+    })
+}
+
+pub(crate) fn rekeylimit_line_write(
+    limit: u64,
+    interval: i32,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = rekeylimit_line_parse(limit, interval)?;
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut formatted = Vec::with_capacity(parsed.output_len);
+    formatted.extend_from_slice(b"rekeylimit ");
+    formatted.extend_from_slice(limit.to_string().as_bytes());
+    formatted.push(b' ');
+    formatted.extend_from_slice(interval.to_string().as_bytes());
     formatted.push(b'\n');
     out.copy_from_slice(&formatted);
     Some(())
@@ -3159,6 +3193,7 @@ mod tests {
         parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
         parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
         proxyjump_line_parse, proxyjump_line_write,
+        rekeylimit_line_parse, rekeylimit_line_write,
         strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
         ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE,
         ATOI_STATUS_TOO_SMALL, DollarExpandParse, DOLLAR_EXPAND_INVALID,
@@ -3170,6 +3205,7 @@ mod tests {
         CanonicalizePermittedCnamesLineParse, CfgIntParse, CfgStringParse,
         FmtIntArgParse, ForwardFormatParse, IpqosLineParse,
         ListenaddrLineParse, PermitListLineParse, ProxyJumpLineParse,
+        RekeyLimitLineParse,
         TunnelDeviceLineParse,
         StrarrayLinesParse, StrarrayOnelineParse, strarray_lines_parse,
         strarray_lines_write, strarray_oneline_parse, strarray_oneline_write,
@@ -4352,6 +4388,27 @@ mod tests {
             Some(())
         );
         assert_eq!(&plain, b"proxyjump jumpb\n");
+    }
+
+    #[test]
+    fn rekeylimit_line_parse_handles_basic_forms() {
+        assert_eq!(
+            rekeylimit_line_parse(1_048_576, 3600),
+            Some(RekeyLimitLineParse {
+                output_len: "rekeylimit 1048576 3600\n".len(),
+                emit: true,
+            })
+        );
+    }
+
+    #[test]
+    fn rekeylimit_line_write_handles_basic_forms() {
+        let mut out = vec![0u8; "rekeylimit 1048576 3600\n".len()];
+        assert_eq!(
+            rekeylimit_line_write(1_048_576, 3600, out.as_mut_ptr(), out.len()),
+            Some(())
+        );
+        assert_eq!(&out, b"rekeylimit 1048576 3600\n");
     }
 
     #[test]
