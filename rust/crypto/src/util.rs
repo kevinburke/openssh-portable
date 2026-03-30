@@ -149,6 +149,12 @@ pub(crate) struct ListenaddrLineParse {
     pub(crate) emit: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct IpqosLineParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
 const SSH_KEYSTROKE_DEFAULT_INTERVAL_MS: i32 = 20;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -379,6 +385,74 @@ pub(crate) fn parse_ipqos(input: *const u8, input_len: usize) -> Option<i32> {
     }
     let parsed = core::str::from_utf8(input).ok()?.parse::<i32>().ok()?;
     (0..=255).contains(&parsed).then_some(parsed)
+}
+
+fn ipqos_name_bytes(value: i32) -> Vec<u8> {
+    match value {
+        IPQOS_NONE => b"none".to_vec(),
+        IPQOS_AF11 => b"af11".to_vec(),
+        IPQOS_AF12 => b"af12".to_vec(),
+        IPQOS_AF13 => b"af13".to_vec(),
+        IPQOS_AF21 => b"af21".to_vec(),
+        IPQOS_AF22 => b"af22".to_vec(),
+        IPQOS_AF23 => b"af23".to_vec(),
+        IPQOS_AF31 => b"af31".to_vec(),
+        IPQOS_AF32 => b"af32".to_vec(),
+        IPQOS_AF33 => b"af33".to_vec(),
+        IPQOS_AF41 => b"af41".to_vec(),
+        IPQOS_AF42 => b"af42".to_vec(),
+        IPQOS_AF43 => b"af43".to_vec(),
+        IPQOS_CS0 => b"cs0".to_vec(),
+        IPQOS_CS1 => b"cs1".to_vec(),
+        IPQOS_CS2 => b"cs2".to_vec(),
+        IPQOS_CS3 => b"cs3".to_vec(),
+        IPQOS_CS4 => b"cs4".to_vec(),
+        IPQOS_CS5 => b"cs5".to_vec(),
+        IPQOS_CS6 => b"cs6".to_vec(),
+        IPQOS_CS7 => b"cs7".to_vec(),
+        IPQOS_EF => b"ef".to_vec(),
+        IPQOS_LE => b"le".to_vec(),
+        IPQOS_VA => b"va".to_vec(),
+        IPQOS_LOWDELAY => b"lowdelay".to_vec(),
+        IPQOS_THROUGHPUT => b"throughput".to_vec(),
+        other => format!("0x{other:02x}").into_bytes(),
+    }
+}
+
+pub(crate) fn ipqos_line_parse(interactive: i32, bulk: i32) -> Option<IpqosLineParse> {
+    let i = ipqos_name_bytes(interactive);
+    let b = ipqos_name_bytes(bulk);
+    Some(IpqosLineParse {
+        output_len: "ipqos ".len() + i.len() + 1 + b.len() + 1,
+        emit: true,
+    })
+}
+
+pub(crate) fn ipqos_line_write(
+    interactive: i32,
+    bulk: i32,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = ipqos_line_parse(interactive, bulk)?;
+    let i = ipqos_name_bytes(interactive);
+    let b = ipqos_name_bytes(bulk);
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut pos = 0usize;
+    let prefix = b"ipqos ";
+    out[pos..pos + prefix.len()].copy_from_slice(prefix);
+    pos += prefix.len();
+    out[pos..pos + i.len()].copy_from_slice(&i);
+    pos += i.len();
+    out[pos] = b' ';
+    pos += 1;
+    out[pos..pos + b.len()].copy_from_slice(&b);
+    pos += b.len();
+    out[pos] = b'\n';
+    Some(())
 }
 
 pub(crate) fn valid_env_name(input: *const u8, input_len: usize) -> bool {
@@ -2746,7 +2820,7 @@ mod tests {
     use super::{
         a2port, atoi_err, argv_split_parse, argv_split_write, cfg_int_parse,
         cfg_int_write, cfg_string_parse, cfg_string_write, host_hash_write,
-        listenaddr_line_parse, listenaddr_line_write,
+        ipqos_line_parse, ipqos_line_write, listenaddr_line_parse, listenaddr_line_write,
         fmt_intarg_parse, forward_format_parse, forward_format_write,
         hpdelim2_parse_in_place, keyword_lookup, keyword_name,
         lookup_env_in_list_parse,
@@ -2764,7 +2838,7 @@ mod tests {
         FMT_INTARG_LITERAL_NO, FMT_INTARG_LITERAL_UNSET, FMT_INTARG_LITERAL_UNKNOWN,
         FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
         CfgIntParse, CfgStringParse, FmtIntArgParse, ForwardFormatParse,
-        ListenaddrLineParse,
+        IpqosLineParse, ListenaddrLineParse,
         StrarrayLinesParse, StrarrayOnelineParse, strarray_lines_parse,
         strarray_lines_write, strarray_oneline_parse, strarray_oneline_write,
         ExpandEntry, expand_parse, expand_write,
@@ -2773,7 +2847,7 @@ mod tests {
         OPT_DEQUOTE_MISSING_START, PatternIntervalParse, UriParse,
         UserHostPathParse, UserHostPortParse, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
         DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID,
-        IPQOS_AF21, IPQOS_CS6, IPQOS_NONE,
+        IPQOS_AF21, IPQOS_CS0, IPQOS_CS6, IPQOS_EF, IPQOS_NONE,
     };
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
@@ -3888,6 +3962,34 @@ mod tests {
             Some(())
         );
         assert_eq!(&out, b"listenaddress [::1]:2222 rdomain blue\n");
+    }
+
+    #[test]
+    fn ipqos_line_parse_handles_basic_forms() {
+        assert_eq!(
+            ipqos_line_parse(IPQOS_EF, IPQOS_CS0),
+            Some(IpqosLineParse {
+                output_len: "ipqos ef cs0\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            ipqos_line_parse(0x44, 0x55),
+            Some(IpqosLineParse {
+                output_len: "ipqos 0x44 0x55\n".len(),
+                emit: true,
+            })
+        );
+    }
+
+    #[test]
+    fn ipqos_line_write_handles_basic_forms() {
+        let mut out = vec![0u8; "ipqos ef cs0\n".len()];
+        assert_eq!(
+            ipqos_line_write(IPQOS_EF, IPQOS_CS0, out.as_mut_ptr(), out.len()),
+            Some(())
+        );
+        assert_eq!(&out, b"ipqos ef cs0\n");
     }
 
     #[test]
