@@ -34,9 +34,10 @@ Rust-backed today:
   - `|1|salt|hash` entry parsing
   - HMAC-SHA1 host matching
   - hashed host re-encoding with existing or fresh salt
-- HMAC consumers layered on `ssh_digest_*`:
+- HMAC computation through `ssh_hmac_*`:
   - `known_hosts` SHA-1 host hashing and matching
-  - packet MACs through `hmac.c` / `mac.c` using Rust-backed digest state
+  - packet MAC computation/reset logic used by `mac.c`
+  - legacy MD5 / SHA-1 and SHA-2 HMACs layered on Rust-backed digest state
 - OpenSSH `openssh-key-v1` armor and header parsing
 - OpenSSH `openssh-key-v1` decrypted private-section parsing for Ed25519,
   RSA, and ECDSA keys:

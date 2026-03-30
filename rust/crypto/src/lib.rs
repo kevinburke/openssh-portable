@@ -3,6 +3,7 @@ mod cipher;
 mod dh;
 mod digest;
 mod ecdsa;
+mod hmac;
 mod kex;
 mod openssh_key;
 mod private_pem;
@@ -31,6 +32,7 @@ use ecdsa::{
     ecdsa_verify_prehashed, OSSH_RUST_ECDSA_PARSE_CURVE_MISMATCH,
     OSSH_RUST_ECDSA_PARSE_INVALID_FORMAT, OSSH_RUST_ECDSA_PARSE_OK,
 };
+use hmac::HmacState;
 use kex::{
     curve25519_public_from_secret, curve25519_shared_secret, ed25519_parse_public_blob,
     ed25519_public_from_seed, ed25519_sign, ed25519_verify, mlkem768x25519_dec,
@@ -78,7 +80,7 @@ use util::{
     OPT_DEQUOTE_MISSING_START,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 45;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 46;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -2115,6 +2117,64 @@ pub extern "C" fn ossh_rust_digest_free(ctx: *mut c_void) {
         return;
     }
     let mut boxed = unsafe { Box::from_raw(ctx.cast::<DigestState>()) };
+    boxed.scrub();
+    drop(boxed);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_hmac_start(alg: c_int) -> *mut c_void {
+    match HmacState::new(alg) {
+        Some(state) => Box::into_raw(Box::new(state)).cast(),
+        None => core::ptr::null_mut(),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_hmac_init(ctx: *mut c_void, key: *const u8, key_len: usize) -> c_int {
+    if ctx.is_null() {
+        return -1;
+    }
+    let ctx = unsafe { &mut *(ctx.cast::<HmacState>()) };
+    if ctx.init(key, key_len).is_err() {
+        return -1;
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_hmac_update(
+    ctx: *mut c_void,
+    data: *const u8,
+    data_len: usize,
+) -> c_int {
+    if ctx.is_null() {
+        return -1;
+    }
+    let ctx = unsafe { &mut *(ctx.cast::<HmacState>()) };
+    if ctx.update(data, data_len).is_err() {
+        return -1;
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_hmac_final(ctx: *mut c_void, out: *mut u8, out_len: usize) -> c_int {
+    if ctx.is_null() {
+        return -1;
+    }
+    let ctx = unsafe { &mut *(ctx.cast::<HmacState>()) };
+    if ctx.finalise(out, out_len).is_err() {
+        return -1;
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_hmac_free(ctx: *mut c_void) {
+    if ctx.is_null() {
+        return;
+    }
+    let mut boxed = unsafe { Box::from_raw(ctx.cast::<HmacState>()) };
     boxed.scrub();
     drop(boxed);
 }
