@@ -59,6 +59,7 @@ use util::{
     keyword_lookup, keyword_name,
     permit_list_line_parse, permit_list_line_write,
     proxyjump_line_parse, proxyjump_line_write,
+    rekeylimit_line_parse, rekeylimit_line_write,
     tunneldevice_line_parse, tunneldevice_line_write,
     canonicalize_permitted_cnames_line_parse,
     canonicalize_permitted_cnames_line_write,
@@ -406,6 +407,12 @@ pub struct RustCanonicalizePermittedCnamesLineParse {
 
 #[repr(C)]
 pub struct RustProxyjumpLineParse {
+    output_len: usize,
+    emit: u32,
+}
+
+#[repr(C)]
+pub struct RustRekeyLimitLineParse {
     output_len: usize,
     emit: u32,
 }
@@ -1514,6 +1521,43 @@ pub extern "C" fn ossh_rust_proxyjump_line_write(
     out_len: usize,
 ) -> c_int {
     if proxyjump_line_write(extra, user, host, port, out, out_len).is_some() {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rekeylimit_line_parse(
+    limit: u64,
+    interval: c_int,
+    out: *mut RustRekeyLimitLineParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match rekeylimit_line_parse(limit, interval) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustRekeyLimitLineParse {
+                    output_len: parsed.output_len,
+                    emit: u32::from(parsed.emit),
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_rekeylimit_line_write(
+    limit: u64,
+    interval: c_int,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if rekeylimit_line_write(limit, interval, out, out_len).is_some() {
         0
     } else {
         -1
