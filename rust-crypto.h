@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 46U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 47U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -527,6 +527,13 @@ int ossh_rust_hmac_init(void *ctx, const uint8_t *key, size_t key_len);
 int ossh_rust_hmac_update(void *ctx, const uint8_t *data, size_t data_len);
 int ossh_rust_hmac_final(void *ctx, uint8_t *out, size_t out_len);
 void ossh_rust_hmac_free(void *ctx);
+void *ossh_rust_mac_start(int alg, int truncate_bits);
+int ossh_rust_mac_init(void *ctx, const uint8_t *key, size_t key_len);
+int ossh_rust_mac_compute(void *ctx, uint32_t seqno, const uint8_t *data,
+    size_t data_len, uint8_t *out, size_t out_len);
+int ossh_rust_mac_check(void *ctx, uint32_t seqno, const uint8_t *data,
+    size_t data_len, const uint8_t *their_mac, size_t their_mac_len);
+void ossh_rust_mac_free(void *ctx);
 int ossh_rust_ed25519_public_from_seed(const uint8_t *seed, size_t seed_len,
     uint8_t *public_key, size_t public_key_len);
 int ossh_rust_ed25519_sign(uint8_t *sig, size_t sig_len, const uint8_t *msg,

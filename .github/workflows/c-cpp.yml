@@ -165,7 +165,7 @@ jobs:
     - name: cargo fuzz smoke
       if: ${{ matrix.config == 'rust-crypto' }}
       run: |
-        for target in ed25519_verify ecdh_peer dh_peer ecdsa_parse rsa_parse chachapoly_decrypt config_helpers; do
+        for target in ed25519_verify ecdh_peer dh_peer ecdsa_parse rsa_parse chachapoly_decrypt config_helpers packet_mac; do
           cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin "$target" -- -runs=1
         done
     - name: save config

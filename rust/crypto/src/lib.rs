@@ -5,6 +5,7 @@ mod digest;
 mod ecdsa;
 mod hmac;
 mod kex;
+mod mac;
 mod openssh_key;
 mod private_pem;
 mod rsa;
@@ -39,6 +40,7 @@ use kex::{
     mlkem768x25519_enc, mlkem768x25519_keypair, sntrup761x25519_dec,
     sntrup761x25519_enc, sntrup761x25519_keypair, EcdhCurve,
 };
+use mac::PacketMacState;
 use openssh_key::{
     openssh_private2_decode_len, openssh_private2_decode_write, openssh_private2_parse,
     openssh_private2_parse_plaintext, openssh_public_blob_decode_len,
@@ -80,7 +82,7 @@ use util::{
     OPT_DEQUOTE_MISSING_START,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 46;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 47;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -2175,6 +2177,75 @@ pub extern "C" fn ossh_rust_hmac_free(ctx: *mut c_void) {
         return;
     }
     let mut boxed = unsafe { Box::from_raw(ctx.cast::<HmacState>()) };
+    boxed.scrub();
+    drop(boxed);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_mac_start(alg: c_int, truncate_bits: c_int) -> *mut c_void {
+    match PacketMacState::new(alg, truncate_bits) {
+        Some(state) => Box::into_raw(Box::new(state)).cast(),
+        None => core::ptr::null_mut(),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_mac_init(ctx: *mut c_void, key: *const u8, key_len: usize) -> c_int {
+    if ctx.is_null() {
+        return -1;
+    }
+    let ctx = unsafe { &mut *(ctx.cast::<PacketMacState>()) };
+    if ctx.init(key, key_len).is_err() {
+        return -1;
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_mac_compute(
+    ctx: *mut c_void,
+    seqno: u32,
+    data: *const u8,
+    data_len: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if ctx.is_null() {
+        return -1;
+    }
+    let ctx = unsafe { &mut *(ctx.cast::<PacketMacState>()) };
+    if ctx.compute(seqno, data, data_len, out, out_len).is_err() {
+        return -1;
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_mac_check(
+    ctx: *mut c_void,
+    seqno: u32,
+    data: *const u8,
+    data_len: usize,
+    their_mac: *const u8,
+    their_mac_len: usize,
+) -> c_int {
+    if ctx.is_null() {
+        return -1;
+    }
+    let ctx = unsafe { &mut *(ctx.cast::<PacketMacState>()) };
+    match ctx.check(seqno, data, data_len, their_mac, their_mac_len) {
+        Ok(true) => 0,
+        Ok(false) => 1,
+        Err(_) => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_mac_free(ctx: *mut c_void) {
+    if ctx.is_null() {
+        return;
+    }
+    let mut boxed = unsafe { Box::from_raw(ctx.cast::<PacketMacState>()) };
     boxed.scrub();
     drop(boxed);
 }
