@@ -66,6 +66,7 @@ use util::{
     atoi_err, cfg_int_parse, cfg_int_write, cfg_string_parse, cfg_string_write, dollar_expand_parse,
     dollar_expand_write, expand_parse, expand_write, ipqos_line_parse, ipqos_line_write,
     listenaddr_line_parse, listenaddr_line_write,
+    controlpersist_line_parse, controlpersist_line_write,
     fmt_intarg_parse, forward_format_parse, forward_format_write,
     keyword_lookup, keyword_name,
     permit_list_line_parse, permit_list_line_write,
@@ -426,6 +427,12 @@ pub struct RustProxyjumpLineParse {
 
 #[repr(C)]
 pub struct RustRekeyLimitLineParse {
+    output_len: usize,
+    emit: u32,
+}
+
+#[repr(C)]
+pub struct RustControlPersistLineParse {
     output_len: usize,
     emit: u32,
 }
@@ -1577,6 +1584,43 @@ pub extern "C" fn ossh_rust_rekeylimit_line_write(
     out_len: usize,
 ) -> c_int {
     if rekeylimit_line_write(limit, interval, out, out_len).is_some() {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_controlpersist_line_parse(
+    value: c_int,
+    timeout: c_int,
+    out: *mut RustControlPersistLineParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match controlpersist_line_parse(value, timeout) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustControlPersistLineParse {
+                    output_len: parsed.output_len,
+                    emit: u32::from(parsed.emit),
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_controlpersist_line_write(
+    value: c_int,
+    timeout: c_int,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if controlpersist_line_write(value, timeout, out, out_len).is_some() {
         0
     } else {
         -1

@@ -132,6 +132,10 @@ struct ossh_rust_rekeylimit_line_parse {
 	size_t output_len;
 	uint32_t emit;
 };
+struct ossh_rust_controlpersist_line_parse {
+	size_t output_len;
+	uint32_t emit;
+};
 struct ossh_rust_escapechar_line_parse {
 	size_t output_len;
 	uint32_t emit;
@@ -468,6 +472,10 @@ int ossh_rust_proxyjump_line_write(const char *extra, const char *user,
 int ossh_rust_rekeylimit_line_parse(uint64_t limit, int interval,
     struct ossh_rust_rekeylimit_line_parse *out);
 int ossh_rust_rekeylimit_line_write(uint64_t limit, int interval,
+    uint8_t *out, size_t out_len);
+int ossh_rust_controlpersist_line_parse(int value, int timeout,
+    struct ossh_rust_controlpersist_line_parse *out);
+int ossh_rust_controlpersist_line_write(int value, int timeout,
     uint8_t *out, size_t out_len);
 int ossh_rust_escapechar_line_parse(int value,
     struct ossh_rust_escapechar_line_parse *out);
