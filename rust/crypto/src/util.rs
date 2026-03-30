@@ -198,8 +198,15 @@ pub(crate) struct RekeyLimitLineParse {
     pub(crate) emit: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct EscapeCharLineParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
 const SSH_KEYSTROKE_DEFAULT_INTERVAL_MS: i32 = 20;
 const SSH_TUNID_ANY: i32 = 0x7fffffff;
+const SSH_ESCAPECHAR_NONE: i32 = -2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StrdelimParse {
@@ -1005,6 +1012,73 @@ pub(crate) fn rekeylimit_line_write(
     formatted.extend_from_slice(limit.to_string().as_bytes());
     formatted.push(b' ');
     formatted.extend_from_slice(interval.to_string().as_bytes());
+    formatted.push(b'\n');
+    out.copy_from_slice(&formatted);
+    Some(())
+}
+
+fn vis_white_byte(c: u8) -> Vec<u8> {
+    if c == b'\\' || c.is_ascii_graphic() {
+        if c == b'\\' {
+            return b"\\\\".to_vec();
+        }
+        return vec![c];
+    }
+    if c == b' ' {
+        return b"\\040".to_vec();
+    }
+    if c.is_ascii_control() || c == 0x7f {
+        let mut out = Vec::with_capacity(2);
+        out.push(b'^');
+        out.push(if c == 0x7f { b'?' } else { c.wrapping_add(b'@') });
+        return out;
+    }
+    if c & 0x80 != 0 {
+        let low = c & 0x7f;
+        let mut out = Vec::with_capacity(4);
+        out.extend_from_slice(b"\\M");
+        if low.is_ascii_control() || low == 0x7f {
+            out.push(b'^');
+            out.push(if low == 0x7f { b'?' } else { low.wrapping_add(b'@') });
+        } else {
+            out.push(b'-');
+            out.push(low);
+        }
+        return out;
+    }
+    vec![b'\\', b'-', c]
+}
+
+pub(crate) fn escapechar_line_parse(value: i32) -> Option<EscapeCharLineParse> {
+    let output_len = if value == SSH_ESCAPECHAR_NONE {
+        "escapechar none\n".len()
+    } else {
+        let byte = u8::try_from(value).ok()?;
+        "escapechar ".len() + vis_white_byte(byte).len() + 1
+    };
+    Some(EscapeCharLineParse {
+        output_len,
+        emit: true,
+    })
+}
+
+pub(crate) fn escapechar_line_write(
+    value: i32,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = escapechar_line_parse(value)?;
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut formatted = Vec::with_capacity(parsed.output_len);
+    formatted.extend_from_slice(b"escapechar ");
+    if value == SSH_ESCAPECHAR_NONE {
+        formatted.extend_from_slice(b"none");
+    } else {
+        formatted.extend_from_slice(&vis_white_byte(u8::try_from(value).ok()?));
+    }
     formatted.push(b'\n');
     out.copy_from_slice(&formatted);
     Some(())
@@ -3193,6 +3267,7 @@ mod tests {
         parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
         parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
         proxyjump_line_parse, proxyjump_line_write,
+        escapechar_line_parse, escapechar_line_write,
         rekeylimit_line_parse, rekeylimit_line_write,
         strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
         ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE,
@@ -3203,6 +3278,7 @@ mod tests {
         FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
         AddKeysToAgentLineParse, AllowedCnameEntry,
         CanonicalizePermittedCnamesLineParse, CfgIntParse, CfgStringParse,
+        EscapeCharLineParse,
         FmtIntArgParse, ForwardFormatParse, IpqosLineParse,
         ListenaddrLineParse, PermitListLineParse, ProxyJumpLineParse,
         RekeyLimitLineParse,
@@ -4409,6 +4485,55 @@ mod tests {
             Some(())
         );
         assert_eq!(&out, b"rekeylimit 1048576 3600\n");
+    }
+
+    #[test]
+    fn escapechar_line_parse_handles_basic_forms() {
+        assert_eq!(
+            escapechar_line_parse(126),
+            Some(EscapeCharLineParse {
+                output_len: "escapechar ~\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            escapechar_line_parse(-2),
+            Some(EscapeCharLineParse {
+                output_len: "escapechar none\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            escapechar_line_parse(9),
+            Some(EscapeCharLineParse {
+                output_len: "escapechar ^I\n".len(),
+                emit: true,
+            })
+        );
+    }
+
+    #[test]
+    fn escapechar_line_write_handles_basic_forms() {
+        let mut out = vec![0u8; "escapechar \\\\\n".len()];
+        assert_eq!(
+            escapechar_line_write(92, out.as_mut_ptr(), out.len()),
+            Some(())
+        );
+        assert_eq!(&out, b"escapechar \\\\\n");
+
+        let mut none_out = vec![0u8; "escapechar none\n".len()];
+        assert_eq!(
+            escapechar_line_write(-2, none_out.as_mut_ptr(), none_out.len()),
+            Some(())
+        );
+        assert_eq!(&none_out, b"escapechar none\n");
+
+        let mut ctrl_out = vec![0u8; "escapechar ^I\n".len()];
+        assert_eq!(
+            escapechar_line_write(9, ctrl_out.as_mut_ptr(), ctrl_out.len()),
+            Some(())
+        );
+        assert_eq!(&ctrl_out, b"escapechar ^I\n");
     }
 
     #[test]

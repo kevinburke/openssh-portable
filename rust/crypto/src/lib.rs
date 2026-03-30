@@ -59,6 +59,7 @@ use util::{
     keyword_lookup, keyword_name,
     permit_list_line_parse, permit_list_line_write,
     proxyjump_line_parse, proxyjump_line_write,
+    escapechar_line_parse, escapechar_line_write,
     rekeylimit_line_parse, rekeylimit_line_write,
     tunneldevice_line_parse, tunneldevice_line_write,
     canonicalize_permitted_cnames_line_parse,
@@ -413,6 +414,12 @@ pub struct RustProxyjumpLineParse {
 
 #[repr(C)]
 pub struct RustRekeyLimitLineParse {
+    output_len: usize,
+    emit: u32,
+}
+
+#[repr(C)]
+pub struct RustEscapeCharLineParse {
     output_len: usize,
     emit: u32,
 }
@@ -1558,6 +1565,41 @@ pub extern "C" fn ossh_rust_rekeylimit_line_write(
     out_len: usize,
 ) -> c_int {
     if rekeylimit_line_write(limit, interval, out, out_len).is_some() {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_escapechar_line_parse(
+    value: c_int,
+    out: *mut RustEscapeCharLineParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match escapechar_line_parse(value) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustEscapeCharLineParse {
+                    output_len: parsed.output_len,
+                    emit: u32::from(parsed.emit),
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_escapechar_line_write(
+    value: c_int,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if escapechar_line_write(value, out, out_len).is_some() {
         0
     } else {
         -1
