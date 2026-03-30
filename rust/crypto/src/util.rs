@@ -211,6 +211,12 @@ pub(crate) struct ControlPersistLineParse {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ConnectTimeoutLineParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct EscapeCharLineParse {
     pub(crate) output_len: usize,
     pub(crate) emit: bool,
@@ -1112,6 +1118,40 @@ pub(crate) fn controlpersist_line_write(
         formatted.extend_from_slice(if value == 0 { b"no" } else { b"yes" });
     } else {
         formatted.extend_from_slice(timeout.to_string().as_bytes());
+    }
+    formatted.push(b'\n');
+    out.copy_from_slice(&formatted);
+    Some(())
+}
+
+pub(crate) fn connecttimeout_line_parse(value: i32) -> Option<ConnectTimeoutLineParse> {
+    if value < -1 {
+        return None;
+    }
+    Some(ConnectTimeoutLineParse {
+        output_len: "connecttimeout ".len()
+            + if value == -1 { "none".len() } else { value.to_string().len() }
+            + 1,
+        emit: true,
+    })
+}
+
+pub(crate) fn connecttimeout_line_write(
+    value: i32,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = connecttimeout_line_parse(value)?;
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut formatted = Vec::with_capacity(parsed.output_len);
+    formatted.extend_from_slice(b"connecttimeout ");
+    if value == -1 {
+        formatted.extend_from_slice(b"none");
+    } else {
+        formatted.extend_from_slice(value.to_string().as_bytes());
     }
     formatted.push(b'\n');
     out.copy_from_slice(&formatted);
@@ -3369,6 +3409,7 @@ mod tests {
         parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
         parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
         proxyjump_line_parse, proxyjump_line_write,
+        connecttimeout_line_parse, connecttimeout_line_write,
         controlpersist_line_parse, controlpersist_line_write,
         escapechar_line_parse, escapechar_line_write,
         rekeylimit_line_parse, rekeylimit_line_write,
@@ -3381,6 +3422,7 @@ mod tests {
         FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
         AddKeysToAgentLineParse, AllowedCnameEntry,
         CanonicalizePermittedCnamesLineParse, CfgIntParse, CfgStringParse,
+        ConnectTimeoutLineParse,
         ControlPersistLineParse,
         EscapeCharLineParse,
         ForwardAgentLineParse,
@@ -4692,6 +4734,42 @@ mod tests {
             Some(())
         );
         assert_eq!(&timeout_out, b"controlpersist 300\n");
+    }
+
+    #[test]
+    fn connecttimeout_line_parse_handles_basic_forms() {
+        assert_eq!(
+            connecttimeout_line_parse(-1),
+            Some(ConnectTimeoutLineParse {
+                output_len: "connecttimeout none\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            connecttimeout_line_parse(30),
+            Some(ConnectTimeoutLineParse {
+                output_len: "connecttimeout 30\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(connecttimeout_line_parse(-2), None);
+    }
+
+    #[test]
+    fn connecttimeout_line_write_handles_basic_forms() {
+        let mut none_out = vec![0u8; "connecttimeout none\n".len()];
+        assert_eq!(
+            connecttimeout_line_write(-1, none_out.as_mut_ptr(), none_out.len()),
+            Some(())
+        );
+        assert_eq!(&none_out, b"connecttimeout none\n");
+
+        let mut num_out = vec![0u8; "connecttimeout 30\n".len()];
+        assert_eq!(
+            connecttimeout_line_write(30, num_out.as_mut_ptr(), num_out.len()),
+            Some(())
+        );
+        assert_eq!(&num_out, b"connecttimeout 30\n");
     }
 
     #[test]
