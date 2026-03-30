@@ -169,8 +169,8 @@ Rust-backed today:
   - `format_listen_addrs()` in `servconf.c`
   - `sshd -T` output for IPv4 and IPv6 listen addresses
   - per-line rendering for `listenaddress ...` output, including bracketed IPv6 formatting
-- client `IPQoS` output formatting used by:
-  - `ssh -G` output for interactive and bulk QoS values
+- shared `IPQoS` output formatting used by:
+  - `ssh -G` / `sshd -T` output for interactive and bulk QoS values
   - canonical DSCP/legacy token rendering and hex fallback for unknown values
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing

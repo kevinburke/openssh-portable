@@ -4521,8 +4521,26 @@ dump_config(ServerOptions *o)
 	}
 	dump_cfg_string(sPermitTunnel, s);
 
+#ifdef WITH_RUST_CRYPTO
+	{
+		struct ossh_rust_ipqos_line_parse parsed;
+		char *buf;
+
+		if (ossh_rust_ipqos_line_parse(o->ip_qos_interactive,
+		    o->ip_qos_bulk, &parsed) != 0)
+			fatal_f("rust ipqos parse failed");
+		buf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_ipqos_line_write(o->ip_qos_interactive,
+		    o->ip_qos_bulk, (u_char *)buf, parsed.output_len) != 0)
+			fatal_f("rust ipqos write failed");
+		buf[parsed.output_len] = '\0';
+		printf("%s", buf);
+		free(buf);
+	}
+#else
 	printf("ipqos %s ", iptos2str(o->ip_qos_interactive));
 	printf("%s\n", iptos2str(o->ip_qos_bulk));
+#endif
 
 	printf("rekeylimit %llu %d\n", (unsigned long long)o->rekey_limit,
 	    o->rekey_interval);
