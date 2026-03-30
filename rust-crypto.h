@@ -128,6 +128,10 @@ struct ossh_rust_proxyjump_line_parse {
 	size_t output_len;
 	uint32_t emit;
 };
+struct ossh_rust_rekeylimit_line_parse {
+	size_t output_len;
+	uint32_t emit;
+};
 #define OSSH_RUST_STRARRAY_EMPTY_SKIP 0U
 #define OSSH_RUST_STRARRAY_EMPTY_NONE 1U
 #define OSSH_RUST_STRARRAY_EMPTY_ANY 2U
@@ -446,6 +450,10 @@ int ossh_rust_proxyjump_line_parse(const char *extra, const char *user,
     const char *host, int port, struct ossh_rust_proxyjump_line_parse *out);
 int ossh_rust_proxyjump_line_write(const char *extra, const char *user,
     const char *host, int port, uint8_t *out, size_t out_len);
+int ossh_rust_rekeylimit_line_parse(uint64_t limit, int interval,
+    struct ossh_rust_rekeylimit_line_parse *out);
+int ossh_rust_rekeylimit_line_write(uint64_t limit, int interval,
+    uint8_t *out, size_t out_len);
 int ossh_rust_keyword_lookup(const uint8_t *input, size_t input_len,
     const struct ossh_rust_keyword_entry *entries, size_t nentries,
     int ignore_case, int *out);
