@@ -9,6 +9,7 @@ mod mac;
 mod openssh_key;
 mod private_pem;
 mod rsa;
+mod sshkey_meta;
 mod util;
 
 use core::ffi::{c_char, c_double, c_int, c_void};
@@ -53,6 +54,12 @@ use rsa::{
     rsa_parse_private_pem_with_passphrase, rsa_parse_public_blob,
     rsa_private_pem_len, rsa_private_pem_write, rsa_sign_prehashed, rsa_verify_prehashed,
 };
+use sshkey_meta::{
+    sshkey_ecdsa_nid_from_name as rust_sshkey_ecdsa_nid_from_name,
+    sshkey_impl_name_from_type_nid as rust_sshkey_impl_name_from_type_nid,
+    sshkey_type_from_name as rust_sshkey_type_from_name,
+    sshkey_type_is_valid_ca as rust_sshkey_type_is_valid_ca, RustSshkeyImpl,
+};
 use util::{
     a2port, add_keys_to_agent_line_parse, add_keys_to_agent_line_write,
     argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
@@ -82,7 +89,7 @@ use util::{
     OPT_DEQUOTE_MISSING_START,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 47;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 48;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -151,6 +158,7 @@ pub struct RustCertBodyParse {
 pub type RustMultistateEntry = MultistateEntry;
 pub type RustKeywordEntry = KeywordEntry;
 pub type RustExpandEntry = ExpandEntry;
+pub type RustSshkeyImplEntry = RustSshkeyImpl;
 
 #[repr(C)]
 pub struct RustPrivate2HeaderParse {
@@ -1647,6 +1655,95 @@ pub extern "C" fn ossh_rust_keyword_name(
         Some(index) => {
             unsafe {
                 *out_index = index;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_type_from_name(
+    input: *const u8,
+    input_len: usize,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    allow_short: c_int,
+    out: *mut c_int,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match rust_sshkey_type_from_name(input, input_len, entries, nentries, allow_short != 0) {
+        Some(parsed) => {
+            unsafe {
+                *out = parsed;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_impl_name_from_type_nid(
+    type_: c_int,
+    nid: c_int,
+    want_short: c_int,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    out: *mut *const c_char,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match rust_sshkey_impl_name_from_type_nid(type_, nid, want_short != 0, entries, nentries) {
+        Some(parsed) => {
+            unsafe {
+                *out = parsed;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_ecdsa_nid_from_name(
+    input: *const u8,
+    input_len: usize,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    out: *mut c_int,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match rust_sshkey_ecdsa_nid_from_name(input, input_len, entries, nentries) {
+        Some(parsed) => {
+            unsafe {
+                *out = parsed;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_type_is_valid_ca(
+    type_: c_int,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    out: *mut c_int,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match rust_sshkey_type_is_valid_ca(type_, entries, nentries) {
+        Some(parsed) => {
+            unsafe {
+                *out = c_int::from(parsed);
             }
             0
         }

@@ -165,7 +165,7 @@ case "$config" in
 rust-crypto)
 	cargo test --manifest-path rust/crypto/Cargo.toml
 	cargo build --manifest-path rust/crypto/fuzz/Cargo.toml
-	for target in ed25519_verify ecdh_peer dh_peer ecdsa_parse rsa_parse chachapoly_decrypt config_helpers packet_mac; do
+	for target in ed25519_verify ecdh_peer dh_peer ecdsa_parse rsa_parse chachapoly_decrypt config_helpers packet_mac sshkey_metadata; do
 		cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin "$target" -- -runs=1
 	done
 	;;
