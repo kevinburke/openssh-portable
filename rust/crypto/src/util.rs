@@ -132,6 +132,12 @@ pub(crate) struct StrarrayLinesParse {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CfgStringParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StrdelimParse {
     pub(crate) next_offset: usize,
     pub(crate) next_is_null: u32,
@@ -727,6 +733,65 @@ pub(crate) fn strarray_lines_write(
         out[pos] = b'\n';
         pos += 1;
     }
+    Some(())
+}
+
+fn cfg_string_empty_bytes(empty_mode: u32) -> Option<&'static [u8]> {
+    match empty_mode {
+        0 => Some(b""),
+        1 => Some(b"none"),
+        _ => None,
+    }
+}
+
+pub(crate) fn cfg_string_parse(
+    prefix: *const c_char,
+    value: *const c_char,
+    empty_mode: u32,
+) -> Option<CfgStringParse> {
+    let prefix = read_cstr_bytes(prefix)?;
+    let value = if value.is_null() {
+        cfg_string_empty_bytes(empty_mode)?
+    } else {
+        read_cstr_bytes(value)?
+    };
+    if value.is_empty() {
+        return Some(CfgStringParse {
+            output_len: 0,
+            emit: false,
+        });
+    }
+    Some(CfgStringParse {
+        output_len: prefix.len() + 1 + value.len() + 1,
+        emit: true,
+    })
+}
+
+pub(crate) fn cfg_string_write(
+    prefix: *const c_char,
+    value: *const c_char,
+    empty_mode: u32,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = cfg_string_parse(prefix, value, empty_mode)?;
+    if !parsed.emit {
+        return if out_len == 0 { Some(()) } else { None };
+    }
+    let prefix = read_cstr_bytes(prefix)?;
+    let value = if value.is_null() {
+        cfg_string_empty_bytes(empty_mode)?
+    } else {
+        read_cstr_bytes(value)?
+    };
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    out[..prefix.len()].copy_from_slice(prefix);
+    out[prefix.len()] = b' ';
+    out[prefix.len() + 1..prefix.len() + 1 + value.len()].copy_from_slice(value);
+    out[prefix.len() + 1 + value.len()] = b'\n';
     Some(())
 }
 
@@ -2532,7 +2597,8 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 #[cfg(test)]
 mod tests {
     use super::{
-        a2port, atoi_err, argv_split_parse, argv_split_write, host_hash_write,
+        a2port, atoi_err, argv_split_parse, argv_split_write, cfg_string_parse,
+        cfg_string_write, host_hash_write,
         fmt_intarg_parse, forward_format_parse, forward_format_write,
         hpdelim2_parse_in_place, keyword_lookup, keyword_name,
         lookup_env_in_list_parse,
@@ -2549,7 +2615,7 @@ mod tests {
         FMT_INTARG_DIGEST, FMT_INTARG_LITERAL_MD5, FMT_INTARG_LITERAL_MULTISTATE,
         FMT_INTARG_LITERAL_NO, FMT_INTARG_LITERAL_UNSET, FMT_INTARG_LITERAL_UNKNOWN,
         FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
-        FmtIntArgParse, ForwardFormatParse,
+        CfgStringParse, FmtIntArgParse, ForwardFormatParse,
         StrarrayLinesParse, StrarrayOnelineParse, strarray_lines_parse,
         strarray_lines_write, strarray_oneline_parse, strarray_oneline_write,
         ExpandEntry, expand_parse, expand_write,
@@ -3520,6 +3586,65 @@ mod tests {
         assert_eq!(&out, b"userknownhostsfile one\nuserknownhostsfile two\n");
         assert_eq!(
             strarray_lines_write(prefix.as_ptr(), core::ptr::null(), 0, core::ptr::null_mut(), 0),
+            Some(())
+        );
+    }
+
+    #[test]
+    fn cfg_string_parse_handles_basic_forms() {
+        let prefix = CString::new("hostname").unwrap();
+        let value = CString::new("example.com").unwrap();
+
+        assert_eq!(
+            cfg_string_parse(prefix.as_ptr(), value.as_ptr(), 0),
+            Some(CfgStringParse {
+                output_len: "hostname example.com\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            cfg_string_parse(prefix.as_ptr(), core::ptr::null(), 0),
+            Some(CfgStringParse {
+                output_len: 0,
+                emit: false,
+            })
+        );
+        assert_eq!(
+            cfg_string_parse(prefix.as_ptr(), core::ptr::null(), 1),
+            Some(CfgStringParse {
+                output_len: "hostname none\n".len(),
+                emit: true,
+            })
+        );
+    }
+
+    #[test]
+    fn cfg_string_write_handles_basic_forms() {
+        let prefix = CString::new("hostname").unwrap();
+        let value = CString::new("example.com").unwrap();
+        let mut out = vec![0u8; "hostname example.com\n".len()];
+
+        assert_eq!(
+            cfg_string_write(prefix.as_ptr(), value.as_ptr(), 0, out.as_mut_ptr(), out.len()),
+            Some(())
+        );
+        assert_eq!(&out, b"hostname example.com\n");
+
+        let mut none_out = vec![0u8; "hostname none\n".len()];
+        assert_eq!(
+            cfg_string_write(
+                prefix.as_ptr(),
+                core::ptr::null(),
+                1,
+                none_out.as_mut_ptr(),
+                none_out.len()
+            ),
+            Some(())
+        );
+        assert_eq!(&none_out, b"hostname none\n");
+
+        assert_eq!(
+            cfg_string_write(prefix.as_ptr(), core::ptr::null(), 0, core::ptr::null_mut(), 0),
             Some(())
         );
     }

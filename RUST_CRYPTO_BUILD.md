@@ -131,10 +131,9 @@ Rust-backed today:
   - `servconf.c` option-name parsing before per-option semantics
   - `sshd -T` and normal server config loading
   - case-insensitive keyword matching with existing flag selection preserved
-- shared config keyword reverse lookup used by:
+- client config keyword reverse lookup used by:
   - `lookup_opcode_name()` in `readconf.c`
-  - `lookup_opcode_name()` in `servconf.c`
-  - `ssh -G` / `sshd -T` style option-name formatting
+  - `ssh -G` style option-name formatting
 - shared config integer formatting used by:
   - `fmt_intarg()` in `readconf.c`
   - `fmt_intarg()` in `servconf.c`
@@ -158,6 +157,10 @@ Rust-backed today:
   - `ssh -G` / `sshd -T` output for repeated list-valued options like
     `HostKeyFile`, `IdentityFile`, `AllowUsers`, and `SetEnv`
   - repeated `keyword value` line rendering for client and server config dumps
+- shared scalar config string formatting used by:
+  - `dump_cfg_string()` in `readconf.c` / `servconf.c`
+  - `ssh -G` output for single-value string options
+  - `sshd -T` output for single-value string options with `none` fallback
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers

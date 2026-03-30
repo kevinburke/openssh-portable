@@ -86,9 +86,15 @@ struct ossh_rust_strarray_lines_parse {
 	size_t output_len;
 	uint32_t emit;
 };
+struct ossh_rust_cfg_string_parse {
+	size_t output_len;
+	uint32_t emit;
+};
 #define OSSH_RUST_STRARRAY_EMPTY_SKIP 0U
 #define OSSH_RUST_STRARRAY_EMPTY_NONE 1U
 #define OSSH_RUST_STRARRAY_EMPTY_ANY 2U
+#define OSSH_RUST_CFG_STRING_EMPTY_SKIP 0U
+#define OSSH_RUST_CFG_STRING_EMPTY_NONE 1U
 #define OSSH_RUST_EXPAND_ENABLE_DOLLAR 1U
 #define OSSH_RUST_EXPAND_ENABLE_PERCENT 2U
 #define OSSH_RUST_PRIVATE2_KDF_NONE 0
@@ -358,6 +364,10 @@ int ossh_rust_strarray_lines_parse(const char *prefix,
     struct ossh_rust_strarray_lines_parse *out);
 int ossh_rust_strarray_lines_write(const char *prefix,
     const char * const *vals, size_t nvals, uint8_t *out, size_t out_len);
+int ossh_rust_cfg_string_parse(const char *prefix, const char *value,
+    uint32_t empty_mode, struct ossh_rust_cfg_string_parse *out);
+int ossh_rust_cfg_string_write(const char *prefix, const char *value,
+    uint32_t empty_mode, uint8_t *out, size_t out_len);
 int ossh_rust_keyword_lookup(const uint8_t *input, size_t input_len,
     const struct ossh_rust_keyword_entry *entries, size_t nentries,
     int ignore_case, int *out);
