@@ -24,7 +24,17 @@
 
 #include "digest.h"
 #include "hmac.h"
+#include "sshbuf.h"
+#ifdef WITH_RUST_CRYPTO
+#include "rust-crypto.h"
+#endif
 
+#ifdef WITH_RUST_CRYPTO
+struct ssh_hmac_ctx {
+	int	alg;
+	void	*rust;
+};
+#else
 struct ssh_hmac_ctx {
 	int			 alg;
 	struct ssh_digest_ctx	*ictx;
@@ -33,6 +43,7 @@ struct ssh_hmac_ctx {
 	u_char			*buf;
 	size_t			 buf_len;
 };
+#endif
 
 size_t
 ssh_hmac_bytes(int alg)
@@ -43,6 +54,18 @@ ssh_hmac_bytes(int alg)
 struct ssh_hmac_ctx *
 ssh_hmac_start(int alg)
 {
+#ifdef WITH_RUST_CRYPTO
+	struct ssh_hmac_ctx	*ret;
+
+	if ((ret = calloc(1, sizeof(*ret))) == NULL)
+		return NULL;
+	ret->alg = alg;
+	if ((ret->rust = ossh_rust_hmac_start(alg)) == NULL) {
+		freezero(ret, sizeof(*ret));
+		return NULL;
+	}
+	return ret;
+#else
 	struct ssh_hmac_ctx	*ret;
 
 	if ((ret = calloc(1, sizeof(*ret))) == NULL)
@@ -59,11 +82,15 @@ ssh_hmac_start(int alg)
 fail:
 	ssh_hmac_free(ret);
 	return NULL;
+#endif
 }
 
 int
 ssh_hmac_init(struct ssh_hmac_ctx *ctx, const void *key, size_t klen)
 {
+#ifdef WITH_RUST_CRYPTO
+	return ossh_rust_hmac_init(ctx->rust, key, klen) == 0 ? 0 : -1;
+#else
 	size_t i;
 
 	/* reset ictx and octx if no is key given */
@@ -88,23 +115,31 @@ ssh_hmac_init(struct ssh_hmac_ctx *ctx, const void *key, size_t klen)
 	if (ssh_digest_copy_state(ctx->ictx, ctx->digest) < 0)
 		return -1;
 	return 0;
+#endif
 }
 
 int
 ssh_hmac_update(struct ssh_hmac_ctx *ctx, const void *m, size_t mlen)
 {
+#ifdef WITH_RUST_CRYPTO
+	return ossh_rust_hmac_update(ctx->rust, m, mlen) == 0 ? 0 : -1;
+#else
 	return ssh_digest_update(ctx->digest, m, mlen);
+#endif
 }
 
 int
 ssh_hmac_update_buffer(struct ssh_hmac_ctx *ctx, const struct sshbuf *b)
 {
-	return ssh_digest_update_buffer(ctx->digest, b);
+	return ssh_hmac_update(ctx, sshbuf_ptr(b), sshbuf_len(b));
 }
 
 int
 ssh_hmac_final(struct ssh_hmac_ctx *ctx, u_char *d, size_t dlen)
 {
+#ifdef WITH_RUST_CRYPTO
+	return ossh_rust_hmac_final(ctx->rust, d, dlen) == 0 ? 0 : -1;
+#else
 	size_t len;
 
 	len = ssh_digest_bytes(ctx->alg);
@@ -117,12 +152,16 @@ ssh_hmac_final(struct ssh_hmac_ctx *ctx, u_char *d, size_t dlen)
 	    ssh_digest_final(ctx->digest, d, dlen) < 0)
 		return -1;
 	return 0;
+#endif
 }
 
 void
 ssh_hmac_free(struct ssh_hmac_ctx *ctx)
 {
 	if (ctx != NULL) {
+#ifdef WITH_RUST_CRYPTO
+		ossh_rust_hmac_free(ctx->rust);
+#else
 		ssh_digest_free(ctx->ictx);
 		ssh_digest_free(ctx->octx);
 		ssh_digest_free(ctx->digest);
@@ -130,6 +169,7 @@ ssh_hmac_free(struct ssh_hmac_ctx *ctx)
 			explicit_bzero(ctx->buf, ctx->buf_len);
 			free(ctx->buf);
 		}
+#endif
 		freezero(ctx, sizeof(*ctx));
 	}
 }
