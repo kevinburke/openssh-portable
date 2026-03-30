@@ -4285,6 +4285,25 @@ dump_client_config(Options *o, const char *host)
 #endif
 
 	/* oCanonicalizePermittedCNAMEs */
+#ifdef WITH_RUST_CRYPTO
+	{
+		const struct ossh_rust_allowed_cname_entry *entries =
+		    (const struct ossh_rust_allowed_cname_entry *)o->permitted_cnames;
+		struct ossh_rust_canonicalize_permitted_cnames_line_parse parsed;
+		char *buf;
+
+		if (ossh_rust_canonicalize_permitted_cnames_line_parse(entries,
+		    o->num_permitted_cnames, &parsed) != 0)
+			fatal_f("rust canonicalizePermittedCNAMEs parse failed");
+		buf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_canonicalize_permitted_cnames_line_write(entries,
+		    o->num_permitted_cnames, (u_char *)buf, parsed.output_len) != 0)
+			fatal_f("rust canonicalizePermittedCNAMEs write failed");
+		buf[parsed.output_len] = '\0';
+		printf("%s", buf);
+		free(buf);
+	}
+#else
 	printf("canonicalizePermittedcnames");
 	if (o->num_permitted_cnames == 0)
 		printf(" none");
@@ -4293,6 +4312,7 @@ dump_client_config(Options *o, const char *host)
 		    o->permitted_cnames[i].target_list);
 	}
 	printf("\n");
+#endif
 
 	/* oControlPersist */
 	if (o->control_persist == 0 || o->control_persist_timeout == 0)

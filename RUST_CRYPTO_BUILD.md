@@ -181,6 +181,9 @@ Rust-backed today:
   - `any` / numeric tunnel endpoint rendering
 - client `AddKeysToAgent` output formatting used by:
   - `addkeystoagent confirm <seconds>` lines in `ssh -G`
+- client `CanonicalizePermittedCNAMEs` output formatting used by:
+  - `canonicalizePermittedcnames source:target ...` lines in `ssh -G`
+  - `none` output when the list is empty
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers

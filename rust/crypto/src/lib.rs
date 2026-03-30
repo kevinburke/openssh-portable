@@ -59,6 +59,8 @@ use util::{
     keyword_lookup, keyword_name,
     permit_list_line_parse, permit_list_line_write,
     tunneldevice_line_parse, tunneldevice_line_write,
+    canonicalize_permitted_cnames_line_parse,
+    canonicalize_permitted_cnames_line_write,
     lookup_env_in_list_parse, lookup_setenv_in_list_parse, multistate_lookup,
     multistate_name, opt_dequote_parse, opt_dequote_write, opt_flag_parse,
     opt_match_parse, parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
@@ -67,7 +69,7 @@ use util::{
     strarray_oneline_write, strdelim_parse_in_place,
     valid_domain, valid_env_name, validate_permit, write_prefix, ATOI_STATUS_INVALID,
     ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL,
-    DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
+    AllowedCnameEntry, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
     DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID, DOLLAR_EXPAND_INVALID,
     ExpandEntry, KeywordEntry, MultistateEntry, OPT_DEQUOTE_MISSING_END,
     OPT_DEQUOTE_MISSING_START,
@@ -385,6 +387,18 @@ pub struct RustTunneldeviceLineParse {
 
 #[repr(C)]
 pub struct RustAddKeysToAgentLineParse {
+    output_len: usize,
+    emit: u32,
+}
+
+#[repr(C)]
+pub struct RustAllowedCnameEntry {
+    source_list: *const c_char,
+    target_list: *const c_char,
+}
+
+#[repr(C)]
+pub struct RustCanonicalizePermittedCnamesLineParse {
     output_len: usize,
     emit: u32,
 }
@@ -1408,6 +1422,50 @@ pub extern "C" fn ossh_rust_add_keys_to_agent_line_write(
     out_len: usize,
 ) -> c_int {
     if add_keys_to_agent_line_write(mode, lifespan, out, out_len).is_some() {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_canonicalize_permitted_cnames_line_parse(
+    entries: *const RustAllowedCnameEntry,
+    nentries: usize,
+    out: *mut RustCanonicalizePermittedCnamesLineParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match canonicalize_permitted_cnames_line_parse(entries.cast::<AllowedCnameEntry>(), nentries) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustCanonicalizePermittedCnamesLineParse {
+                    output_len: parsed.output_len,
+                    emit: u32::from(parsed.emit),
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_canonicalize_permitted_cnames_line_write(
+    entries: *const RustAllowedCnameEntry,
+    nentries: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if canonicalize_permitted_cnames_line_write(
+        entries.cast::<AllowedCnameEntry>(),
+        nentries,
+        out,
+        out_len,
+    )
+    .is_some()
+    {
         0
     } else {
         -1
