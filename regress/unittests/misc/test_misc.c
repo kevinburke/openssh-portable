@@ -15,11 +15,42 @@
 
 #include "../test_helper/test_helper.h"
 
+#include "digest.h"
 #include "log.h"
+#include "mac.h"
 #include "misc.h"
+#include "ssherr.h"
 #include "xmalloc.h"
 
 void test_misc(void);
+
+static void
+test_packet_mac(void)
+{
+	struct sshmac mac;
+	u_char key[20], digest[SSH_DIGEST_MAX_LENGTH];
+	const u_char data[] = "packet payload";
+	u_char corrupted[sizeof(data)];
+
+	memset(&mac, 0, sizeof(mac));
+	memset(key, 0x0b, sizeof(key));
+	memcpy(corrupted, data, sizeof(data));
+
+	TEST_START("packet mac detects payload corruption");
+	ASSERT_INT_EQ(mac_setup(&mac, "hmac-sha1"), 0);
+	mac.key = key;
+	mac.key_len = sizeof(key);
+	ASSERT_INT_EQ(mac_init(&mac), 0);
+	ASSERT_INT_EQ(mac_compute(&mac, 7, data, sizeof(data) - 1,
+	    digest, sizeof(digest)), 0);
+	ASSERT_INT_EQ(mac_check(&mac, 7, data, sizeof(data) - 1,
+	    digest, mac.mac_len), 0);
+	corrupted[0] ^= 1;
+	ASSERT_INT_EQ(mac_check(&mac, 7, corrupted, sizeof(corrupted) - 1,
+	    digest, mac.mac_len), SSH_ERR_MAC_INVALID);
+	mac_clear(&mac);
+	TEST_DONE();
+}
 
 static void
 test_chop(void)
@@ -798,6 +829,7 @@ test_parse_pattern_interval(void)
 void
 test_misc(void)
 {
+	test_packet_mac();
 	test_chop();
 	test_rtrim();
 	test_strprefix();
