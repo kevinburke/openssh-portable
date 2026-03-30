@@ -184,6 +184,9 @@ Rust-backed today:
 - client `CanonicalizePermittedCNAMEs` output formatting used by:
   - `canonicalizePermittedcnames source:target ...` lines in `ssh -G`
   - `none` output when the list is empty
+- client `ProxyJump` output formatting used by:
+  - `proxyjump ...` lines in `ssh -G`
+  - bracketed numeric jump-host rendering and preserved extra jump-chain prefixes
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers

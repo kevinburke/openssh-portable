@@ -4073,7 +4073,7 @@ dump_cfg_forwards(OpCodes code, u_int count, const struct Forward *fwds)
 void
 dump_client_config(Options *o, const char *host)
 {
-	int i, r;
+	int r;
 	char buf[8], *all_key;
 
 	/*
@@ -4314,6 +4314,8 @@ dump_client_config(Options *o, const char *host)
 		free(buf);
 	}
 #else
+	int i;
+
 	printf("canonicalizepermittedcnames");
 	if (o->num_permitted_cnames == 0)
 		printf(" none");
@@ -4375,8 +4377,26 @@ dump_client_config(Options *o, const char *host)
 	if (o->jump_host == NULL)
 		dump_cfg_string(oProxyCommand, o->proxy_command);
 	else {
+#ifdef WITH_RUST_CRYPTO
+		struct ossh_rust_proxyjump_line_parse parsed;
+		char *outbuf;
+
+		if (ossh_rust_proxyjump_line_parse(o->jump_extra,
+		    o->jump_user, o->jump_host, o->jump_port, &parsed) != 0)
+			fatal_f("rust proxyjump parse failed");
+		outbuf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_proxyjump_line_write(o->jump_extra,
+		    o->jump_user, o->jump_host, o->jump_port,
+		    (u_char *)outbuf, parsed.output_len) != 0)
+			fatal_f("rust proxyjump write failed");
+		outbuf[parsed.output_len] = '\0';
+		printf("%s", outbuf);
+		free(outbuf);
+#else
+	int is_numeric;
+
 		/* Check for numeric addresses */
-		i = strchr(o->jump_host, ':') != NULL ||
+		is_numeric = strchr(o->jump_host, ':') != NULL ||
 		    strspn(o->jump_host, "1234567890.") == strlen(o->jump_host);
 		snprintf(buf, sizeof(buf), "%d", o->jump_port);
 		printf("proxyjump %s%s%s%s%s%s%s%s%s\n",
@@ -4387,13 +4407,14 @@ dump_client_config(Options *o, const char *host)
 		    o->jump_user == NULL ? "" : o->jump_user,
 		    o->jump_user == NULL ? "" : "@",
 		    /* opening [ if hostname is numeric */
-		    i ? "[" : "",
+		    is_numeric ? "[" : "",
 		    /* mandatory hostname */
 		    o->jump_host,
 		    /* closing ] if hostname is numeric */
-		    i ? "]" : "",
+		    is_numeric ? "]" : "",
 		    /* optional port number */
 		    o->jump_port <= 0 ? "" : ":",
 		    o->jump_port <= 0 ? "" : buf);
+#endif
 	}
 }

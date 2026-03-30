@@ -186,6 +186,12 @@ pub(crate) struct CanonicalizePermittedCnamesLineParse {
     pub(crate) emit: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ProxyJumpLineParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
 const SSH_KEYSTROKE_DEFAULT_INTERVAL_MS: i32 = 20;
 const SSH_TUNID_ANY: i32 = 0x7fffffff;
 
@@ -872,6 +878,98 @@ pub(crate) fn canonicalize_permitted_cnames_line_write(
         formatted.extend_from_slice(read_cstr_bytes(entry.source_list)?);
         formatted.push(b':');
         formatted.extend_from_slice(read_cstr_bytes(entry.target_list)?);
+    }
+    formatted.push(b'\n');
+    out.copy_from_slice(&formatted);
+    Some(())
+}
+
+fn is_numeric_jump_host(host: &[u8]) -> bool {
+    host.contains(&b':') || host.iter().all(|b| b.is_ascii_digit() || *b == b'.')
+}
+
+pub(crate) fn proxyjump_line_parse(
+    extra: *const c_char,
+    user: *const c_char,
+    host: *const c_char,
+    port: i32,
+) -> Option<ProxyJumpLineParse> {
+    let host = read_cstr_bytes(host)?;
+    let extra = if extra.is_null() {
+        None
+    } else {
+        Some(read_cstr_bytes(extra)?)
+    };
+    let user = if user.is_null() {
+        None
+    } else {
+        Some(read_cstr_bytes(user)?)
+    };
+    let bracket = is_numeric_jump_host(host);
+    let mut len = "proxyjump ".len() + host.len() + 1;
+    if bracket {
+        len += 2;
+    }
+    if let Some(extra) = extra {
+        len += extra.len() + 1;
+    }
+    if let Some(user) = user {
+        len += user.len() + 1;
+    }
+    if port > 0 {
+        len += 1 + port.to_string().len();
+    }
+    Some(ProxyJumpLineParse {
+        output_len: len,
+        emit: true,
+    })
+}
+
+pub(crate) fn proxyjump_line_write(
+    extra: *const c_char,
+    user: *const c_char,
+    host: *const c_char,
+    port: i32,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = proxyjump_line_parse(extra, user, host, port)?;
+    let host = read_cstr_bytes(host)?;
+    let extra = if extra.is_null() {
+        None
+    } else {
+        Some(read_cstr_bytes(extra)?)
+    };
+    let user = if user.is_null() {
+        None
+    } else {
+        Some(read_cstr_bytes(user)?)
+    };
+    let bracket = is_numeric_jump_host(host);
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut formatted = Vec::with_capacity(parsed.output_len);
+    formatted.extend_from_slice(b"proxyjump ");
+    if let Some(extra) = extra {
+        formatted.extend_from_slice(extra);
+        formatted.push(b',');
+    }
+    if let Some(user) = user {
+        formatted.extend_from_slice(user);
+        formatted.push(b'@');
+    }
+    if bracket {
+        formatted.push(b'[');
+    }
+    formatted.extend_from_slice(host);
+    if bracket {
+        formatted.push(b']');
+    }
+    if port > 0 {
+        formatted.push(b':');
+        formatted.extend_from_slice(port.to_string().as_bytes());
     }
     formatted.push(b'\n');
     out.copy_from_slice(&formatted);
@@ -3060,6 +3158,7 @@ mod tests {
         parse_absolute_time, parse_convtime_double, parse_forward_field_in_place,
         parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
         parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
+        proxyjump_line_parse, proxyjump_line_write,
         strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
         ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE,
         ATOI_STATUS_TOO_SMALL, DollarExpandParse, DOLLAR_EXPAND_INVALID,
@@ -3070,7 +3169,8 @@ mod tests {
         AddKeysToAgentLineParse, AllowedCnameEntry,
         CanonicalizePermittedCnamesLineParse, CfgIntParse, CfgStringParse,
         FmtIntArgParse, ForwardFormatParse, IpqosLineParse,
-        ListenaddrLineParse, PermitListLineParse, TunnelDeviceLineParse,
+        ListenaddrLineParse, PermitListLineParse, ProxyJumpLineParse,
+        TunnelDeviceLineParse,
         StrarrayLinesParse, StrarrayOnelineParse, strarray_lines_parse,
         strarray_lines_write, strarray_oneline_parse, strarray_oneline_write,
         permit_list_line_parse, permit_list_line_write,
@@ -4194,6 +4294,64 @@ mod tests {
             Some(())
         );
         assert_eq!(&none_out, b"canonicalizePermittedcnames none\n");
+    }
+
+    #[test]
+    fn proxyjump_line_parse_handles_basic_forms() {
+        let extra = CString::new("jumpa").unwrap();
+        let user = CString::new("alice").unwrap();
+        let host = CString::new("127.0.0.1").unwrap();
+        assert_eq!(
+            proxyjump_line_parse(extra.as_ptr(), user.as_ptr(), host.as_ptr(), 2222),
+            Some(ProxyJumpLineParse {
+                output_len: "proxyjump jumpa,alice@[127.0.0.1]:2222\n".len(),
+                emit: true,
+            })
+        );
+
+        let host = CString::new("jumpb").unwrap();
+        assert_eq!(
+            proxyjump_line_parse(core::ptr::null(), core::ptr::null(), host.as_ptr(), -1),
+            Some(ProxyJumpLineParse {
+                output_len: "proxyjump jumpb\n".len(),
+                emit: true,
+            })
+        );
+    }
+
+    #[test]
+    fn proxyjump_line_write_handles_basic_forms() {
+        let extra = CString::new("jumpa").unwrap();
+        let user = CString::new("alice").unwrap();
+        let host = CString::new("127.0.0.1").unwrap();
+        let mut out = vec![0u8; "proxyjump jumpa,alice@[127.0.0.1]:2222\n".len()];
+        assert_eq!(
+            proxyjump_line_write(
+                extra.as_ptr(),
+                user.as_ptr(),
+                host.as_ptr(),
+                2222,
+                out.as_mut_ptr(),
+                out.len()
+            ),
+            Some(())
+        );
+        assert_eq!(&out, b"proxyjump jumpa,alice@[127.0.0.1]:2222\n");
+
+        let host = CString::new("jumpb").unwrap();
+        let mut plain = vec![0u8; "proxyjump jumpb\n".len()];
+        assert_eq!(
+            proxyjump_line_write(
+                core::ptr::null(),
+                core::ptr::null(),
+                host.as_ptr(),
+                -1,
+                plain.as_mut_ptr(),
+                plain.len()
+            ),
+            Some(())
+        );
+        assert_eq!(&plain, b"proxyjump jumpb\n");
     }
 
     #[test]
