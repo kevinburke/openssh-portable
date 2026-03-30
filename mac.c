@@ -236,19 +236,6 @@ mac_check(struct sshmac *mac, uint32_t seqno,
 
 	if (mac->mac_len > mlen)
 		return SSH_ERR_INVALID_ARGUMENT;
-#ifdef WITH_RUST_CRYPTO
-	if (mac->type == SSH_DIGEST) {
-		if (mac->rust_ctx == NULL)
-			return SSH_ERR_INVALID_ARGUMENT;
-		r = ossh_rust_mac_check(mac->rust_ctx, seqno, data, dlen,
-		    theirmac, mlen);
-		if (r == 0)
-			return 0;
-		if (r > 0)
-			return SSH_ERR_MAC_INVALID;
-		return SSH_ERR_LIBCRYPTO_ERROR;
-	}
-#endif
 	if ((r = mac_compute(mac, seqno, data, dlen,
 	    ourmac, sizeof(ourmac))) != 0)
 		return r;
