@@ -4410,7 +4410,7 @@ dump_client_config(Options *o, const char *host)
 #endif
 
 	/* oLogFacility */
-	printf("syslogfacility %s\n", log_facility_name(o->log_facility));
+	dump_cfg_string(oLogFacility, log_facility_name(o->log_facility));
 
 	/* oProxyCommand / oProxyJump */
 	if (o->jump_host == NULL)
