@@ -67,22 +67,22 @@ static const struct ssh_digest digests[SSH_DIGEST_MAX] = {
 		"MD5",
 		MD5_BLOCK_LENGTH,
 		MD5_DIGEST_LENGTH,
-		SSH_DIGEST_BACKEND_LIBC,
-		sizeof(MD5_CTX),
-		(md_init_fn *)MD5Init,
-		(md_update_fn *)MD5Update,
-		(md_final_fn *)MD5Final
+		SSH_DIGEST_BACKEND_RUST,
+		0,
+		NULL,
+		NULL,
+		NULL
 	},
 	{
 		SSH_DIGEST_SHA1,
 		"SHA1",
 		SHA1_BLOCK_LENGTH,
 		SHA1_DIGEST_LENGTH,
-		SSH_DIGEST_BACKEND_LIBC,
-		sizeof(SHA1_CTX),
-		(md_init_fn *)SHA1Init,
-		(md_update_fn *)SHA1Update,
-		(md_final_fn *)SHA1Final
+		SSH_DIGEST_BACKEND_RUST,
+		0,
+		NULL,
+		NULL,
+		NULL
 	},
 	{
 		SSH_DIGEST_SHA256,
