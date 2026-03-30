@@ -58,6 +58,7 @@ use util::{
     fmt_intarg_parse, forward_format_parse, forward_format_write,
     keyword_lookup, keyword_name,
     permit_list_line_parse, permit_list_line_write,
+    proxyjump_line_parse, proxyjump_line_write,
     tunneldevice_line_parse, tunneldevice_line_write,
     canonicalize_permitted_cnames_line_parse,
     canonicalize_permitted_cnames_line_write,
@@ -399,6 +400,12 @@ pub struct RustAllowedCnameEntry {
 
 #[repr(C)]
 pub struct RustCanonicalizePermittedCnamesLineParse {
+    output_len: usize,
+    emit: u32,
+}
+
+#[repr(C)]
+pub struct RustProxyjumpLineParse {
     output_len: usize,
     emit: u32,
 }
@@ -1466,6 +1473,47 @@ pub extern "C" fn ossh_rust_canonicalize_permitted_cnames_line_write(
     )
     .is_some()
     {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_proxyjump_line_parse(
+    extra: *const c_char,
+    user: *const c_char,
+    host: *const c_char,
+    port: c_int,
+    out: *mut RustProxyjumpLineParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match proxyjump_line_parse(extra, user, host, port) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustProxyjumpLineParse {
+                    output_len: parsed.output_len,
+                    emit: u32::from(parsed.emit),
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_proxyjump_line_write(
+    extra: *const c_char,
+    user: *const c_char,
+    host: *const c_char,
+    port: c_int,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if proxyjump_line_write(extra, user, host, port, out, out_len).is_some() {
         0
     } else {
         -1
