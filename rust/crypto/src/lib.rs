@@ -52,7 +52,8 @@ use rsa::{
 use util::{
     a2port, argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
     atoi_err, cfg_int_parse, cfg_int_write, cfg_string_parse, cfg_string_write, dollar_expand_parse,
-    dollar_expand_write, expand_parse, expand_write,
+    dollar_expand_write, expand_parse, expand_write, listenaddr_line_parse,
+    listenaddr_line_write,
     fmt_intarg_parse, forward_format_parse, forward_format_write,
     keyword_lookup, keyword_name,
     lookup_env_in_list_parse, lookup_setenv_in_list_parse, multistate_lookup,
@@ -351,6 +352,12 @@ pub struct RustCfgStringParse {
 
 #[repr(C)]
 pub struct RustCfgIntParse {
+    output_len: usize,
+    emit: u32,
+}
+
+#[repr(C)]
+pub struct RustListenaddrLineParse {
     output_len: usize,
     emit: u32,
 }
@@ -1183,6 +1190,47 @@ pub extern "C" fn ossh_rust_cfg_int_write(
     out_len: usize,
 ) -> c_int {
     if cfg_int_write(prefix, value, mode, out, out_len).is_some() {
+        0
+    } else {
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_listenaddr_line_parse(
+    addr: *const c_char,
+    port: *const c_char,
+    rdomain: *const c_char,
+    is_ipv6: u32,
+    out: *mut RustListenaddrLineParse,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match listenaddr_line_parse(addr, port, rdomain, is_ipv6 != 0) {
+        Some(parsed) => {
+            unsafe {
+                *out = RustListenaddrLineParse {
+                    output_len: parsed.output_len,
+                    emit: u32::from(parsed.emit),
+                };
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_listenaddr_line_write(
+    addr: *const c_char,
+    port: *const c_char,
+    rdomain: *const c_char,
+    is_ipv6: u32,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if listenaddr_line_write(addr, port, rdomain, is_ipv6 != 0, out, out_len).is_some() {
         0
     } else {
         -1
