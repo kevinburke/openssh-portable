@@ -63,5 +63,12 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "packet_mac"
+path = "fuzz_targets/packet_mac.rs"
+test = false
+doc = false
+bench = false
+
 [workspace]
 members = ["."]
