@@ -167,6 +167,12 @@ pub(crate) struct TunnelDeviceLineParse {
     pub(crate) emit: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct AddKeysToAgentLineParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
 const SSH_KEYSTROKE_DEFAULT_INTERVAL_MS: i32 = 20;
 const SSH_TUNID_ANY: i32 = 0x7fffffff;
 
@@ -764,6 +770,43 @@ pub(crate) fn tunneldevice_line_write(
     } else {
         formatted.extend_from_slice(remote.to_string().as_bytes());
     }
+    formatted.push(b'\n');
+    out.copy_from_slice(&formatted);
+    Some(())
+}
+
+pub(crate) fn add_keys_to_agent_line_parse(
+    mode: i32,
+    lifespan: i32,
+) -> Option<AddKeysToAgentLineParse> {
+    if lifespan <= 0 {
+        return None;
+    }
+    let confirm_len = if mode == 3 { " confirm".len() } else { 0 };
+    Some(AddKeysToAgentLineParse {
+        output_len: "addkeystoagent".len() + confirm_len + 1 + lifespan.to_string().len() + 1,
+        emit: true,
+    })
+}
+
+pub(crate) fn add_keys_to_agent_line_write(
+    mode: i32,
+    lifespan: i32,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = add_keys_to_agent_line_parse(mode, lifespan)?;
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut formatted = Vec::with_capacity(parsed.output_len);
+    formatted.extend_from_slice(b"addkeystoagent");
+    if mode == 3 {
+        formatted.extend_from_slice(b" confirm");
+    }
+    formatted.push(b' ');
+    formatted.extend_from_slice(lifespan.to_string().as_bytes());
     formatted.push(b'\n');
     out.copy_from_slice(&formatted);
     Some(())
@@ -2936,7 +2979,8 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 #[cfg(test)]
 mod tests {
     use super::{
-        a2port, atoi_err, argv_split_parse, argv_split_write, cfg_int_parse,
+        a2port, add_keys_to_agent_line_parse, add_keys_to_agent_line_write,
+        atoi_err, argv_split_parse, argv_split_write, cfg_int_parse,
         cfg_int_write, cfg_string_parse, cfg_string_write, host_hash_write,
         ipqos_line_parse, ipqos_line_write, listenaddr_line_parse, listenaddr_line_write,
         fmt_intarg_parse, forward_format_parse, forward_format_write,
@@ -2955,9 +2999,9 @@ mod tests {
         FMT_INTARG_DIGEST, FMT_INTARG_LITERAL_MD5, FMT_INTARG_LITERAL_MULTISTATE,
         FMT_INTARG_LITERAL_NO, FMT_INTARG_LITERAL_UNSET, FMT_INTARG_LITERAL_UNKNOWN,
         FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
-        CfgIntParse, CfgStringParse, FmtIntArgParse, ForwardFormatParse,
-        IpqosLineParse, ListenaddrLineParse, PermitListLineParse,
-        TunnelDeviceLineParse,
+        AddKeysToAgentLineParse, CfgIntParse, CfgStringParse, FmtIntArgParse,
+        ForwardFormatParse, IpqosLineParse, ListenaddrLineParse,
+        PermitListLineParse, TunnelDeviceLineParse,
         StrarrayLinesParse, StrarrayOnelineParse, strarray_lines_parse,
         strarray_lines_write, strarray_oneline_parse, strarray_oneline_write,
         permit_list_line_parse, permit_list_line_write,
@@ -3982,6 +4026,42 @@ mod tests {
             Some(())
         );
         assert_eq!(&any_out, b"tunneldevice any:3\n");
+    }
+
+    #[test]
+    fn add_keys_to_agent_line_parse_handles_basic_forms() {
+        assert_eq!(
+            add_keys_to_agent_line_parse(1, 300),
+            Some(AddKeysToAgentLineParse {
+                output_len: "addkeystoagent 300\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            add_keys_to_agent_line_parse(3, 300),
+            Some(AddKeysToAgentLineParse {
+                output_len: "addkeystoagent confirm 300\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(add_keys_to_agent_line_parse(3, 0), None);
+    }
+
+    #[test]
+    fn add_keys_to_agent_line_write_handles_basic_forms() {
+        let mut out = vec![0u8; "addkeystoagent confirm 300\n".len()];
+        assert_eq!(
+            add_keys_to_agent_line_write(3, 300, out.as_mut_ptr(), out.len()),
+            Some(())
+        );
+        assert_eq!(&out, b"addkeystoagent confirm 300\n");
+
+        let mut plain = vec![0u8; "addkeystoagent 300\n".len()];
+        assert_eq!(
+            add_keys_to_agent_line_write(1, 300, plain.as_mut_ptr(), plain.len()),
+            Some(())
+        );
+        assert_eq!(&plain, b"addkeystoagent 300\n");
     }
 
     #[test]
