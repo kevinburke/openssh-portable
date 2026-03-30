@@ -116,6 +116,10 @@ struct ossh_rust_add_keys_to_agent_line_parse {
 	size_t output_len;
 	uint32_t emit;
 };
+struct ossh_rust_forwardagent_line_parse {
+	size_t output_len;
+	uint32_t emit;
+};
 struct ossh_rust_allowed_cname_entry {
 	const char *source_list;
 	const char *target_list;
@@ -458,6 +462,10 @@ int ossh_rust_tunneldevice_line_write(int local, int remote,
 int ossh_rust_add_keys_to_agent_line_parse(int mode, int lifespan,
     struct ossh_rust_add_keys_to_agent_line_parse *out);
 int ossh_rust_add_keys_to_agent_line_write(int mode, int lifespan,
+    uint8_t *out, size_t out_len);
+int ossh_rust_forwardagent_line_parse(int value, const char *socket_path,
+    struct ossh_rust_forwardagent_line_parse *out);
+int ossh_rust_forwardagent_line_write(int value, const char *socket_path,
     uint8_t *out, size_t out_len);
 int ossh_rust_canonicalize_permitted_cnames_line_parse(
     const struct ossh_rust_allowed_cname_entry *entries, size_t nentries,

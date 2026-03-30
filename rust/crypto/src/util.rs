@@ -173,6 +173,12 @@ pub(crate) struct AddKeysToAgentLineParse {
     pub(crate) emit: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ForwardAgentLineParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct AllowedCnameEntry {
@@ -845,6 +851,51 @@ pub(crate) fn add_keys_to_agent_line_write(
     }
     formatted.push(b' ');
     formatted.extend_from_slice(lifespan.to_string().as_bytes());
+    formatted.push(b'\n');
+    out.copy_from_slice(&formatted);
+    Some(())
+}
+
+pub(crate) fn forwardagent_line_parse(
+    value: i32,
+    socket_path: *const c_char,
+) -> Option<ForwardAgentLineParse> {
+    if socket_path.is_null() {
+        let suffix = match value {
+            0 => "no",
+            1 => "yes",
+            _ => return None,
+        };
+        return Some(ForwardAgentLineParse {
+            output_len: "forwardagent ".len() + suffix.len() + 1,
+            emit: true,
+        });
+    }
+    let socket_path = read_cstr_bytes(socket_path)?;
+    Some(ForwardAgentLineParse {
+        output_len: "forwardagent ".len() + socket_path.len() + 1,
+        emit: true,
+    })
+}
+
+pub(crate) fn forwardagent_line_write(
+    value: i32,
+    socket_path: *const c_char,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = forwardagent_line_parse(value, socket_path)?;
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut formatted = Vec::with_capacity(parsed.output_len);
+    formatted.extend_from_slice(b"forwardagent ");
+    if socket_path.is_null() {
+        formatted.extend_from_slice(if value == 0 { b"no" } else { b"yes" });
+    } else {
+        formatted.extend_from_slice(read_cstr_bytes(socket_path)?);
+    }
     formatted.push(b'\n');
     out.copy_from_slice(&formatted);
     Some(())
@@ -3302,6 +3353,7 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 mod tests {
     use super::{
         a2port, add_keys_to_agent_line_parse, add_keys_to_agent_line_write,
+        forwardagent_line_parse, forwardagent_line_write,
         atoi_err, argv_split_parse, argv_split_write, cfg_int_parse,
         canonicalize_permitted_cnames_line_parse,
         canonicalize_permitted_cnames_line_write,
@@ -3331,6 +3383,7 @@ mod tests {
         CanonicalizePermittedCnamesLineParse, CfgIntParse, CfgStringParse,
         ControlPersistLineParse,
         EscapeCharLineParse,
+        ForwardAgentLineParse,
         FmtIntArgParse, ForwardFormatParse, IpqosLineParse,
         ListenaddrLineParse, PermitListLineParse, ProxyJumpLineParse,
         RekeyLimitLineParse,
@@ -4395,6 +4448,59 @@ mod tests {
             Some(())
         );
         assert_eq!(&plain, b"addkeystoagent 300\n");
+    }
+
+    #[test]
+    fn forwardagent_line_parse_handles_basic_forms() {
+        let socket = CString::new("/tmp/agent.sock").unwrap();
+
+        assert_eq!(
+            forwardagent_line_parse(0, core::ptr::null()),
+            Some(ForwardAgentLineParse {
+                output_len: "forwardagent no\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            forwardagent_line_parse(1, core::ptr::null()),
+            Some(ForwardAgentLineParse {
+                output_len: "forwardagent yes\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            forwardagent_line_parse(1, socket.as_ptr()),
+            Some(ForwardAgentLineParse {
+                output_len: "forwardagent /tmp/agent.sock\n".len(),
+                emit: true,
+            })
+        );
+    }
+
+    #[test]
+    fn forwardagent_line_write_handles_basic_forms() {
+        let socket = CString::new("/tmp/agent.sock").unwrap();
+
+        let mut no_out = vec![0u8; "forwardagent no\n".len()];
+        assert_eq!(
+            forwardagent_line_write(0, core::ptr::null(), no_out.as_mut_ptr(), no_out.len()),
+            Some(())
+        );
+        assert_eq!(&no_out, b"forwardagent no\n");
+
+        let mut yes_out = vec![0u8; "forwardagent yes\n".len()];
+        assert_eq!(
+            forwardagent_line_write(1, core::ptr::null(), yes_out.as_mut_ptr(), yes_out.len()),
+            Some(())
+        );
+        assert_eq!(&yes_out, b"forwardagent yes\n");
+
+        let mut socket_out = vec![0u8; "forwardagent /tmp/agent.sock\n".len()];
+        assert_eq!(
+            forwardagent_line_write(1, socket.as_ptr(), socket_out.as_mut_ptr(), socket_out.len()),
+            Some(())
+        );
+        assert_eq!(&socket_out, b"forwardagent /tmp/agent.sock\n");
     }
 
     #[test]
