@@ -173,6 +173,19 @@ pub(crate) struct AddKeysToAgentLineParse {
     pub(crate) emit: bool,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct AllowedCnameEntry {
+    pub source_list: *const c_char,
+    pub target_list: *const c_char,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CanonicalizePermittedCnamesLineParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
 const SSH_KEYSTROKE_DEFAULT_INTERVAL_MS: i32 = 20;
 const SSH_TUNID_ANY: i32 = 0x7fffffff;
 
@@ -807,6 +820,59 @@ pub(crate) fn add_keys_to_agent_line_write(
     }
     formatted.push(b' ');
     formatted.extend_from_slice(lifespan.to_string().as_bytes());
+    formatted.push(b'\n');
+    out.copy_from_slice(&formatted);
+    Some(())
+}
+
+pub(crate) fn canonicalize_permitted_cnames_line_parse(
+    entries: *const AllowedCnameEntry,
+    nentries: usize,
+) -> Option<CanonicalizePermittedCnamesLineParse> {
+    let output_len = if nentries == 0 {
+        "canonicalizePermittedcnames none\n".len()
+    } else {
+        let entries = read_ptr_slice(entries, nentries)?;
+        let mut len = "canonicalizePermittedcnames".len();
+        for entry in entries {
+            len += 1;
+            len += read_cstr_bytes(entry.source_list)?.len();
+            len += 1;
+            len += read_cstr_bytes(entry.target_list)?.len();
+        }
+        len + 1
+    };
+    Some(CanonicalizePermittedCnamesLineParse {
+        output_len,
+        emit: true,
+    })
+}
+
+pub(crate) fn canonicalize_permitted_cnames_line_write(
+    entries: *const AllowedCnameEntry,
+    nentries: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = canonicalize_permitted_cnames_line_parse(entries, nentries)?;
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut formatted = Vec::with_capacity(parsed.output_len);
+    formatted.extend_from_slice(b"canonicalizePermittedcnames");
+    if nentries == 0 {
+        formatted.extend_from_slice(b" none\n");
+        out.copy_from_slice(&formatted);
+        return Some(());
+    }
+    let entries = read_ptr_slice(entries, nentries)?;
+    for entry in entries {
+        formatted.push(b' ');
+        formatted.extend_from_slice(read_cstr_bytes(entry.source_list)?);
+        formatted.push(b':');
+        formatted.extend_from_slice(read_cstr_bytes(entry.target_list)?);
+    }
     formatted.push(b'\n');
     out.copy_from_slice(&formatted);
     Some(())
@@ -2981,6 +3047,8 @@ mod tests {
     use super::{
         a2port, add_keys_to_agent_line_parse, add_keys_to_agent_line_write,
         atoi_err, argv_split_parse, argv_split_write, cfg_int_parse,
+        canonicalize_permitted_cnames_line_parse,
+        canonicalize_permitted_cnames_line_write,
         cfg_int_write, cfg_string_parse, cfg_string_write, host_hash_write,
         ipqos_line_parse, ipqos_line_write, listenaddr_line_parse, listenaddr_line_write,
         fmt_intarg_parse, forward_format_parse, forward_format_write,
@@ -2999,9 +3067,10 @@ mod tests {
         FMT_INTARG_DIGEST, FMT_INTARG_LITERAL_MD5, FMT_INTARG_LITERAL_MULTISTATE,
         FMT_INTARG_LITERAL_NO, FMT_INTARG_LITERAL_UNSET, FMT_INTARG_LITERAL_UNKNOWN,
         FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
-        AddKeysToAgentLineParse, CfgIntParse, CfgStringParse, FmtIntArgParse,
-        ForwardFormatParse, IpqosLineParse, ListenaddrLineParse,
-        PermitListLineParse, TunnelDeviceLineParse,
+        AddKeysToAgentLineParse, AllowedCnameEntry,
+        CanonicalizePermittedCnamesLineParse, CfgIntParse, CfgStringParse,
+        FmtIntArgParse, ForwardFormatParse, IpqosLineParse,
+        ListenaddrLineParse, PermitListLineParse, TunnelDeviceLineParse,
         StrarrayLinesParse, StrarrayOnelineParse, strarray_lines_parse,
         strarray_lines_write, strarray_oneline_parse, strarray_oneline_write,
         permit_list_line_parse, permit_list_line_write,
@@ -4062,6 +4131,69 @@ mod tests {
             Some(())
         );
         assert_eq!(&plain, b"addkeystoagent 300\n");
+    }
+
+    #[test]
+    fn canonicalize_permitted_cnames_line_parse_handles_basic_forms() {
+        let src = CString::new("*.example.com").unwrap();
+        let dst = CString::new("*.corp.example").unwrap();
+        let entries = [AllowedCnameEntry {
+            source_list: src.as_ptr(),
+            target_list: dst.as_ptr(),
+        }];
+
+        assert_eq!(
+            canonicalize_permitted_cnames_line_parse(entries.as_ptr(), entries.len()),
+            Some(CanonicalizePermittedCnamesLineParse {
+                output_len:
+                    "canonicalizePermittedcnames *.example.com:*.corp.example\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            canonicalize_permitted_cnames_line_parse(core::ptr::null(), 0),
+            Some(CanonicalizePermittedCnamesLineParse {
+                output_len: "canonicalizePermittedcnames none\n".len(),
+                emit: true,
+            })
+        );
+    }
+
+    #[test]
+    fn canonicalize_permitted_cnames_line_write_handles_basic_forms() {
+        let src = CString::new("*.example.com").unwrap();
+        let dst = CString::new("*.corp.example").unwrap();
+        let entries = [AllowedCnameEntry {
+            source_list: src.as_ptr(),
+            target_list: dst.as_ptr(),
+        }];
+        let mut out =
+            vec![0u8; "canonicalizePermittedcnames *.example.com:*.corp.example\n".len()];
+        assert_eq!(
+            canonicalize_permitted_cnames_line_write(
+                entries.as_ptr(),
+                entries.len(),
+                out.as_mut_ptr(),
+                out.len()
+            ),
+            Some(())
+        );
+        assert_eq!(
+            &out,
+            b"canonicalizePermittedcnames *.example.com:*.corp.example\n"
+        );
+
+        let mut none_out = vec![0u8; "canonicalizePermittedcnames none\n".len()];
+        assert_eq!(
+            canonicalize_permitted_cnames_line_write(
+                core::ptr::null(),
+                0,
+                none_out.as_mut_ptr(),
+                none_out.len()
+            ),
+            Some(())
+        );
+        assert_eq!(&none_out, b"canonicalizePermittedcnames none\n");
     }
 
     #[test]
