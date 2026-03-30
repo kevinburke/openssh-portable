@@ -866,6 +866,8 @@ Run a short smoke test:
 cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
   --bin ed25519_verify -- -runs=1
 cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
+  --bin sshkey_metadata -- -runs=1
+cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
   --bin packet_mac -- -runs=1
 ```
 
@@ -876,6 +878,7 @@ cd rust/crypto/fuzz
 cargo +nightly fuzz run ed25519_verify -- -max_total_time=60
 cargo +nightly fuzz run ecdh_peer -- -max_total_time=60
 cargo +nightly fuzz run chachapoly_decrypt -- -max_total_time=60
+cargo +nightly fuzz run sshkey_metadata -- -max_total_time=60
 cargo +nightly fuzz run packet_mac -- -max_total_time=60
 ```
 
@@ -891,10 +894,12 @@ Current targets:
 - `ed25519_verify`
 - `ecdh_peer`
 - `chachapoly_decrypt`
+- `sshkey_metadata`
+- `packet_mac`
 
 Notes:
 
-- the CI job only does a smoke run of `ed25519_verify`
+- the CI job only does smoke runs of the configured Rust fuzz targets
 - `cargo run` is fine for a quick execute/build sanity check
 - `cargo +nightly fuzz run ...` is the real coverage-guided path
 
