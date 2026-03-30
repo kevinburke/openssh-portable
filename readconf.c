@@ -4317,10 +4317,29 @@ dump_client_config(Options *o, const char *host)
 #endif
 
 	/* oControlPersist */
+#ifdef WITH_RUST_CRYPTO
+	{
+		struct ossh_rust_controlpersist_line_parse parsed;
+		char *outbuf;
+
+		if (ossh_rust_controlpersist_line_parse(o->control_persist,
+		    o->control_persist_timeout, &parsed) != 0)
+			fatal_f("rust controlpersist parse failed");
+		outbuf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_controlpersist_line_write(o->control_persist,
+		    o->control_persist_timeout, (u_char *)outbuf,
+		    parsed.output_len) != 0)
+			fatal_f("rust controlpersist write failed");
+		outbuf[parsed.output_len] = '\0';
+		printf("%s", outbuf);
+		free(outbuf);
+	}
+#else
 	if (o->control_persist == 0 || o->control_persist_timeout == 0)
 		dump_cfg_fmtint(oControlPersist, o->control_persist);
 	else
 		dump_cfg_int(oControlPersist, o->control_persist_timeout);
+#endif
 
 	/* oEscapeChar */
 #ifdef WITH_RUST_CRYPTO
