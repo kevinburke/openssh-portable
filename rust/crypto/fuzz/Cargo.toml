@@ -70,5 +70,12 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "sshkey_metadata"
+path = "fuzz_targets/sshkey_metadata.rs"
+test = false
+doc = false
+bench = false
+
 [workspace]
 members = ["."]

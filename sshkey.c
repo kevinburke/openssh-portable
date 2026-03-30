@@ -162,6 +162,18 @@ const struct sshkey_impl * const keyimpls[] = {
 	NULL
 };
 
+#ifdef WITH_RUST_CRYPTO
+static size_t
+keyimpl_nentries(void)
+{
+	size_t i;
+
+	for (i = 0; keyimpls[i] != NULL; i++)
+		;
+	return i;
+}
+#endif /* WITH_RUST_CRYPTO */
+
 static const struct sshkey_impl *
 sshkey_impl_from_type(int type)
 {
@@ -198,8 +210,18 @@ sshkey_impl_from_key(const struct sshkey *k)
 const char *
 sshkey_type(const struct sshkey *k)
 {
+#ifdef WITH_RUST_CRYPTO
+	const char *name = NULL;
+#endif
 	const struct sshkey_impl *impl;
 
+#ifdef WITH_RUST_CRYPTO
+	if (k != NULL &&
+	    ossh_rust_sshkey_impl_name_from_type_nid(k->type, k->ecdsa_nid, 1,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &name) == 0 && name != NULL)
+		return name;
+#endif
 	if ((impl = sshkey_impl_from_key(k)) == NULL)
 		return "unknown";
 	return impl->shortname;
@@ -208,8 +230,17 @@ sshkey_type(const struct sshkey *k)
 static const char *
 sshkey_ssh_name_from_type_nid(int type, int nid)
 {
+#ifdef WITH_RUST_CRYPTO
+	const char *name = NULL;
+#endif
 	const struct sshkey_impl *impl;
 
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_sshkey_impl_name_from_type_nid(type, nid, 0,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &name) == 0 && name != NULL)
+		return name;
+#endif
 	if ((impl = sshkey_impl_from_type_nid(type, nid)) == NULL)
 		return "ssh-unknown";
 	return impl->name;
@@ -249,6 +280,14 @@ type_from_name(const char *name, int allow_short)
 	int i;
 	int nid = -1, type;
 	const struct sshkey_impl *impl;
+
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_sshkey_type_from_name((const u_char *)name,
+	    name == NULL ? 0 : strlen(name),
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), allow_short, &type) == 0)
+		return type;
+#endif
 
 	type = peek_ecdsa_type_nid(name, strlen(name), &nid);
 	if (type != KEY_UNSPEC)
@@ -337,6 +376,16 @@ peek_ecdsa_type_nid(const char *name, size_t len, int *nid)
 int
 sshkey_ecdsa_nid_from_name(const char *name)
 {
+#ifdef WITH_RUST_CRYPTO
+	int nid;
+
+	if (ossh_rust_sshkey_ecdsa_nid_from_name((const u_char *)name,
+	    name == NULL ? 0 : strlen(name),
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &nid) == 0)
+		return nid;
+	return -1;
+#else
 	int i;
 	int nid = -1, type;
 
@@ -352,6 +401,7 @@ sshkey_ecdsa_nid_from_name(const char *name)
 			return keyimpls[i]->nid;
 	}
 	return -1;
+#endif
 }
 
 int
@@ -467,6 +517,15 @@ sshkey_size(const struct sshkey *k)
 static int
 sshkey_type_is_valid_ca(int type)
 {
+#ifdef WITH_RUST_CRYPTO
+	int ret;
+
+	if (ossh_rust_sshkey_type_is_valid_ca(type,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &ret) == 0)
+		return ret;
+	return 0;
+#else
 	const struct sshkey_impl *impl;
 
 	if (type == KEY_ECDSA)
@@ -475,6 +534,7 @@ sshkey_type_is_valid_ca(int type)
 		return 0;
 	/* All non-certificate types may act as CAs */
 	return !impl->cert;
+#endif
 }
 
 int

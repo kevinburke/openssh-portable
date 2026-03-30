@@ -490,6 +490,21 @@ sshkey_tests(void)
 	k1 = k2 = NULL;
 	TEST_DONE();
 
+	TEST_START("metadata lookup helpers");
+	ASSERT_INT_EQ(sshkey_type_from_name("ssh-ed25519"), KEY_ED25519);
+	ASSERT_INT_EQ(sshkey_type_from_name("rsa-sha2-256"), KEY_RSA);
+	ASSERT_INT_EQ(sshkey_type_from_shortname("ED25519"), KEY_ED25519);
+	ASSERT_INT_EQ(sshkey_type_from_shortname("RSA"), KEY_RSA);
+	ASSERT_INT_EQ(sshkey_ecdsa_nid_from_name("ecdsa-sha2-nistp384"),
+	    NID_secp384r1);
+	k1 = sshkey_new(KEY_ED25519);
+	ASSERT_PTR_NE(k1, NULL);
+	ASSERT_STRING_EQ(sshkey_type(k1), "ED25519");
+	ASSERT_STRING_EQ(sshkey_ssh_name(k1), "ssh-ed25519");
+	sshkey_free(k1);
+	k1 = NULL;
+	TEST_DONE();
+
 #ifdef WITH_OPENSSL
 	sshkey_free(kr);
 	sshkey_free(kd);
