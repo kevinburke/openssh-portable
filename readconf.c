@@ -4243,10 +4243,29 @@ dump_client_config(Options *o, const char *host)
 	}
 
 	/* oForwardAgent */
+#ifdef WITH_RUST_CRYPTO
+	{
+		struct ossh_rust_forwardagent_line_parse parsed;
+		char *outbuf;
+
+		if (ossh_rust_forwardagent_line_parse(o->forward_agent,
+		    o->forward_agent_sock_path, &parsed) != 0)
+			fatal_f("rust forwardagent parse failed");
+		outbuf = xmalloc(parsed.output_len + 1);
+		if (ossh_rust_forwardagent_line_write(o->forward_agent,
+		    o->forward_agent_sock_path, (u_char *)outbuf,
+		    parsed.output_len) != 0)
+			fatal_f("rust forwardagent write failed");
+		outbuf[parsed.output_len] = '\0';
+		printf("%s", outbuf);
+		free(outbuf);
+	}
+#else
 	if (o->forward_agent_sock_path == NULL)
 		dump_cfg_fmtint(oForwardAgent, o->forward_agent);
 	else
 		dump_cfg_string(oForwardAgent, o->forward_agent_sock_path);
+#endif
 
 	/* oConnectTimeout */
 	if (o->connection_timeout == -1)
