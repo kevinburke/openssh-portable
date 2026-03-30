@@ -36,8 +36,12 @@ Rust-backed today:
   - hashed host re-encoding with existing or fresh salt
 - HMAC computation through `ssh_hmac_*`:
   - `known_hosts` SHA-1 host hashing and matching
-  - packet MAC computation/reset logic used by `mac.c`
+  - packet HMAC reset/update/final logic used by `mac.c`
   - legacy MD5 / SHA-1 and SHA-2 HMACs layered on Rust-backed digest state
+- digest-backed packet MAC dispatch through `mac.c`:
+  - HMAC packet-MAC setup/init/compute/check for `hmac-*`
+  - sequence-number prefixing and truncated digest handling
+  - UMAC / UMAC128 remain in C
 - OpenSSH `openssh-key-v1` armor and header parsing
 - OpenSSH `openssh-key-v1` decrypted private-section parsing for Ed25519,
   RSA, and ECDSA keys:
@@ -861,6 +865,8 @@ Run a short smoke test:
 ```sh
 cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
   --bin ed25519_verify -- -runs=1
+cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
+  --bin packet_mac -- -runs=1
 ```
 
 Run a bounded real fuzzing session:
@@ -870,6 +876,7 @@ cd rust/crypto/fuzz
 cargo +nightly fuzz run ed25519_verify -- -max_total_time=60
 cargo +nightly fuzz run ecdh_peer -- -max_total_time=60
 cargo +nightly fuzz run chachapoly_decrypt -- -max_total_time=60
+cargo +nightly fuzz run packet_mac -- -max_total_time=60
 ```
 
 Run a longer local fuzzing session:
