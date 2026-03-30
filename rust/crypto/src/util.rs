@@ -161,7 +161,14 @@ pub(crate) struct IpqosLineParse {
     pub(crate) emit: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TunnelDeviceLineParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
 const SSH_KEYSTROKE_DEFAULT_INTERVAL_MS: i32 = 20;
+const SSH_TUNID_ANY: i32 = 0x7fffffff;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StrdelimParse {
@@ -708,6 +715,56 @@ pub(crate) fn forward_format_write(
     if mode != FORWARD_FMT_DYNAMIC {
         append_forward_endpoint(&mut formatted, connect_host, connect_port, connect_path)?;
     }
+    out.copy_from_slice(&formatted);
+    Some(())
+}
+
+pub(crate) fn tunneldevice_line_parse(local: i32, remote: i32) -> Option<TunnelDeviceLineParse> {
+    let local_len = if local == SSH_TUNID_ANY {
+        "any".len()
+    } else if local >= 0 {
+        local.to_string().len()
+    } else {
+        return None;
+    };
+    let remote_len = if remote == SSH_TUNID_ANY {
+        "any".len()
+    } else if remote >= 0 {
+        remote.to_string().len()
+    } else {
+        return None;
+    };
+    Some(TunnelDeviceLineParse {
+        output_len: "tunneldevice ".len() + local_len + 1 + remote_len + 1,
+        emit: true,
+    })
+}
+
+pub(crate) fn tunneldevice_line_write(
+    local: i32,
+    remote: i32,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = tunneldevice_line_parse(local, remote)?;
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut formatted = Vec::with_capacity(parsed.output_len);
+    formatted.extend_from_slice(b"tunneldevice ");
+    if local == SSH_TUNID_ANY {
+        formatted.extend_from_slice(b"any");
+    } else {
+        formatted.extend_from_slice(local.to_string().as_bytes());
+    }
+    formatted.push(b':');
+    if remote == SSH_TUNID_ANY {
+        formatted.extend_from_slice(b"any");
+    } else {
+        formatted.extend_from_slice(remote.to_string().as_bytes());
+    }
+    formatted.push(b'\n');
     out.copy_from_slice(&formatted);
     Some(())
 }
@@ -2900,16 +2957,18 @@ mod tests {
         FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
         CfgIntParse, CfgStringParse, FmtIntArgParse, ForwardFormatParse,
         IpqosLineParse, ListenaddrLineParse, PermitListLineParse,
+        TunnelDeviceLineParse,
         StrarrayLinesParse, StrarrayOnelineParse, strarray_lines_parse,
         strarray_lines_write, strarray_oneline_parse, strarray_oneline_write,
         permit_list_line_parse, permit_list_line_write,
+        tunneldevice_line_parse, tunneldevice_line_write,
         ExpandEntry, expand_parse, expand_write,
         ForwardParse, HostfileLineParse, JumpParse,
         KeywordEntry, MultistateEntry, OptDequoteParse, OPT_DEQUOTE_MISSING_END,
         OPT_DEQUOTE_MISSING_START, PatternIntervalParse, UriParse,
         UserHostPathParse, UserHostPortParse, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
         DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID,
-        IPQOS_AF21, IPQOS_CS0, IPQOS_CS6, IPQOS_EF, IPQOS_NONE,
+        IPQOS_AF21, IPQOS_CS0, IPQOS_CS6, IPQOS_EF, IPQOS_NONE, SSH_TUNID_ANY,
     };
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
@@ -3882,6 +3941,47 @@ mod tests {
             Some(())
         );
         assert_eq!(&any_out, b"permitlisten any\n");
+    }
+
+    #[test]
+    fn tunneldevice_line_parse_handles_basic_forms() {
+        assert_eq!(
+            tunneldevice_line_parse(5, 7),
+            Some(TunnelDeviceLineParse {
+                output_len: "tunneldevice 5:7\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            tunneldevice_line_parse(SSH_TUNID_ANY, SSH_TUNID_ANY),
+            Some(TunnelDeviceLineParse {
+                output_len: "tunneldevice any:any\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(tunneldevice_line_parse(-1, 7), None);
+    }
+
+    #[test]
+    fn tunneldevice_line_write_handles_basic_forms() {
+        let mut out = vec![0u8; "tunneldevice 5:any\n".len()];
+        assert_eq!(
+            tunneldevice_line_write(5, SSH_TUNID_ANY, out.as_mut_ptr(), out.len()),
+            Some(())
+        );
+        assert_eq!(&out, b"tunneldevice 5:any\n");
+
+        let mut any_out = vec![0u8; "tunneldevice any:3\n".len()];
+        assert_eq!(
+            tunneldevice_line_write(
+                SSH_TUNID_ANY,
+                3,
+                any_out.as_mut_ptr(),
+                any_out.len()
+            ),
+            Some(())
+        );
+        assert_eq!(&any_out, b"tunneldevice any:3\n");
     }
 
     #[test]

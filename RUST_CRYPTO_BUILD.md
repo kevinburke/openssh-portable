@@ -176,6 +176,9 @@ Rust-backed today:
   - `PermitRemoteOpen` in `ssh -G`
   - `PermitOpen` / `PermitListen` in `sshd -T`
   - `any` fallback and joined permit target rendering
+- client `TunnelDevice` output formatting used by:
+  - `tunneldevice local:remote` lines in `ssh -G`
+  - `any` / numeric tunnel endpoint rendering
 - `a2port()` numeric and service-name port parsing used by:
   - destination and forwarding helpers layered above shared host/port parsing
   - `ssh`, `sshd`, `scp`, `sftp`, and `ssh-keyscan` port consumers

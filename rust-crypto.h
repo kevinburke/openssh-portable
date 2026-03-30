@@ -108,6 +108,10 @@ struct ossh_rust_ipqos_line_parse {
 	size_t output_len;
 	uint32_t emit;
 };
+struct ossh_rust_tunneldevice_line_parse {
+	size_t output_len;
+	uint32_t emit;
+};
 #define OSSH_RUST_STRARRAY_EMPTY_SKIP 0U
 #define OSSH_RUST_STRARRAY_EMPTY_NONE 1U
 #define OSSH_RUST_STRARRAY_EMPTY_ANY 2U
@@ -407,6 +411,10 @@ int ossh_rust_listenaddr_line_write(const char *addr, const char *port,
 int ossh_rust_ipqos_line_parse(int interactive, int bulk,
     struct ossh_rust_ipqos_line_parse *out);
 int ossh_rust_ipqos_line_write(int interactive, int bulk,
+    uint8_t *out, size_t out_len);
+int ossh_rust_tunneldevice_line_parse(int local, int remote,
+    struct ossh_rust_tunneldevice_line_parse *out);
+int ossh_rust_tunneldevice_line_write(int local, int remote,
     uint8_t *out, size_t out_len);
 int ossh_rust_keyword_lookup(const uint8_t *input, size_t input_len,
     const struct ossh_rust_keyword_entry *entries, size_t nentries,
