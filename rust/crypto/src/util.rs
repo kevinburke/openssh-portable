@@ -223,6 +223,12 @@ pub(crate) struct PubkeyAuthOptionsLineParse {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PermitUserEnvironmentLineParse {
+    pub(crate) output_len: usize,
+    pub(crate) emit: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct EscapeCharLineParse {
     pub(crate) output_len: usize,
     pub(crate) emit: bool,
@@ -1206,6 +1212,51 @@ pub(crate) fn pubkeyauthoptions_line_write(
     }
     if value & PUBKEYAUTH_VERIFY_REQUIRED != 0 {
         formatted.extend_from_slice(b" verify-required");
+    }
+    formatted.push(b'\n');
+    out.copy_from_slice(&formatted);
+    Some(())
+}
+
+pub(crate) fn permituserenvironment_line_parse(
+    value: i32,
+    allowlist: *const c_char,
+) -> Option<PermitUserEnvironmentLineParse> {
+    if allowlist.is_null() {
+        let suffix = match value {
+            0 => "no",
+            1 => "yes",
+            _ => return None,
+        };
+        return Some(PermitUserEnvironmentLineParse {
+            output_len: "permituserenvironment ".len() + suffix.len() + 1,
+            emit: true,
+        });
+    }
+    let allowlist = read_cstr_bytes(allowlist)?;
+    Some(PermitUserEnvironmentLineParse {
+        output_len: "permituserenvironment ".len() + allowlist.len() + 1,
+        emit: true,
+    })
+}
+
+pub(crate) fn permituserenvironment_line_write(
+    value: i32,
+    allowlist: *const c_char,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let parsed = permituserenvironment_line_parse(value, allowlist)?;
+    let out = read_slice_mut(out, out_len)?;
+    if out.len() != parsed.output_len {
+        return None;
+    }
+    let mut formatted = Vec::with_capacity(parsed.output_len);
+    formatted.extend_from_slice(b"permituserenvironment ");
+    if allowlist.is_null() {
+        formatted.extend_from_slice(if value == 0 { b"no" } else { b"yes" });
+    } else {
+        formatted.extend_from_slice(read_cstr_bytes(allowlist)?);
     }
     formatted.push(b'\n');
     out.copy_from_slice(&formatted);
@@ -3462,6 +3513,7 @@ mod tests {
         parse_absolute_time, parse_convtime_double, parse_forward_field_in_place,
         parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
         parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
+        permituserenvironment_line_parse, permituserenvironment_line_write,
         pubkeyauthoptions_line_parse, pubkeyauthoptions_line_write,
         proxyjump_line_parse, proxyjump_line_write,
         connecttimeout_line_parse, connecttimeout_line_write,
@@ -3483,6 +3535,7 @@ mod tests {
         ForwardAgentLineParse,
         FmtIntArgParse, ForwardFormatParse, IpqosLineParse,
         ListenaddrLineParse, PermitListLineParse, ProxyJumpLineParse,
+        PermitUserEnvironmentLineParse,
         PubkeyAuthOptionsLineParse,
         RekeyLimitLineParse,
         TunnelDeviceLineParse,
@@ -4891,6 +4944,72 @@ mod tests {
             &both_out,
             b"pubkeyauthoptions touch-required verify-required\n"
         );
+    }
+
+    #[test]
+    fn permituserenvironment_line_parse_handles_basic_forms() {
+        let allow = CString::new("FOO,BAR").unwrap();
+        assert_eq!(
+            permituserenvironment_line_parse(0, core::ptr::null()),
+            Some(PermitUserEnvironmentLineParse {
+                output_len: "permituserenvironment no\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            permituserenvironment_line_parse(1, core::ptr::null()),
+            Some(PermitUserEnvironmentLineParse {
+                output_len: "permituserenvironment yes\n".len(),
+                emit: true,
+            })
+        );
+        assert_eq!(
+            permituserenvironment_line_parse(1, allow.as_ptr()),
+            Some(PermitUserEnvironmentLineParse {
+                output_len: "permituserenvironment FOO,BAR\n".len(),
+                emit: true,
+            })
+        );
+    }
+
+    #[test]
+    fn permituserenvironment_line_write_handles_basic_forms() {
+        let allow = CString::new("FOO,BAR").unwrap();
+        let mut no_out = vec![0u8; "permituserenvironment no\n".len()];
+        assert_eq!(
+            permituserenvironment_line_write(
+                0,
+                core::ptr::null(),
+                no_out.as_mut_ptr(),
+                no_out.len()
+            ),
+            Some(())
+        );
+        assert_eq!(&no_out, b"permituserenvironment no\n");
+
+        let mut yes_out = vec![0u8; "permituserenvironment yes\n".len()];
+        assert_eq!(
+            permituserenvironment_line_write(
+                1,
+                core::ptr::null(),
+                yes_out.as_mut_ptr(),
+                yes_out.len()
+            ),
+            Some(())
+        );
+        assert_eq!(&yes_out, b"permituserenvironment yes\n");
+
+        let mut allow_out = vec![0u8; "permituserenvironment FOO,BAR\n".len()];
+        assert_eq!(
+            permituserenvironment_line_write(
+                1,
+                allow.as_ptr(),
+                allow_out.as_mut_ptr(),
+                allow_out.len()
+            ),
+            Some(())
+        );
+        assert_eq!(&allow_out, b"permituserenvironment FOO,BAR\n");
     }
 
     #[test]
