@@ -46,6 +46,8 @@ Rust-backed today:
   - `keyimpl` selection by type
   - `keyimpl` selection by `(type, nid)`
   - key-type relation helpers for `plain`, `certified`, `is_cert`, and `is_sk`
+  - constructor-side type validity checks and cert lifecycle allocation in
+    `sshkey_new()`
   - existing C key object allocation/free and function tables remain in place
 - OpenSSH `openssh-key-v1` armor and header parsing
 - OpenSSH `openssh-key-v1` decrypted private-section parsing for Ed25519,
