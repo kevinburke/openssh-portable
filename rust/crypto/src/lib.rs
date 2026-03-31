@@ -56,6 +56,8 @@ use rsa::{
 };
 use sshkey_meta::{
     sshkey_ecdsa_nid_from_name as rust_sshkey_ecdsa_nid_from_name,
+    sshkey_impl_index_from_type as rust_sshkey_impl_index_from_type,
+    sshkey_impl_index_from_type_nid as rust_sshkey_impl_index_from_type_nid,
     sshkey_impl_name_from_type_nid as rust_sshkey_impl_name_from_type_nid,
     sshkey_type_from_name as rust_sshkey_type_from_name,
     sshkey_type_is_valid_ca as rust_sshkey_type_is_valid_ca, RustSshkeyImpl,
@@ -1914,6 +1916,49 @@ pub extern "C" fn ossh_rust_sshkey_impl_name_from_type_nid(
         return -1;
     }
     match rust_sshkey_impl_name_from_type_nid(type_, nid, want_short != 0, entries, nentries) {
+        Some(parsed) => {
+            unsafe {
+                *out = parsed;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_impl_index_from_type(
+    type_: c_int,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    out: *mut usize,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match rust_sshkey_impl_index_from_type(type_, entries, nentries) {
+        Some(parsed) => {
+            unsafe {
+                *out = parsed;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_impl_index_from_type_nid(
+    type_: c_int,
+    nid: c_int,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    out: *mut usize,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match rust_sshkey_impl_index_from_type_nid(type_, nid, entries, nentries) {
         Some(parsed) => {
             unsafe {
                 *out = parsed;

@@ -107,6 +107,39 @@ pub(crate) fn sshkey_impl_name_from_type_nid(
     None
 }
 
+pub(crate) fn sshkey_impl_index_from_type(
+    type_: c_int,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Option<usize> {
+    let entries = keyimpls(entries, nentries)?;
+
+    for (idx, entry_ptr) in entries.iter().enumerate() {
+        let entry = entry_ref(*entry_ptr)?;
+        if entry.type_ == type_ {
+            return Some(idx);
+        }
+    }
+    None
+}
+
+pub(crate) fn sshkey_impl_index_from_type_nid(
+    type_: c_int,
+    nid: c_int,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Option<usize> {
+    let entries = keyimpls(entries, nentries)?;
+
+    for (idx, entry_ptr) in entries.iter().enumerate() {
+        let entry = entry_ref(*entry_ptr)?;
+        if matches_type_nid(entry, type_, nid) {
+            return Some(idx);
+        }
+    }
+    None
+}
+
 pub(crate) fn sshkey_ecdsa_nid_from_name(
     input: *const u8,
     input_len: usize,
@@ -324,6 +357,23 @@ mod tests {
                 entry_ptrs.len(),
             ),
             Some(715)
+        );
+    }
+
+    #[test]
+    fn impl_index_lookup_preserves_first_matching_entry() {
+        let entry_ptrs = entry_ptrs();
+        assert_eq!(
+            sshkey_impl_index_from_type(KEY_RSA, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some(5)
+        );
+        assert_eq!(
+            sshkey_impl_index_from_type_nid(KEY_ECDSA, 715, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some(4)
+        );
+        assert_eq!(
+            sshkey_impl_index_from_type_nid(KEY_RSA, 0, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some(5)
         );
     }
 
