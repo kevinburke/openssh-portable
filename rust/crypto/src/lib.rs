@@ -58,6 +58,7 @@ use sshkey_meta::{
     sshkey_ecdsa_nid_from_name as rust_sshkey_ecdsa_nid_from_name,
     sshkey_equal_public_plan as rust_sshkey_equal_public_plan,
     sshkey_from_private_plan as rust_sshkey_from_private_plan,
+    sshkey_generate_plan as rust_sshkey_generate_plan,
     sshkey_impl_index_from_type as rust_sshkey_impl_index_from_type,
     sshkey_impl_index_from_type_nid as rust_sshkey_impl_index_from_type_nid,
     sshkey_impl_name_from_type_nid as rust_sshkey_impl_name_from_type_nid,
@@ -2087,6 +2088,27 @@ pub extern "C" fn ossh_rust_sshkey_type_can_new(
             0
         }
         None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_generate_plan(
+    type_: c_int,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    out_type: *mut c_int,
+) -> c_int {
+    if out_type.is_null() {
+        return -1;
+    }
+    match rust_sshkey_generate_plan(type_, entries, nentries) {
+        Ok(effective_type) => {
+            unsafe {
+                *out_type = effective_type;
+            }
+            0
+        }
+        Err(err) => err,
     }
 }
 

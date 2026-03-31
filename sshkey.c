@@ -1833,18 +1833,40 @@ sshkey_generate(int type, u_int bits, struct sshkey **keyp)
 {
 	struct sshkey *k;
 	int ret = SSH_ERR_INTERNAL_ERROR;
+#ifdef WITH_RUST_CRYPTO
+	int new_type = KEY_UNSPEC;
+#endif
 	const struct sshkey_impl *impl;
 
-	if (keyp == NULL || sshkey_type_is_cert(type))
+	if (keyp == NULL)
 		return SSH_ERR_INVALID_ARGUMENT;
 	*keyp = NULL;
+#ifdef WITH_RUST_CRYPTO
+	ret = ossh_rust_sshkey_generate_plan(type,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &new_type);
+	if (ret == -1)
+		return SSH_ERR_INVALID_ARGUMENT;
+	if (ret != 0)
+		return SSH_ERR_KEY_TYPE_UNKNOWN;
+	if ((impl = sshkey_impl_from_type(new_type)) == NULL)
+		return SSH_ERR_KEY_TYPE_UNKNOWN;
+#else
+	if (sshkey_type_is_cert(type))
+		return SSH_ERR_INVALID_ARGUMENT;
 	if ((impl = sshkey_impl_from_type(type)) == NULL)
 		return SSH_ERR_KEY_TYPE_UNKNOWN;
+#endif
 	if (impl->funcs->generate == NULL)
 		return SSH_ERR_FEATURE_UNSUPPORTED;
 	if ((k = sshkey_new(KEY_UNSPEC)) == NULL)
 		return SSH_ERR_ALLOC_FAIL;
-	k->type = type;
+	k->type =
+#ifdef WITH_RUST_CRYPTO
+	    new_type;
+#else
+	    type;
+#endif
 	if ((ret = impl->funcs->generate(k, bits)) != 0) {
 		sshkey_free(k);
 		return ret;
