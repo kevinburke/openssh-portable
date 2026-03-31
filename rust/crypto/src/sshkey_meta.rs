@@ -11,6 +11,7 @@ const KEY_ECDSA_SK: c_int = 6;
 const KEY_ECDSA_SK_CERT: c_int = 7;
 const KEY_ED25519_SK: c_int = 8;
 const KEY_ED25519_SK_CERT: c_int = 9;
+const KEY_UNSPEC: c_int = 10;
 
 #[repr(C)]
 pub struct RustSshkeyImpl {
@@ -95,6 +96,20 @@ pub(crate) fn sshkey_type_certified(type_: c_int) -> Option<c_int> {
 
 pub(crate) fn sshkey_type_is_sk(type_: c_int) -> bool {
     matches!(sshkey_type_plain(type_), KEY_ECDSA_SK | KEY_ED25519_SK)
+}
+
+pub(crate) fn sshkey_type_can_new(
+    type_: c_int,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Option<bool> {
+    if type_ == KEY_UNSPEC {
+        return Some(true);
+    }
+    if sshkey_impl_index_from_type(type_, entries, nentries).is_some() {
+        return Some(true);
+    }
+    Some(is_ecdsa_variant(type_) && sshkey_type_plain(type_) == KEY_ECDSA)
 }
 
 pub(crate) fn sshkey_type_from_name(
@@ -439,5 +454,30 @@ mod tests {
         assert_eq!(sshkey_type_certified(KEY_RSA_CERT), None);
         assert!(sshkey_type_is_sk(KEY_ED25519_SK_CERT));
         assert!(!sshkey_type_is_sk(KEY_RSA_CERT));
+    }
+
+    #[test]
+    fn type_can_new_matches_constructor_rules() {
+        let entry_ptrs = entry_ptrs();
+        assert_eq!(
+            sshkey_type_can_new(KEY_UNSPEC, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some(true)
+        );
+        assert_eq!(
+            sshkey_type_can_new(KEY_ED25519, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some(true)
+        );
+        assert_eq!(
+            sshkey_type_can_new(KEY_ECDSA_CERT, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some(true)
+        );
+        assert_eq!(
+            sshkey_type_can_new(KEY_ECDSA_SK, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some(false)
+        );
+        assert_eq!(
+            sshkey_type_can_new(4242, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some(false)
+        );
     }
 }
