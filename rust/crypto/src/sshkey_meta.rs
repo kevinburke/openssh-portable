@@ -173,6 +173,17 @@ pub(crate) fn sshkey_equal_public_plan(
     Some((true, lhs_type))
 }
 
+pub(crate) fn sshkey_free_contents_plan(
+    type_: c_int,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Option<(bool, c_int)> {
+    if let Some(index) = sshkey_impl_index_from_type(type_, entries, nentries) {
+        return Some((sshkey_type_is_cert(type_), index as c_int));
+    }
+    Some((sshkey_type_is_cert(type_), KEY_UNSPEC))
+}
+
 pub(crate) fn sshkey_type_from_name(
     input: *const u8,
     input_len: usize,
@@ -610,6 +621,23 @@ mod tests {
         assert_eq!(
             sshkey_equal_public_plan(KEY_ECDSA_SK, KEY_ECDSA_SK, entry_ptrs.as_ptr(), entry_ptrs.len()),
             None
+        );
+    }
+
+    #[test]
+    fn free_contents_plan_tracks_cert_and_optional_cleanup_dispatch() {
+        let entry_ptrs = entry_ptrs();
+        assert_eq!(
+            sshkey_free_contents_plan(KEY_ED25519_CERT, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some((
+                true,
+                sshkey_impl_index_from_type(KEY_ED25519_CERT, entry_ptrs.as_ptr(), entry_ptrs.len())
+                    .unwrap() as c_int,
+            ))
+        );
+        assert_eq!(
+            sshkey_free_contents_plan(KEY_UNSPEC, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some((false, KEY_UNSPEC))
         );
     }
 }

@@ -995,16 +995,33 @@ static void
 sshkey_free_contents(struct sshkey *k)
 {
 	const struct sshkey_impl *impl;
+#ifdef WITH_RUST_CRYPTO
+	int has_cert = 0, impl_index = KEY_UNSPEC;
+#endif
 
 	if (k == NULL)
 		return;
 	if ((k->flags & SSHKEY_FLAG_EXT) != 0)
 		pkcs11_key_free(k);
+#ifdef WITH_RUST_CRYPTO
+	impl = NULL;
+	if (ossh_rust_sshkey_free_contents_plan(k->type,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &has_cert, &impl_index) == 0 &&
+	    impl_index != KEY_UNSPEC) {
+		impl = keyimpls[impl_index];
+	}
+	if (impl != NULL && impl->funcs->cleanup != NULL)
+		impl->funcs->cleanup(k);
+	if (has_cert)
+		cert_free(k->cert);
+#else
 	if ((impl = sshkey_impl_from_type(k->type)) != NULL &&
 	    impl->funcs->cleanup != NULL)
 		impl->funcs->cleanup(k);
 	if (sshkey_type_is_cert(k->type))
 		cert_free(k->cert);
+#endif
 	freezero(k->shielded_private, k->shielded_len);
 	sshkey_prekey_free(k->shield_prekey, k->shield_prekey_len);
 }
