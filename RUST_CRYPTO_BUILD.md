@@ -42,6 +42,10 @@ Rust-backed today:
   - HMAC packet-MAC setup/init/compute/check for `hmac-*`
   - sequence-number prefixing and truncated digest handling
   - UMAC / UMAC128 remain in C
+- the first `sshkey.c` dispatch-consolidation slice:
+  - `keyimpl` selection by type
+  - `keyimpl` selection by `(type, nid)`
+  - existing C key object allocation/free and function tables remain in place
 - OpenSSH `openssh-key-v1` armor and header parsing
 - OpenSSH `openssh-key-v1` decrypted private-section parsing for Ed25519,
   RSA, and ECDSA keys:

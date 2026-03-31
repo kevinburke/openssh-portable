@@ -525,6 +525,12 @@ int ossh_rust_sshkey_type_from_name(const uint8_t *input, size_t input_len,
 int ossh_rust_sshkey_impl_name_from_type_nid(int type, int nid,
     int want_short, const struct ossh_rust_sshkey_impl * const *entries,
     size_t nentries, const char **out);
+int ossh_rust_sshkey_impl_index_from_type(int type,
+    const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
+    size_t *out);
+int ossh_rust_sshkey_impl_index_from_type_nid(int type, int nid,
+    const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
+    size_t *out);
 int ossh_rust_sshkey_ecdsa_nid_from_name(const uint8_t *input,
     size_t input_len, const struct ossh_rust_sshkey_impl * const *entries,
     size_t nentries, int *out);
