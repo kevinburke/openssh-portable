@@ -53,6 +53,7 @@ Rust-backed today:
   - `sshkey_from_private()` derivation planning, including cert-copy decisions
   - `sshkey_equal_public()` comparability and dispatch planning
   - `sshkey_generate()` type validation and dispatch planning
+  - `sshkey_free_contents()` cleanup planning
   - existing C key object allocation/free and function tables remain in place
 - OpenSSH `openssh-key-v1` armor and header parsing
 - OpenSSH `openssh-key-v1` decrypted private-section parsing for Ed25519,
