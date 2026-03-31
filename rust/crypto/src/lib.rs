@@ -58,6 +58,7 @@ use sshkey_meta::{
     sshkey_equal_plan as rust_sshkey_equal_plan,
     sshkey_ecdsa_nid_from_name as rust_sshkey_ecdsa_nid_from_name,
     sshkey_equal_public_plan as rust_sshkey_equal_public_plan,
+    sshkey_from_blob_plan as rust_sshkey_from_blob_plan,
     sshkey_free_contents_plan as rust_sshkey_free_contents_plan,
     sshkey_from_private_plan as rust_sshkey_from_private_plan,
     sshkey_generate_plan as rust_sshkey_generate_plan,
@@ -2207,6 +2208,33 @@ pub extern "C" fn ossh_rust_sshkey_equal_plan(
             0
         }
         None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_from_blob_plan(
+    input: *const u8,
+    input_len: usize,
+    allow_cert: c_int,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    out_type: *mut c_int,
+    out_impl_index: *mut c_int,
+    out_use_noec_fallback: *mut c_int,
+) -> c_int {
+    if out_type.is_null() || out_impl_index.is_null() || out_use_noec_fallback.is_null() {
+        return -1;
+    }
+    match rust_sshkey_from_blob_plan(input, input_len, allow_cert != 0, entries, nentries) {
+        Ok((type_, impl_index, use_noec_fallback)) => {
+            unsafe {
+                *out_type = type_;
+                *out_impl_index = impl_index;
+                *out_use_noec_fallback = c_int::from(use_noec_fallback);
+            }
+            0
+        }
+        Err(err) => err,
     }
 }
 

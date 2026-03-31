@@ -558,6 +558,10 @@ int ossh_rust_sshkey_equal_public_plan(int lhs_type, int rhs_type,
 int ossh_rust_sshkey_equal_plan(int lhs_type, int rhs_type,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     int *out_compare_cert, int *out_dispatch_type);
+int ossh_rust_sshkey_from_blob_plan(const uint8_t *input, size_t input_len,
+    int allow_cert, const struct ossh_rust_sshkey_impl * const *entries,
+    size_t nentries, int *out_type, int *out_impl_index,
+    int *out_use_noec_fallback);
 int ossh_rust_sshkey_free_contents_plan(int type,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     int *out_has_cert, int *out_impl_index);
