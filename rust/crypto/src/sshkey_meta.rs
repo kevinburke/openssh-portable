@@ -12,6 +12,7 @@ const KEY_ECDSA_SK_CERT: c_int = 7;
 const KEY_ED25519_SK: c_int = 8;
 const KEY_ED25519_SK_CERT: c_int = 9;
 const KEY_UNSPEC: c_int = 10;
+const SSH_ERR_KEY_CERT_INVALID_SIGN_KEY: c_int = -19;
 const SSH_ERR_EXPECTED_CERT: c_int = -16;
 const SSH_ERR_KEY_LACKS_CERTBLOB: c_int = -17;
 
@@ -65,6 +66,22 @@ fn matches_type_nid(entry: &RustSshkeyImpl, type_: c_int, nid: c_int) -> bool {
 
 fn is_ecdsa_variant(type_: c_int) -> bool {
     matches!(type_, KEY_ECDSA | KEY_ECDSA_CERT | KEY_ECDSA_SK | KEY_ECDSA_SK_CERT)
+}
+
+fn parse_ecdsa_type_name(input: &[u8]) -> Option<c_int> {
+    match input {
+        b"ecdsa-sha2-nistp256"
+        | b"ecdsa-sha2-nistp384"
+        | b"ecdsa-sha2-nistp521" => Some(KEY_ECDSA),
+        b"ecdsa-sha2-nistp256-cert-v01@openssh.com"
+        | b"ecdsa-sha2-nistp384-cert-v01@openssh.com"
+        | b"ecdsa-sha2-nistp521-cert-v01@openssh.com" => Some(KEY_ECDSA_CERT),
+        b"sk-ecdsa-sha2-nistp256@openssh.com"
+        | b"webauthn-sk-ecdsa-sha2-nistp256@openssh.com" => Some(KEY_ECDSA_SK),
+        b"sk-ecdsa-sha2-nistp256-cert-v01@openssh.com"
+        | b"webauthn-sk-ecdsa-sha2-nistp256-cert-v01@openssh.com" => Some(KEY_ECDSA_SK_CERT),
+        _ => None,
+    }
 }
 
 pub(crate) fn sshkey_type_is_cert(type_: c_int) -> bool {
@@ -186,6 +203,27 @@ pub(crate) fn sshkey_equal_plan(
     Some((sshkey_type_is_cert(lhs_type), lhs_type))
 }
 
+pub(crate) fn sshkey_from_blob_plan(
+    input: *const u8,
+    input_len: usize,
+    allow_cert: bool,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Result<(c_int, c_int, bool), c_int> {
+    let type_ = sshkey_type_from_name(input, input_len, entries, nentries, false)
+        .ok_or(-14)?;
+    if !allow_cert && sshkey_type_is_cert(type_) {
+        return Err(SSH_ERR_KEY_CERT_INVALID_SIGN_KEY);
+    }
+    if let Some(index) = sshkey_impl_index_from_type(type_, entries, nentries) {
+        return Ok((type_, index as c_int, false));
+    }
+    if is_ecdsa_variant(type_) && sshkey_type_plain(type_) == KEY_ECDSA {
+        return Ok((type_, KEY_UNSPEC, true));
+    }
+    Err(-14)
+}
+
 pub(crate) fn sshkey_free_contents_plan(
     type_: c_int,
     entries: *const *const RustSshkeyImpl,
@@ -205,6 +243,9 @@ pub(crate) fn sshkey_type_from_name(
     allow_short: bool,
 ) -> Option<c_int> {
     let input = read_input(input, input_len)?;
+    if let Some(type_) = parse_ecdsa_type_name(input) {
+        return Some(type_);
+    }
     let entries = keyimpls(entries, nentries)?;
 
     for entry_ptr in entries {
@@ -651,6 +692,54 @@ mod tests {
         assert_eq!(
             sshkey_equal_plan(KEY_ECDSA_SK, KEY_ECDSA_SK, entry_ptrs.as_ptr(), entry_ptrs.len()),
             None
+        );
+    }
+
+    #[test]
+    fn from_blob_plan_handles_cert_policy_and_noec_fallback() {
+        let entry_ptrs = entry_ptrs();
+        let noec_entry_ptrs: Vec<*const RustSshkeyImpl> = entry_ptrs
+            .iter()
+            .copied()
+            .filter(|entry_ptr| {
+                let entry = entry_ref(*entry_ptr).unwrap();
+                !is_ecdsa_variant(entry.type_)
+            })
+            .collect();
+        assert_eq!(
+            sshkey_from_blob_plan(
+                b"ssh-ed25519".as_ptr(),
+                b"ssh-ed25519".len(),
+                true,
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Ok((
+                KEY_ED25519,
+                sshkey_impl_index_from_type(KEY_ED25519, entry_ptrs.as_ptr(), entry_ptrs.len())
+                    .unwrap() as c_int,
+                false,
+            ))
+        );
+        assert_eq!(
+            sshkey_from_blob_plan(
+                b"ecdsa-sha2-nistp256-cert-v01@openssh.com".as_ptr(),
+                b"ecdsa-sha2-nistp256-cert-v01@openssh.com".len(),
+                false,
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Err(SSH_ERR_KEY_CERT_INVALID_SIGN_KEY)
+        );
+        assert_eq!(
+            sshkey_from_blob_plan(
+                b"ecdsa-sha2-nistp256-cert-v01@openssh.com".as_ptr(),
+                b"ecdsa-sha2-nistp256-cert-v01@openssh.com".len(),
+                true,
+                noec_entry_ptrs.as_ptr(),
+                noec_entry_ptrs.len(),
+            ),
+            Ok((KEY_ECDSA_CERT, KEY_UNSPEC, true))
         );
     }
 
