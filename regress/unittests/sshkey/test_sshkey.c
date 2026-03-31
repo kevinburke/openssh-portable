@@ -495,9 +495,9 @@ sshkey_tests(void)
 	ASSERT_INT_EQ(sshkey_type_from_shortname("ED25519"), KEY_ED25519);
 	ASSERT_INT_EQ(sshkey_type_plain(KEY_ED25519_CERT), KEY_ED25519);
 	ASSERT_INT_EQ(sshkey_type_is_cert(KEY_ED25519_CERT), 1);
-	k1 = sshkey_new(KEY_ED25519_SK_CERT);
+	k1 = sshkey_new(KEY_ED25519_CERT);
 	ASSERT_PTR_NE(k1, NULL);
-	ASSERT_INT_EQ(sshkey_is_sk(k1), 1);
+	ASSERT_PTR_NE(k1->cert, NULL);
 	sshkey_free(k1);
 	k1 = NULL;
 #if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
@@ -514,6 +514,12 @@ sshkey_tests(void)
 	ASSERT_STRING_EQ(sshkey_ssh_name(k1), "ssh-ed25519");
 	sshkey_free(k1);
 	k1 = NULL;
+	k1 = sshkey_new(KEY_ED25519_CERT);
+	ASSERT_PTR_NE(k1, NULL);
+	ASSERT_PTR_NE(k1->cert, NULL);
+	sshkey_free(k1);
+	k1 = NULL;
+	ASSERT_PTR_EQ(sshkey_new(4242), NULL);
 	TEST_DONE();
 
 #ifdef WITH_OPENSSL

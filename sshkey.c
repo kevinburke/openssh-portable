@@ -864,7 +864,20 @@ sshkey_new(int type)
 {
 	struct sshkey *k;
 	const struct sshkey_impl *impl = NULL;
+#ifdef WITH_RUST_CRYPTO
+	int can_new = 0, is_cert = 0;
+#endif
 
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_sshkey_type_can_new(type,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &can_new) == 0) {
+		if (!can_new)
+			return NULL;
+		if (type != KEY_UNSPEC)
+			impl = sshkey_impl_from_type(type);
+	} else
+#endif
 	if (type != KEY_UNSPEC &&
 	    (impl = sshkey_impl_from_type(type)) == NULL) {
 		if (!(key_type_is_ecdsa_variant(type) &&
@@ -883,7 +896,12 @@ sshkey_new(int type)
 			return NULL;
 		}
 	}
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_sshkey_type_is_cert(type, &is_cert) == 0 ? is_cert :
+	    sshkey_is_cert(k)) {
+#else
 	if (sshkey_is_cert(k)) {
+#endif
 		if ((k->cert = cert_new()) == NULL) {
 			sshkey_free(k);
 			return NULL;
@@ -985,7 +1003,7 @@ sshkey_free_contents(struct sshkey *k)
 	if ((impl = sshkey_impl_from_type(k->type)) != NULL &&
 	    impl->funcs->cleanup != NULL)
 		impl->funcs->cleanup(k);
-	if (sshkey_is_cert(k))
+	if (sshkey_type_is_cert(k->type))
 		cert_free(k->cert);
 	freezero(k->shielded_private, k->shielded_len);
 	sshkey_prekey_free(k->shield_prekey, k->shield_prekey_len);
