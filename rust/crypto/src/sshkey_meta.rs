@@ -138,6 +138,16 @@ pub(crate) fn sshkey_serialize_plan(
     Ok((effective_type, false))
 }
 
+pub(crate) fn sshkey_from_private_plan(
+    type_: c_int,
+    nid: c_int,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Option<(c_int, bool)> {
+    sshkey_impl_index_from_type_nid(type_, nid, entries, nentries)?;
+    Some((type_, sshkey_type_is_cert(type_)))
+}
+
 pub(crate) fn sshkey_type_from_name(
     input: *const u8,
     input_len: usize,
@@ -524,6 +534,23 @@ mod tests {
         assert_eq!(
             sshkey_serialize_plan(KEY_ED25519_CERT, false, true, 0),
             Err(SSH_ERR_KEY_LACKS_CERTBLOB)
+        );
+    }
+
+    #[test]
+    fn from_private_plan_requires_supported_type_and_tracks_cert_copy() {
+        let entry_ptrs = entry_ptrs();
+        assert_eq!(
+            sshkey_from_private_plan(KEY_ED25519, 0, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some((KEY_ED25519, false))
+        );
+        assert_eq!(
+            sshkey_from_private_plan(KEY_ECDSA_CERT, 415, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some((KEY_ECDSA_CERT, true))
+        );
+        assert_eq!(
+            sshkey_from_private_plan(KEY_ECDSA_CERT, 999, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            None
         );
     }
 }

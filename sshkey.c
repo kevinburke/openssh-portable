@@ -1923,18 +1923,42 @@ sshkey_from_private(const struct sshkey *k, struct sshkey **pkp)
 {
 	struct sshkey *n = NULL;
 	int r = SSH_ERR_INTERNAL_ERROR;
+#ifdef WITH_RUST_CRYPTO
+	int new_type = KEY_UNSPEC, copy_cert = 0;
+#endif
 	const struct sshkey_impl *impl;
 
 	*pkp = NULL;
+	if (k == NULL)
+		return SSH_ERR_KEY_TYPE_UNKNOWN;
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_sshkey_from_private_plan(k->type, k->ecdsa_nid,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &new_type, &copy_cert) != 0)
+		return SSH_ERR_KEY_TYPE_UNKNOWN;
+	if ((impl = sshkey_impl_from_key(k)) == NULL)
+		return SSH_ERR_KEY_TYPE_UNKNOWN;
+	if ((n = sshkey_new(new_type)) == NULL) {
+		r = SSH_ERR_ALLOC_FAIL;
+		goto out;
+	}
+#else
 	if ((impl = sshkey_impl_from_key(k)) == NULL)
 		return SSH_ERR_KEY_TYPE_UNKNOWN;
 	if ((n = sshkey_new(k->type)) == NULL) {
 		r = SSH_ERR_ALLOC_FAIL;
 		goto out;
 	}
+#endif
 	if ((r = impl->funcs->copy_public(k, n)) != 0)
 		goto out;
-	if (sshkey_is_cert(k) && (r = sshkey_cert_copy(k, n)) != 0)
+	if (
+#ifdef WITH_RUST_CRYPTO
+	    copy_cert
+#else
+	    sshkey_is_cert(k)
+#endif
+	    && (r = sshkey_cert_copy(k, n)) != 0)
 		goto out;
 	/* success */
 	*pkp = n;

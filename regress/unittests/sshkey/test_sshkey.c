@@ -253,7 +253,7 @@ load_public_text_line(const char *name)
 void
 sshkey_tests(void)
 {
-	struct sshkey *k1 = NULL, *k2 = NULL, *k3 = NULL, *kf = NULL;
+	struct sshkey *k1 = NULL, *k2 = NULL, *k3 = NULL, *kcert = NULL, *kf = NULL;
 #ifdef WITH_OPENSSL
 	struct sshkey *k4 = NULL, *kr = NULL, *kd = NULL;
 #ifdef OPENSSL_HAS_ECC
@@ -668,11 +668,17 @@ sshkey_tests(void)
 	sshbuf_reset(b);
 	ASSERT_INT_EQ(sshkey_putb_plain(k1, b), 0);
 	ASSERT_INT_EQ(sshkey_from_blob(sshbuf_ptr(b), sshbuf_len(b), &k3), 0);
+	ASSERT_INT_EQ(sshkey_from_private(k1, &kcert), 0);
+	ASSERT_PTR_NE(kcert, NULL);
+	ASSERT_INT_EQ(kcert->type, k1->type);
+	ASSERT_PTR_NE(kcert->cert, NULL);
+	ASSERT_INT_EQ(sshkey_equal(k1, kcert), 1);
 
 	sshkey_free(k1);
 	sshkey_free(k2);
 	sshkey_free(k3);
-	k1 = k2 = k3 = NULL;
+	sshkey_free(kcert);
+	k1 = k2 = k3 = kcert = NULL;
 	sshbuf_reset(b);
 	TEST_DONE();
 
