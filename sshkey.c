@@ -2463,6 +2463,9 @@ sshkey_from_blob_internal(struct sshbuf *b, struct sshkey **keyp,
 	struct sshkey *key = NULL;
 	struct sshbuf *copy;
 	const struct sshkey_impl *impl;
+#ifdef WITH_RUST_CRYPTO
+	int impl_index = KEY_UNSPEC, use_noec_fallback = 0;
+#endif
 
 #ifdef DEBUG_PK /* XXX */
 	sshbuf_dump(b, stderr);
@@ -2478,6 +2481,15 @@ sshkey_from_blob_internal(struct sshbuf *b, struct sshkey **keyp,
 		goto out;
 	}
 
+#ifdef WITH_RUST_CRYPTO
+	ret = ossh_rust_sshkey_from_blob_plan((const u_char *)ktype,
+	    strlen(ktype), allow_cert,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &type, &impl_index, &use_noec_fallback);
+	if (ret != 0)
+		goto out;
+	impl = impl_index == KEY_UNSPEC ? NULL : keyimpls[impl_index];
+#else
 	type = sshkey_type_from_name(ktype);
 	if (!allow_cert && sshkey_type_is_cert(type)) {
 		ret = SSH_ERR_KEY_CERT_INVALID_SIGN_KEY;
@@ -2489,6 +2501,7 @@ sshkey_from_blob_internal(struct sshbuf *b, struct sshkey **keyp,
 		ret = SSH_ERR_KEY_TYPE_UNKNOWN;
 		goto out;
 	}
+#endif
 	if ((key = sshkey_new(type)) == NULL) {
 		ret = SSH_ERR_ALLOC_FAIL;
 		goto out;
@@ -2502,8 +2515,13 @@ sshkey_from_blob_internal(struct sshbuf *b, struct sshkey **keyp,
 	}
 	if (impl != NULL)
 		ret = impl->funcs->deserialize_public(ktype, b, key);
+#ifdef WITH_RUST_CRYPTO
+	else if (use_noec_fallback)
+		ret = sshkey_ecdsa_deserialize_public_noec(ktype, b, key);
+#else
 	else
 		ret = sshkey_ecdsa_deserialize_public_noec(ktype, b, key);
+#endif
 	if (ret != 0)
 		goto out;
 
