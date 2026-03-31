@@ -59,8 +59,12 @@ use sshkey_meta::{
     sshkey_impl_index_from_type as rust_sshkey_impl_index_from_type,
     sshkey_impl_index_from_type_nid as rust_sshkey_impl_index_from_type_nid,
     sshkey_impl_name_from_type_nid as rust_sshkey_impl_name_from_type_nid,
+    sshkey_type_certified as rust_sshkey_type_certified,
     sshkey_type_from_name as rust_sshkey_type_from_name,
+    sshkey_type_is_cert as rust_sshkey_type_is_cert,
+    sshkey_type_is_sk as rust_sshkey_type_is_sk,
     sshkey_type_is_valid_ca as rust_sshkey_type_is_valid_ca, RustSshkeyImpl,
+    sshkey_type_plain as rust_sshkey_type_plain,
 };
 use util::{
     a2port, add_keys_to_agent_line_parse, add_keys_to_agent_line_write,
@@ -2010,6 +2014,55 @@ pub extern "C" fn ossh_rust_sshkey_type_is_valid_ca(
         }
         None => -1,
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_type_is_cert(type_: c_int, out: *mut c_int) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    unsafe {
+        *out = c_int::from(rust_sshkey_type_is_cert(type_));
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_type_plain(type_: c_int, out: *mut c_int) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    unsafe {
+        *out = rust_sshkey_type_plain(type_);
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_type_certified(type_: c_int, out: *mut c_int) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match rust_sshkey_type_certified(type_) {
+        Some(parsed) => {
+            unsafe {
+                *out = parsed;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_type_is_sk(type_: c_int, out: *mut c_int) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    unsafe {
+        *out = c_int::from(rust_sshkey_type_is_sk(type_));
+    }
+    0
 }
 
 #[unsafe(no_mangle)]
