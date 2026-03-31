@@ -1094,13 +1094,34 @@ sshkey_equal_public(const struct sshkey *a, const struct sshkey *b)
 int
 sshkey_equal(const struct sshkey *a, const struct sshkey *b)
 {
-	if (a == NULL || b == NULL || a->type != b->type)
+	const struct sshkey_impl *impl;
+#ifdef WITH_RUST_CRYPTO
+	int compare_cert = 0, dispatch_type = KEY_UNSPEC;
+#endif
+
+	if (a == NULL || b == NULL)
+		return 0;
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_sshkey_equal_plan(a->type, b->type,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &compare_cert, &dispatch_type) != 0)
+		return 0;
+	if ((impl = sshkey_impl_from_type(dispatch_type)) == NULL)
+		return 0;
+	if (compare_cert) {
+#else
+	if (a->type != b->type)
 		return 0;
 	if (sshkey_is_cert(a)) {
+#endif
 		if (!cert_compare(a->cert, b->cert))
 			return 0;
 	}
-	return sshkey_equal_public(a, b);
+#ifndef WITH_RUST_CRYPTO
+	if ((impl = sshkey_impl_from_type(a->type)) == NULL)
+		return 0;
+#endif
+	return impl->funcs->equal(a, b);
 }
 
 

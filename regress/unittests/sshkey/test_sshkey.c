@@ -682,6 +682,8 @@ sshkey_tests(void)
 	ASSERT_INT_EQ(kcert->type, k1->type);
 	ASSERT_PTR_NE(kcert->cert, NULL);
 	ASSERT_INT_EQ(sshkey_equal(k1, kcert), 1);
+	ASSERT_INT_EQ(sshbuf_put_u8(kcert->cert->certblob, 0), 0);
+	ASSERT_INT_EQ(sshkey_equal(k1, kcert), 0);
 
 	sshkey_free(k1);
 	sshkey_free(k2);
