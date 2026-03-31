@@ -1049,13 +1049,28 @@ sshkey_sk_fields_equal(const struct sshkey *a, const struct sshkey *b)
 int
 sshkey_equal_public(const struct sshkey *a, const struct sshkey *b)
 {
+#ifdef WITH_RUST_CRYPTO
+	int comparable = 0, dispatch_type = KEY_UNSPEC;
+#endif
 	const struct sshkey_impl *impl;
 
-	if (a == NULL || b == NULL ||
-	    sshkey_type_plain(a->type) != sshkey_type_plain(b->type))
+	if (a == NULL || b == NULL)
+		return 0;
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_sshkey_equal_public_plan(a->type, b->type,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &comparable, &dispatch_type) != 0)
+		return 0;
+	if (!comparable)
+		return 0;
+	if ((impl = sshkey_impl_from_type(dispatch_type)) == NULL)
+		return 0;
+#else
+	if (sshkey_type_plain(a->type) != sshkey_type_plain(b->type))
 		return 0;
 	if ((impl = sshkey_impl_from_type(a->type)) == NULL)
 		return 0;
+#endif
 	return impl->funcs->equal(a, b);
 }
 
