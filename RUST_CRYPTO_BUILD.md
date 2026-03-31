@@ -45,6 +45,7 @@ Rust-backed today:
 - the first `sshkey.c` dispatch-consolidation slice:
   - `keyimpl` selection by type
   - `keyimpl` selection by `(type, nid)`
+  - key-type relation helpers for `plain`, `certified`, `is_cert`, and `is_sk`
   - existing C key object allocation/free and function tables remain in place
 - OpenSSH `openssh-key-v1` armor and header parsing
 - OpenSSH `openssh-key-v1` decrypted private-section parsing for Ed25519,

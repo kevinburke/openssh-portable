@@ -1,10 +1,16 @@
 use core::ffi::{c_char, c_int, c_void, CStr};
 use core::slice;
 
+const KEY_RSA: c_int = 0;
 const KEY_ECDSA: c_int = 1;
+const KEY_ED25519: c_int = 2;
+const KEY_RSA_CERT: c_int = 3;
 const KEY_ECDSA_CERT: c_int = 4;
+const KEY_ED25519_CERT: c_int = 5;
 const KEY_ECDSA_SK: c_int = 6;
 const KEY_ECDSA_SK_CERT: c_int = 7;
+const KEY_ED25519_SK: c_int = 8;
+const KEY_ED25519_SK_CERT: c_int = 9;
 
 #[repr(C)]
 pub struct RustSshkeyImpl {
@@ -56,6 +62,39 @@ fn matches_type_nid(entry: &RustSshkeyImpl, type_: c_int, nid: c_int) -> bool {
 
 fn is_ecdsa_variant(type_: c_int) -> bool {
     matches!(type_, KEY_ECDSA | KEY_ECDSA_CERT | KEY_ECDSA_SK | KEY_ECDSA_SK_CERT)
+}
+
+pub(crate) fn sshkey_type_is_cert(type_: c_int) -> bool {
+    matches!(
+        type_,
+        KEY_RSA_CERT | KEY_ECDSA_CERT | KEY_ECDSA_SK_CERT | KEY_ED25519_CERT | KEY_ED25519_SK_CERT
+    )
+}
+
+pub(crate) fn sshkey_type_plain(type_: c_int) -> c_int {
+    match type_ {
+        KEY_RSA_CERT => KEY_RSA,
+        KEY_ECDSA_CERT => KEY_ECDSA,
+        KEY_ECDSA_SK_CERT => KEY_ECDSA_SK,
+        KEY_ED25519_CERT => KEY_ED25519,
+        KEY_ED25519_SK_CERT => KEY_ED25519_SK,
+        _ => type_,
+    }
+}
+
+pub(crate) fn sshkey_type_certified(type_: c_int) -> Option<c_int> {
+    match type_ {
+        KEY_RSA => Some(KEY_RSA_CERT),
+        KEY_ECDSA => Some(KEY_ECDSA_CERT),
+        KEY_ECDSA_SK => Some(KEY_ECDSA_SK_CERT),
+        KEY_ED25519 => Some(KEY_ED25519_CERT),
+        KEY_ED25519_SK => Some(KEY_ED25519_SK_CERT),
+        _ => None,
+    }
+}
+
+pub(crate) fn sshkey_type_is_sk(type_: c_int) -> bool {
+    matches!(sshkey_type_plain(type_), KEY_ECDSA_SK | KEY_ED25519_SK)
 }
 
 pub(crate) fn sshkey_type_from_name(
@@ -185,11 +224,6 @@ pub(crate) fn sshkey_type_is_valid_ca(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const KEY_RSA: c_int = 0;
-    const KEY_ED25519: c_int = 2;
-    const KEY_RSA_CERT: c_int = 3;
-    const KEY_ED25519_CERT: c_int = 5;
     const SSH_ED25519: &[u8] = b"ssh-ed25519\0";
     const SSH_ED25519_CERT: &[u8] = b"ssh-ed25519-cert-v01@openssh.com\0";
     const ECDSA_P256: &[u8] = b"ecdsa-sha2-nistp256\0";
@@ -392,5 +426,18 @@ mod tests {
             sshkey_type_is_valid_ca(KEY_ED25519, entry_ptrs.as_ptr(), entry_ptrs.len()),
             Some(true)
         );
+    }
+
+    #[test]
+    fn type_relation_helpers_match_c_semantics() {
+        assert!(sshkey_type_is_cert(KEY_RSA_CERT));
+        assert!(!sshkey_type_is_cert(KEY_RSA));
+        assert_eq!(sshkey_type_plain(KEY_ECDSA_SK_CERT), KEY_ECDSA_SK);
+        assert_eq!(sshkey_type_plain(KEY_ED25519_CERT), KEY_ED25519);
+        assert_eq!(sshkey_type_certified(KEY_ED25519), Some(KEY_ED25519_CERT));
+        assert_eq!(sshkey_type_certified(KEY_ECDSA_SK), Some(KEY_ECDSA_SK_CERT));
+        assert_eq!(sshkey_type_certified(KEY_RSA_CERT), None);
+        assert!(sshkey_type_is_sk(KEY_ED25519_SK_CERT));
+        assert!(!sshkey_type_is_sk(KEY_RSA_CERT));
     }
 }
