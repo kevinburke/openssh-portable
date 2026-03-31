@@ -55,6 +55,7 @@ use rsa::{
     rsa_private_pem_len, rsa_private_pem_write, rsa_sign_prehashed, rsa_verify_prehashed,
 };
 use sshkey_meta::{
+    sshkey_equal_plan as rust_sshkey_equal_plan,
     sshkey_ecdsa_nid_from_name as rust_sshkey_ecdsa_nid_from_name,
     sshkey_equal_public_plan as rust_sshkey_equal_public_plan,
     sshkey_free_contents_plan as rust_sshkey_free_contents_plan,
@@ -2177,6 +2178,30 @@ pub extern "C" fn ossh_rust_sshkey_equal_public_plan(
         Some((comparable, dispatch_type)) => {
             unsafe {
                 *out_comparable = c_int::from(comparable);
+                *out_dispatch_type = dispatch_type;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_equal_plan(
+    lhs_type: c_int,
+    rhs_type: c_int,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    out_compare_cert: *mut c_int,
+    out_dispatch_type: *mut c_int,
+) -> c_int {
+    if out_compare_cert.is_null() || out_dispatch_type.is_null() {
+        return -1;
+    }
+    match rust_sshkey_equal_plan(lhs_type, rhs_type, entries, nentries) {
+        Some((compare_cert, dispatch_type)) => {
+            unsafe {
+                *out_compare_cert = c_int::from(compare_cert);
                 *out_dispatch_type = dispatch_type;
             }
             0
