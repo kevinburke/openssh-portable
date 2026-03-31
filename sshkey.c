@@ -3102,13 +3102,27 @@ sshkey_private_deserialize(struct sshbuf *buf, struct sshkey **kp)
 	u_char *expect_ed25519_pk = NULL;
 	struct sshkey *k = NULL;
 	int type, r = SSH_ERR_INTERNAL_ERROR;
+#ifdef WITH_RUST_CRYPTO
+	int is_cert = 0, impl_index = KEY_UNSPEC, expected_cert_nid = -1;
+#endif
 
 	if (kp != NULL)
 		*kp = NULL;
 	if ((r = sshbuf_get_cstring(buf, &tname, NULL)) != 0)
 		goto out;
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_sshkey_private_deserialize_plan((const u_char *)tname,
+	    strlen(tname), (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &type, &is_cert, &impl_index,
+	    &expected_cert_nid) != 0) {
+		r = SSH_ERR_INTERNAL_ERROR;
+		goto out;
+	}
+	if (is_cert) {
+#else
 	type = sshkey_type_from_name(tname);
 	if (sshkey_type_is_cert(type)) {
+#endif
 		/*
 		 * Certificate key private keys begin with the certificate
 		 * itself. Make sure this matches the type of the enclosing
@@ -3122,7 +3136,13 @@ sshkey_private_deserialize(struct sshbuf *buf, struct sshkey **kp)
 		}
 		/* For ECDSA keys, the group must match too */
 		if (k->type == KEY_ECDSA &&
-		    k->ecdsa_nid != sshkey_ecdsa_nid_from_name(tname)) {
+		    k->ecdsa_nid !=
+#ifdef WITH_RUST_CRYPTO
+		    expected_cert_nid
+#else
+		    sshkey_ecdsa_nid_from_name(tname)
+#endif
+		    ) {
 			r = SSH_ERR_KEY_CERT_MISMATCH;
 			goto out;
 		}
@@ -3140,7 +3160,15 @@ sshkey_private_deserialize(struct sshbuf *buf, struct sshkey **kp)
 			goto out;
 		}
 	}
+#ifdef WITH_RUST_CRYPTO
+	impl = impl_index == KEY_UNSPEC ? NULL : keyimpls[impl_index];
+#else
 	if ((impl = sshkey_impl_from_type(type)) == NULL) {
+		r = SSH_ERR_INTERNAL_ERROR;
+		goto out;
+	}
+#endif
+	if (impl == NULL) {
 		r = SSH_ERR_INTERNAL_ERROR;
 		goto out;
 	}

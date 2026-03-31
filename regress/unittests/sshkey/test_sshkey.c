@@ -380,6 +380,19 @@ sshkey_tests(void)
 	k1 = NULL;
 	TEST_DONE();
 
+	TEST_START("private serialize/deserialize KEY_ED25519");
+	b = sshbuf_new();
+	ASSERT_PTR_NE(b, NULL);
+	ASSERT_INT_EQ(sshkey_private_serialize(kf, b), 0);
+	ASSERT_INT_EQ(sshkey_private_deserialize(b, &k1), 0);
+	ASSERT_PTR_NE(k1, NULL);
+	ASSERT_INT_EQ(sshkey_equal(kf, k1), 1);
+	sshkey_free(k1);
+	k1 = NULL;
+	sshbuf_free(b);
+	b = NULL;
+	TEST_DONE();
+
 	TEST_START("generate invalid key types");
 	ASSERT_INT_EQ(sshkey_generate(KEY_ED25519_CERT, 256, &k1),
 	    SSH_ERR_INVALID_ARGUMENT);
