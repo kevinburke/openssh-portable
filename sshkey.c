@@ -1089,12 +1089,27 @@ to_blob_buf(const struct sshkey *key, struct sshbuf *b, int force_plain,
   enum sshkey_serialize_rep opts)
 {
 	int type, ret = SSH_ERR_INTERNAL_ERROR;
+#ifdef WITH_RUST_CRYPTO
+	int use_cert_blob = 0;
+#endif
 	const char *typename;
 	const struct sshkey_impl *impl;
 
 	if (key == NULL)
 		return SSH_ERR_INVALID_ARGUMENT;
 
+#ifdef WITH_RUST_CRYPTO
+	ret = ossh_rust_sshkey_serialize_plan(key->type, force_plain,
+	    key->cert != NULL, key->cert == NULL ? 0 : sshbuf_len(key->cert->certblob),
+	    &type, &use_cert_blob);
+	if (ret != 0)
+		return ret;
+	if (use_cert_blob) {
+		if ((ret = sshbuf_putb(b, key->cert->certblob)) != 0)
+			return ret;
+		return 0;
+	}
+#else
 	type = force_plain ? sshkey_type_plain(key->type) : key->type;
 
 	if (sshkey_type_is_cert(type)) {
@@ -1107,6 +1122,7 @@ to_blob_buf(const struct sshkey *key, struct sshbuf *b, int force_plain,
 			return ret;
 		return 0;
 	}
+#endif
 	if ((impl = sshkey_impl_from_type(type)) == NULL)
 		return SSH_ERR_KEY_TYPE_UNKNOWN;
 
