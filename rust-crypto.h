@@ -544,6 +544,9 @@ int ossh_rust_sshkey_type_is_sk(int type, int *out);
 int ossh_rust_sshkey_type_can_new(int type,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     int *out);
+int ossh_rust_sshkey_generate_plan(int type,
+    const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
+    int *out_type);
 int ossh_rust_sshkey_serialize_plan(int type, int force_plain, int has_cert,
     size_t certblob_len, int *out_type, int *out_use_cert_blob);
 int ossh_rust_sshkey_from_private_plan(int type, int nid,

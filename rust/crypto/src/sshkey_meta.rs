@@ -114,6 +114,18 @@ pub(crate) fn sshkey_type_can_new(
     Some(is_ecdsa_variant(type_) && sshkey_type_plain(type_) == KEY_ECDSA)
 }
 
+pub(crate) fn sshkey_generate_plan(
+    type_: c_int,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Result<c_int, c_int> {
+    if sshkey_type_is_cert(type_) {
+        return Err(-1);
+    }
+    sshkey_impl_index_from_type(type_, entries, nentries).ok_or(-2)?;
+    Ok(type_)
+}
+
 pub(crate) fn sshkey_serialize_plan(
     type_: c_int,
     force_plain: bool,
@@ -547,6 +559,23 @@ mod tests {
         assert_eq!(
             sshkey_serialize_plan(KEY_ED25519_CERT, false, true, 0),
             Err(SSH_ERR_KEY_LACKS_CERTBLOB)
+        );
+    }
+
+    #[test]
+    fn generate_plan_rejects_cert_and_unknown_types() {
+        let entry_ptrs = entry_ptrs();
+        assert_eq!(
+            sshkey_generate_plan(KEY_ED25519, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Ok(KEY_ED25519)
+        );
+        assert_eq!(
+            sshkey_generate_plan(KEY_ED25519_CERT, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Err(-1)
+        );
+        assert_eq!(
+            sshkey_generate_plan(4242, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Err(-2)
         );
     }
 
