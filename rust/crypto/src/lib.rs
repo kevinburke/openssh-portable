@@ -57,6 +57,7 @@ use rsa::{
 use sshkey_meta::{
     sshkey_ecdsa_nid_from_name as rust_sshkey_ecdsa_nid_from_name,
     sshkey_equal_public_plan as rust_sshkey_equal_public_plan,
+    sshkey_free_contents_plan as rust_sshkey_free_contents_plan,
     sshkey_from_private_plan as rust_sshkey_from_private_plan,
     sshkey_generate_plan as rust_sshkey_generate_plan,
     sshkey_impl_index_from_type as rust_sshkey_impl_index_from_type,
@@ -2177,6 +2178,29 @@ pub extern "C" fn ossh_rust_sshkey_equal_public_plan(
             unsafe {
                 *out_comparable = c_int::from(comparable);
                 *out_dispatch_type = dispatch_type;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_free_contents_plan(
+    type_: c_int,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    out_has_cert: *mut c_int,
+    out_impl_index: *mut c_int,
+) -> c_int {
+    if out_has_cert.is_null() || out_impl_index.is_null() {
+        return -1;
+    }
+    match rust_sshkey_free_contents_plan(type_, entries, nentries) {
+        Some((has_cert, impl_index)) => {
+            unsafe {
+                *out_has_cert = c_int::from(has_cert);
+                *out_impl_index = impl_index;
             }
             0
         }

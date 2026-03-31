@@ -555,6 +555,9 @@ int ossh_rust_sshkey_from_private_plan(int type, int nid,
 int ossh_rust_sshkey_equal_public_plan(int lhs_type, int rhs_type,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     int *out_comparable, int *out_dispatch_type);
+int ossh_rust_sshkey_free_contents_plan(int type,
+    const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
+    int *out_has_cert, int *out_impl_index);
 int ossh_rust_opt_flag(const uint8_t *opt, size_t opt_len,
     int allow_negate, const uint8_t *input, size_t input_len,
     size_t *out_offset, int *out_result);
