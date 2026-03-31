@@ -224,6 +224,25 @@ pub(crate) fn sshkey_from_blob_plan(
     Err(-14)
 }
 
+pub(crate) fn sshkey_private_deserialize_plan(
+    input: *const u8,
+    input_len: usize,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Option<(c_int, bool, c_int, c_int)> {
+    let type_ = sshkey_type_from_name(input, input_len, entries, nentries, false)?;
+    let is_cert = sshkey_type_is_cert(type_);
+    let impl_index = sshkey_impl_index_from_type(type_, entries, nentries)
+        .map(|idx| idx as c_int)
+        .unwrap_or(KEY_UNSPEC);
+    let expected_cert_nid = if type_ == KEY_ECDSA_CERT {
+        sshkey_ecdsa_nid_from_name(input, input_len, entries, nentries)?
+    } else {
+        -1
+    };
+    Some((type_, is_cert, impl_index, expected_cert_nid))
+}
+
 pub(crate) fn sshkey_free_contents_plan(
     type_: c_int,
     entries: *const *const RustSshkeyImpl,
@@ -740,6 +759,41 @@ mod tests {
                 noec_entry_ptrs.len(),
             ),
             Ok((KEY_ECDSA_CERT, KEY_UNSPEC, true))
+        );
+    }
+
+    #[test]
+    fn private_deserialize_plan_tracks_cert_and_impl_selection() {
+        let entry_ptrs = entry_ptrs();
+        assert_eq!(
+            sshkey_private_deserialize_plan(
+                b"ssh-ed25519".as_ptr(),
+                b"ssh-ed25519".len(),
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Some((
+                KEY_ED25519,
+                false,
+                sshkey_impl_index_from_type(KEY_ED25519, entry_ptrs.as_ptr(), entry_ptrs.len())
+                    .unwrap() as c_int,
+                -1,
+            ))
+        );
+        assert_eq!(
+            sshkey_private_deserialize_plan(
+                b"ecdsa-sha2-nistp256-cert-v01@openssh.com".as_ptr(),
+                b"ecdsa-sha2-nistp256-cert-v01@openssh.com".len(),
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Some((
+                KEY_ECDSA_CERT,
+                true,
+                sshkey_impl_index_from_type(KEY_ECDSA_CERT, entry_ptrs.as_ptr(), entry_ptrs.len())
+                    .unwrap() as c_int,
+                415,
+            ))
         );
     }
 
