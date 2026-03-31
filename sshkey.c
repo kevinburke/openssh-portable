@@ -261,6 +261,12 @@ sshkey_ssh_name_from_type_nid(int type, int nid)
 int
 sshkey_type_is_cert(int type)
 {
+#ifdef WITH_RUST_CRYPTO
+	int ret;
+
+	if (ossh_rust_sshkey_type_is_cert(type, &ret) == 0)
+		return ret;
+#endif
 	switch (type) {
 	case KEY_RSA_CERT:
 	case KEY_ECDSA_CERT:
@@ -560,8 +566,16 @@ sshkey_is_cert(const struct sshkey *k)
 int
 sshkey_is_sk(const struct sshkey *k)
 {
+#ifdef WITH_RUST_CRYPTO
+	int ret;
+#endif
+
 	if (k == NULL)
 		return 0;
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_sshkey_type_is_sk(k->type, &ret) == 0)
+		return ret;
+#endif
 	switch (sshkey_type_plain(k->type)) {
 	case KEY_ECDSA_SK:
 	case KEY_ED25519_SK:
@@ -575,6 +589,12 @@ sshkey_is_sk(const struct sshkey *k)
 int
 sshkey_type_plain(int type)
 {
+#ifdef WITH_RUST_CRYPTO
+	int ret;
+
+	if (ossh_rust_sshkey_type_plain(type, &ret) == 0)
+		return ret;
+#endif
 	switch (type) {
 	case KEY_RSA_CERT:
 		return KEY_RSA;
@@ -597,6 +617,12 @@ sshkey_type_plain(int type)
 static int
 sshkey_type_certified(int type)
 {
+#ifdef WITH_RUST_CRYPTO
+	int ret;
+
+	if (ossh_rust_sshkey_type_certified(type, &ret) == 0)
+		return ret;
+#endif
 	switch (type) {
 	case KEY_RSA:
 		return KEY_RSA_CERT;

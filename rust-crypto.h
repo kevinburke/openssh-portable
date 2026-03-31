@@ -537,6 +537,10 @@ int ossh_rust_sshkey_ecdsa_nid_from_name(const uint8_t *input,
 int ossh_rust_sshkey_type_is_valid_ca(int type,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     int *out);
+int ossh_rust_sshkey_type_is_cert(int type, int *out);
+int ossh_rust_sshkey_type_plain(int type, int *out);
+int ossh_rust_sshkey_type_certified(int type, int *out);
+int ossh_rust_sshkey_type_is_sk(int type, int *out);
 int ossh_rust_opt_flag(const uint8_t *opt, size_t opt_len,
     int allow_negate, const uint8_t *input, size_t input_len,
     size_t *out_offset, int *out_result);
