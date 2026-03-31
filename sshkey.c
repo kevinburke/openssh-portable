@@ -177,11 +177,17 @@ keyimpl_nentries(void)
 static const struct sshkey_impl *
 sshkey_impl_from_type(int type)
 {
-	int i;
+	size_t idx = 0;
 
-	for (i = 0; keyimpls[i] != NULL; i++) {
-		if (keyimpls[i]->type == type)
-			return keyimpls[i];
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_sshkey_impl_index_from_type(type,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &idx) == 0)
+		return keyimpls[idx];
+#endif
+	for (idx = 0; keyimpls[idx] != NULL; idx++) {
+		if (keyimpls[idx]->type == type)
+			return keyimpls[idx];
 	}
 	return NULL;
 }
@@ -189,12 +195,18 @@ sshkey_impl_from_type(int type)
 static const struct sshkey_impl *
 sshkey_impl_from_type_nid(int type, int nid)
 {
-	int i;
+	size_t idx = 0;
 
-	for (i = 0; keyimpls[i] != NULL; i++) {
-		if (keyimpls[i]->type == type &&
-		    (keyimpls[i]->nid == 0 || keyimpls[i]->nid == nid))
-			return keyimpls[i];
+#ifdef WITH_RUST_CRYPTO
+	if (ossh_rust_sshkey_impl_index_from_type_nid(type, nid,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &idx) == 0)
+		return keyimpls[idx];
+#endif
+	for (idx = 0; keyimpls[idx] != NULL; idx++) {
+		if (keyimpls[idx]->type == type &&
+		    (keyimpls[idx]->nid == 0 || keyimpls[idx]->nid == nid))
+			return keyimpls[idx];
 	}
 	return NULL;
 }
