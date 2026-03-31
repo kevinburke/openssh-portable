@@ -50,6 +50,7 @@ Rust-backed today:
     `sshkey_new()`
   - `to_blob_buf()` serialization planning for force-plain handling and cert
     blob reuse/error paths
+  - `sshkey_from_private()` derivation planning, including cert-copy decisions
   - existing C key object allocation/free and function tables remain in place
 - OpenSSH `openssh-key-v1` armor and header parsing
 - OpenSSH `openssh-key-v1` decrypted private-section parsing for Ed25519,
