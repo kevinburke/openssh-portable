@@ -13,6 +13,7 @@ const KEY_ED25519_SK: c_int = 8;
 const KEY_ED25519_SK_CERT: c_int = 9;
 const KEY_UNSPEC: c_int = 10;
 const SSH_ERR_KEY_CERT_INVALID_SIGN_KEY: c_int = -19;
+const SSH_ERR_INVALID_ARGUMENT: c_int = -10;
 const SSH_ERR_EXPECTED_CERT: c_int = -16;
 const SSH_ERR_KEY_LACKS_CERTBLOB: c_int = -17;
 
@@ -241,6 +242,22 @@ pub(crate) fn sshkey_private_deserialize_plan(
         -1
     };
     Some((type_, is_cert, impl_index, expected_cert_nid))
+}
+
+pub(crate) fn sshkey_private_serialize_plan(
+    type_: c_int,
+    nid: c_int,
+    has_cert: bool,
+    certblob_len: usize,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Result<c_int, c_int> {
+    if sshkey_type_is_cert(type_) && (!has_cert || certblob_len == 0) {
+        return Err(SSH_ERR_INVALID_ARGUMENT);
+    }
+    sshkey_impl_index_from_type_nid(type_, nid, entries, nentries)
+        .map(|idx| idx as c_int)
+        .ok_or(-1)
 }
 
 pub(crate) fn sshkey_free_contents_plan(
@@ -794,6 +811,39 @@ mod tests {
                     .unwrap() as c_int,
                 415,
             ))
+        );
+    }
+
+    #[test]
+    fn private_serialize_plan_requires_certblob_and_impl() {
+        let entry_ptrs = entry_ptrs();
+        assert_eq!(
+            sshkey_private_serialize_plan(
+                KEY_ED25519,
+                0,
+                false,
+                0,
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Ok(sshkey_impl_index_from_type_nid(
+                KEY_ED25519,
+                0,
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            )
+            .unwrap() as c_int)
+        );
+        assert_eq!(
+            sshkey_private_serialize_plan(
+                KEY_ED25519_CERT,
+                0,
+                false,
+                0,
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Err(SSH_ERR_INVALID_ARGUMENT)
         );
     }
 

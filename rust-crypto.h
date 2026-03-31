@@ -566,6 +566,9 @@ int ossh_rust_sshkey_private_deserialize_plan(const uint8_t *input,
     size_t input_len, const struct ossh_rust_sshkey_impl * const *entries,
     size_t nentries, int *out_type, int *out_is_cert, int *out_impl_index,
     int *out_expected_cert_nid);
+int ossh_rust_sshkey_private_serialize_plan(int type, int nid, int has_cert,
+    size_t certblob_len, const struct ossh_rust_sshkey_impl * const *entries,
+    size_t nentries, int *out_impl_index);
 int ossh_rust_sshkey_free_contents_plan(int type,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     int *out_has_cert, int *out_impl_index);
