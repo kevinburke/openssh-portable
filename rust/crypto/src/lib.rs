@@ -59,6 +59,7 @@ use sshkey_meta::{
     sshkey_impl_index_from_type as rust_sshkey_impl_index_from_type,
     sshkey_impl_index_from_type_nid as rust_sshkey_impl_index_from_type_nid,
     sshkey_impl_name_from_type_nid as rust_sshkey_impl_name_from_type_nid,
+    sshkey_serialize_plan as rust_sshkey_serialize_plan,
     sshkey_type_can_new as rust_sshkey_type_can_new,
     sshkey_type_certified as rust_sshkey_type_certified,
     sshkey_type_from_name as rust_sshkey_type_from_name,
@@ -2084,6 +2085,30 @@ pub extern "C" fn ossh_rust_sshkey_type_can_new(
             0
         }
         None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_serialize_plan(
+    type_: c_int,
+    force_plain: c_int,
+    has_cert: c_int,
+    certblob_len: usize,
+    out_type: *mut c_int,
+    out_use_cert_blob: *mut c_int,
+) -> c_int {
+    if out_type.is_null() || out_use_cert_blob.is_null() {
+        return -1;
+    }
+    match rust_sshkey_serialize_plan(type_, force_plain != 0, has_cert != 0, certblob_len) {
+        Ok((effective_type, use_cert_blob)) => {
+            unsafe {
+                *out_type = effective_type;
+                *out_use_cert_blob = c_int::from(use_cert_blob);
+            }
+            0
+        }
+        Err(err) => err,
     }
 }
 

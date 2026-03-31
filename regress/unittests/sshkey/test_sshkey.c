@@ -517,6 +517,11 @@ sshkey_tests(void)
 	k1 = sshkey_new(KEY_ED25519_CERT);
 	ASSERT_PTR_NE(k1, NULL);
 	ASSERT_PTR_NE(k1->cert, NULL);
+	b = sshbuf_new();
+	ASSERT_PTR_NE(b, NULL);
+	ASSERT_INT_EQ(sshkey_putb(k1, b), SSH_ERR_KEY_LACKS_CERTBLOB);
+	sshbuf_free(b);
+	b = NULL;
 	sshkey_free(k1);
 	k1 = NULL;
 	ASSERT_PTR_EQ(sshkey_new(4242), NULL);
@@ -660,6 +665,8 @@ sshkey_tests(void)
 	b = sshbuf_new();
 	ASSERT_PTR_NE(b, NULL);
 	ASSERT_INT_EQ(sshkey_putb(k1, b), 0);
+	sshbuf_reset(b);
+	ASSERT_INT_EQ(sshkey_putb_plain(k1, b), 0);
 	ASSERT_INT_EQ(sshkey_from_blob(sshbuf_ptr(b), sshbuf_len(b), &k3), 0);
 
 	sshkey_free(k1);
