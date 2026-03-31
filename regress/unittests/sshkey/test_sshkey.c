@@ -393,6 +393,18 @@ sshkey_tests(void)
 	b = NULL;
 	TEST_DONE();
 
+	TEST_START("private serialize rejects cert without certblob");
+	k1 = sshkey_new(KEY_ED25519_CERT);
+	ASSERT_PTR_NE(k1, NULL);
+	b = sshbuf_new();
+	ASSERT_PTR_NE(b, NULL);
+	ASSERT_INT_EQ(sshkey_private_serialize(k1, b), SSH_ERR_INVALID_ARGUMENT);
+	sshbuf_free(b);
+	b = NULL;
+	sshkey_free(k1);
+	k1 = NULL;
+	TEST_DONE();
+
 	TEST_START("generate invalid key types");
 	ASSERT_INT_EQ(sshkey_generate(KEY_ED25519_CERT, 256, &k1),
 	    SSH_ERR_INVALID_ARGUMENT);

@@ -60,6 +60,7 @@ use sshkey_meta::{
     sshkey_equal_public_plan as rust_sshkey_equal_public_plan,
     sshkey_from_blob_plan as rust_sshkey_from_blob_plan,
     sshkey_private_deserialize_plan as rust_sshkey_private_deserialize_plan,
+    sshkey_private_serialize_plan as rust_sshkey_private_serialize_plan,
     sshkey_free_contents_plan as rust_sshkey_free_contents_plan,
     sshkey_from_private_plan as rust_sshkey_from_private_plan,
     sshkey_generate_plan as rust_sshkey_generate_plan,
@@ -2268,6 +2269,37 @@ pub extern "C" fn ossh_rust_sshkey_private_deserialize_plan(
             0
         }
         None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_private_serialize_plan(
+    type_: c_int,
+    nid: c_int,
+    has_cert: c_int,
+    certblob_len: usize,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    out_impl_index: *mut c_int,
+) -> c_int {
+    if out_impl_index.is_null() {
+        return -1;
+    }
+    match rust_sshkey_private_serialize_plan(
+        type_,
+        nid,
+        has_cert != 0,
+        certblob_len,
+        entries,
+        nentries,
+    ) {
+        Ok(impl_index) => {
+            unsafe {
+                *out_impl_index = impl_index;
+            }
+            0
+        }
+        Err(err) => err,
     }
 }
 

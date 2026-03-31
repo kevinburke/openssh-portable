@@ -57,6 +57,7 @@ Rust-backed today:
   - `sshkey_equal()` full-equality planning
   - `sshkey_from_blob_internal()` load-path planning
   - `sshkey_private_deserialize()` load-path planning
+  - `sshkey_private_serialize_opt()` load-path planning
   - existing C key object allocation/free and function tables remain in place
 - OpenSSH `openssh-key-v1` armor and header parsing
 - OpenSSH `openssh-key-v1` decrypted private-section parsing for Ed25519,
