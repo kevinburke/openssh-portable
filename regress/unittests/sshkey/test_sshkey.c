@@ -380,6 +380,15 @@ sshkey_tests(void)
 	k1 = NULL;
 	TEST_DONE();
 
+	TEST_START("generate invalid key types");
+	ASSERT_INT_EQ(sshkey_generate(KEY_ED25519_CERT, 256, &k1),
+	    SSH_ERR_INVALID_ARGUMENT);
+	ASSERT_PTR_EQ(k1, NULL);
+	ASSERT_INT_EQ(sshkey_generate(4242, 256, &k1),
+	    SSH_ERR_KEY_TYPE_UNKNOWN);
+	ASSERT_PTR_EQ(k1, NULL);
+	TEST_DONE();
+
 #ifdef WITH_OPENSSL
 	TEST_START("demote KEY_RSA");
 	ASSERT_INT_EQ(sshkey_from_private(kr, &k1), 0);
