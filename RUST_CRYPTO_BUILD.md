@@ -885,6 +885,8 @@ cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
 cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
   --bin sshkey_metadata -- -runs=1
 cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
+  --bin sshkey_lifecycle -- -runs=1
+cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
   --bin packet_mac -- -runs=1
 ```
 
@@ -896,6 +898,7 @@ cargo +nightly fuzz run ed25519_verify -- -max_total_time=60
 cargo +nightly fuzz run ecdh_peer -- -max_total_time=60
 cargo +nightly fuzz run chachapoly_decrypt -- -max_total_time=60
 cargo +nightly fuzz run sshkey_metadata -- -max_total_time=60
+cargo +nightly fuzz run sshkey_lifecycle -- -max_total_time=60
 cargo +nightly fuzz run packet_mac -- -max_total_time=60
 ```
 
@@ -912,6 +915,7 @@ Current targets:
 - `ecdh_peer`
 - `chachapoly_decrypt`
 - `sshkey_metadata`
+- `sshkey_lifecycle`
 - `packet_mac`
 
 Notes:
