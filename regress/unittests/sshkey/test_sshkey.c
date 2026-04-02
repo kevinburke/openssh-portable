@@ -807,7 +807,7 @@ sshkey_tests(void)
 	ASSERT_INT_EQ(k3->type, k1->type);
 	ASSERT_PTR_NE(k3->cert, NULL);
 	ASSERT_INT_EQ(sshbuf_len(k3->cert->certblob) > 0, 1);
-	ASSERT_INT_EQ(sshkey_equal(k1, k3), 1);
+	ASSERT_INT_EQ(sshkey_equal_public(k1, k3), 1);
 
 	sshkey_free(k1);
 	sshkey_free(k2);
