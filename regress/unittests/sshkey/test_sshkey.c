@@ -764,7 +764,7 @@ sshkey_tests(void)
 
 	TEST_START("certified private roundtrip preserves cert");
 	k1 = get_private("ed25519_1");
-	k3 = get_private("ed25519_1");
+	kf = get_private("ed25519_1");
 	k2 = get_private("ed25519_2");
 	ASSERT_INT_EQ(sshkey_from_private(k1, &kcert), 0);
 	ASSERT_PTR_NE(kcert, NULL);
@@ -792,16 +792,16 @@ sshkey_tests(void)
 	ASSERT_INT_EQ(sshkey_certify(kcert, k2, NULL, NULL, NULL), 0);
 	ASSERT_INT_EQ(sshkey_to_certified(k1), 0);
 	ASSERT_INT_EQ(sshkey_cert_copy(kcert, k1), 0);
-	ASSERT_INT_EQ(sshkey_equal(k1, k3), 0);
-	ASSERT_INT_EQ(sshkey_equal(k3, k1), 0);
-	sshkey_free(k3);
-	k3 = NULL;
+	ASSERT_INT_EQ(sshkey_equal(k1, kf), 0);
+	ASSERT_INT_EQ(sshkey_equal(kf, k1), 0);
 	sshbuf_reset(b);
 	{
 		int r;
 		r = sshkey_private_serialize(k1, b);
 		ASSERT_INT_EQ(r, 0);
 	}
+	sshkey_free(kf);
+	kf = NULL;
 	ASSERT_INT_EQ(sshkey_private_deserialize(b, &k3), 0);
 	ASSERT_PTR_NE(k3, NULL);
 	ASSERT_INT_EQ(k3->type, k1->type);
@@ -813,7 +813,7 @@ sshkey_tests(void)
 	sshkey_free(k2);
 	sshkey_free(k3);
 	sshkey_free(kcert);
-	k1 = k2 = k3 = kcert = NULL;
+	k1 = k2 = k3 = kcert = kf = NULL;
 	sshbuf_reset(b);
 	TEST_DONE();
 
