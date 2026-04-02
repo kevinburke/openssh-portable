@@ -3064,8 +3064,6 @@ sshkey_private_serialize_opt(struct sshkey *key, struct sshbuf *buf,
 			r = SSH_ERR_INVALID_ARGUMENT;
 			goto out;
 		}
-		if ((r = sshbuf_put_stringb(b, key->cert->certblob)) != 0)
-			goto out;
 	}
 #endif
 	if (sshkey_is_cert(key)) {
