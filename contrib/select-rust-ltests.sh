@@ -51,7 +51,8 @@ while IFS= read -r path; do
 		add_test forwarding
 		add_test connect-uri
 		;;
-	sshkey.c|authfile.c|hostfile.c|ssh-ecdsa*.c|ssh-rsa*.c|ssh-ed25519*.c|rust/crypto/src/ecdsa.rs|rust/crypto/src/rsa.rs|rust/crypto/src/openssh_key.rs|rust/crypto/src/private_pem.rs|rust/crypto/src/cert.rs)
+	sshkey.c|authfile.c|authfd.c|hostfile.c|ssh-add.c|ssh-agent.c|ssh-ecdsa*.c|ssh-rsa*.c|ssh-ed25519*.c|rust/crypto/src/ecdsa.rs|rust/crypto/src/rsa.rs|rust/crypto/src/openssh_key.rs|rust/crypto/src/private_pem.rs|rust/crypto/src/cert.rs|rust/crypto/src/sshkey_meta.rs)
+		add_test agent
 		add_test keygen-comment
 		add_test keygen-convert
 		add_test keygen-sshfp
