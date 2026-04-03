@@ -268,6 +268,54 @@ pub(crate) fn sshkey_alg_list_include(
     Some(true)
 }
 
+pub(crate) fn sshkey_names_valid_include(
+    input: *const u8,
+    input_len: usize,
+    allow_wildcard: bool,
+    plain_only: bool,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Option<bool> {
+    let input = read_input(input, input_len)?;
+    if input.is_empty() {
+        return Some(false);
+    }
+    if let Some(type_) = sshkey_type_from_name(input.as_ptr(), input.len(), entries, nentries, false)
+    {
+        return Some(!(plain_only && sshkey_type_is_cert(type_)));
+    }
+    if !allow_wildcard {
+        return Some(false);
+    }
+    let entries_slice = keyimpls(entries, nentries)?;
+    for entry_ptr in entries_slice {
+        let entry = entry_ref(*entry_ptr)?;
+        let name = entry_bytes(entry.name)?;
+        if wildcard_match(input, name) {
+            return Some(true);
+        }
+    }
+    Some(false)
+}
+
+fn wildcard_match(pattern: &[u8], text: &[u8]) -> bool {
+    wildcard_match_from(pattern, text)
+}
+
+fn wildcard_match_from(pattern: &[u8], text: &[u8]) -> bool {
+    if pattern.is_empty() {
+        return text.is_empty();
+    }
+    match pattern[0] {
+        b'*' => {
+            wildcard_match_from(&pattern[1..], text)
+                || (!text.is_empty() && wildcard_match_from(pattern, &text[1..]))
+        }
+        b'?' => !text.is_empty() && wildcard_match_from(&pattern[1..], &text[1..]),
+        ch => !text.is_empty() && ch == text[0] && wildcard_match_from(&pattern[1..], &text[1..]),
+    }
+}
+
 pub(crate) fn sshkey_equal_public_plan(
     lhs_type: c_int,
     rhs_type: c_int,
@@ -995,6 +1043,56 @@ mod tests {
         assert_eq!(
             sshkey_alg_list_include(false, false, true, entry_ptrs[7]),
             Some(true)
+        );
+    }
+
+    #[test]
+    fn names_valid_include_matches_exact_and_wildcard_cases() {
+        let entry_ptrs = entry_ptrs();
+
+        assert_eq!(
+            sshkey_names_valid_include(
+                b"ssh-ed25519".as_ptr(),
+                b"ssh-ed25519".len(),
+                false,
+                false,
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Some(true)
+        );
+        assert_eq!(
+            sshkey_names_valid_include(
+                b"ssh-rsa-cert-v01@openssh.com".as_ptr(),
+                b"ssh-rsa-cert-v01@openssh.com".len(),
+                false,
+                true,
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Some(false)
+        );
+        assert_eq!(
+            sshkey_names_valid_include(
+                b"ssh-*".as_ptr(),
+                b"ssh-*".len(),
+                true,
+                false,
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Some(true)
+        );
+        assert_eq!(
+            sshkey_names_valid_include(
+                b"bogus-*".as_ptr(),
+                b"bogus-*".len(),
+                true,
+                false,
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Some(false)
         );
     }
 

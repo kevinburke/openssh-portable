@@ -61,6 +61,7 @@ Rust-backed today:
   - `sshkey_match_keyname_to_sigalgs()` signature-family classification
   - `sshkey_sigalg_by_name()` signature-algorithm name resolution
   - `sshkey_alg_list()` key-algorithm list filtering
+  - `sshkey_names_valid2()` key-name and wildcard validation
   - `sshkey_from_blob_internal()` load-path planning
   - `sshkey_private_deserialize()` load-path planning
   - `sshkey_private_serialize_opt()` load-path planning
