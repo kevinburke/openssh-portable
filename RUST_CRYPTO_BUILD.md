@@ -58,6 +58,7 @@ Rust-backed today:
   - `sshkey_cert_copy()` certificate-shape validation and signature-key copy
     planning
   - `sshkey_copy_public_sk()` security-key application validation
+  - `sshkey_match_keyname_to_sigalgs()` signature-family classification
   - `sshkey_from_blob_internal()` load-path planning
   - `sshkey_private_deserialize()` load-path planning
   - `sshkey_private_serialize_opt()` load-path planning
