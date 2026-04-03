@@ -1,17 +1,21 @@
 #![no_main]
 
-use core::ffi::{c_int, c_void};
+use core::{ffi::{c_int, c_void}, mem};
 
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use rust_crypto::{
+    ossh_rust_private2_decode_len, ossh_rust_private2_decode_write,
+    ossh_rust_private2_parse_header, ossh_rust_private2_parse_plaintext,
+    ossh_rust_public_blob_decode_len, ossh_rust_public_blob_decode_write,
+    ossh_rust_public_line_parse,
     ossh_rust_sshkey_equal_plan, ossh_rust_sshkey_equal_public_plan,
     ossh_rust_sshkey_free_contents_plan, ossh_rust_sshkey_from_blob_plan,
     ossh_rust_sshkey_from_private_plan, ossh_rust_sshkey_generate_plan,
     ossh_rust_sshkey_private_deserialize_plan, ossh_rust_sshkey_private_serialize_plan,
     ossh_rust_sshkey_serialize_plan, ossh_rust_sshkey_type_can_new,
-    ossh_rust_sshkey_type_from_name, ossh_rust_sshkey_type_is_cert,
-    ossh_rust_sshkey_type_plain, RustSshkeyImplEntry,
+    ossh_rust_sshkey_type_from_name, ossh_rust_sshkey_type_is_cert, ossh_rust_sshkey_type_plain,
+    RustPrivate2HeaderParse, RustPrivate2PlaintextParse, RustPublicLineParse, RustSshkeyImplEntry,
 };
 
 const KEY_RSA: c_int = 0;
@@ -154,6 +158,9 @@ fn entry_ptrs() -> [*const RustSshkeyImplEntry; ENTRIES.len()] {
 struct Input {
     name: Vec<u8>,
     alt_name: Vec<u8>,
+    public_line: Vec<u8>,
+    armored_private: Vec<u8>,
+    plaintext_private: Vec<u8>,
     bits: u8,
     certblob_len: u16,
     flags: u8,
@@ -184,6 +191,9 @@ fuzz_target!(|input: Input| {
     let mut out_expected_cert_nid = -1;
     let mut out_use_noec_fallback = 0;
     let mut out_name_type = KEY_UNSPEC;
+    let mut public_line: RustPublicLineParse = unsafe { mem::zeroed() };
+    let mut private2_header: RustPrivate2HeaderParse = unsafe { mem::zeroed() };
+    let mut private2_plaintext: RustPrivate2PlaintextParse = unsafe { mem::zeroed() };
 
     let _ = ossh_rust_sshkey_type_from_name(
         input.name.as_ptr(),
@@ -264,6 +274,45 @@ fuzz_target!(|input: Input| {
         entries.len(),
         &mut out_bool,
         &mut out_impl_index,
+    );
+    let _ = ossh_rust_public_line_parse(
+        input.public_line.as_ptr(),
+        input.public_line.len(),
+        &mut public_line,
+    );
+    let public_blob_len =
+        ossh_rust_public_blob_decode_len(input.public_line.as_ptr(), input.public_line.len());
+    if public_blob_len > 0 && public_blob_len <= 1 << 20 {
+        let mut decoded = vec![0u8; public_blob_len];
+        let _ = ossh_rust_public_blob_decode_write(
+            input.public_line.as_ptr(),
+            input.public_line.len(),
+            decoded.as_mut_ptr(),
+            decoded.len(),
+        );
+    }
+    let private2_len =
+        ossh_rust_private2_decode_len(input.armored_private.as_ptr(), input.armored_private.len());
+    if private2_len > 0 && private2_len <= 1 << 20 {
+        let mut decoded = vec![0u8; private2_len];
+        if ossh_rust_private2_decode_write(
+            input.armored_private.as_ptr(),
+            input.armored_private.len(),
+            decoded.as_mut_ptr(),
+            decoded.len(),
+        ) == 0
+        {
+            let _ = ossh_rust_private2_parse_header(
+                decoded.as_ptr(),
+                decoded.len(),
+                &mut private2_header,
+            );
+        }
+    }
+    let _ = ossh_rust_private2_parse_plaintext(
+        input.plaintext_private.as_ptr(),
+        input.plaintext_private.len(),
+        &mut private2_plaintext,
     );
 
     let _ = input.bits;
