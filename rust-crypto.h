@@ -536,6 +536,7 @@ int ossh_rust_sshkey_ecdsa_nid_from_name(const uint8_t *input,
     size_t nentries, int *out);
 int ossh_rust_sshkey_curve_name_to_nid(const uint8_t *input, size_t input_len,
     int *out);
+int ossh_rust_sshkey_curve_nid_to_bits(int nid, int *out);
 int ossh_rust_sshkey_type_is_valid_ca(int type,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     int *out);
