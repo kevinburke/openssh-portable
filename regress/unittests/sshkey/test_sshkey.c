@@ -562,6 +562,12 @@ sshkey_tests(void)
 	ASSERT_STRING_EQ(sshkey_ssh_name(k1), "ssh-ed25519");
 	sshkey_free(k1);
 	k1 = NULL;
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
+	ASSERT_INT_EQ(sshkey_match_keyname_to_sigalgs("ssh-rsa",
+	    "rsa-sha2-256"), 1);
+	ASSERT_INT_EQ(sshkey_match_keyname_to_sigalgs("ssh-rsa",
+	    "ssh-ed25519"), 0);
+#endif
 	k1 = sshkey_new(KEY_ED25519_CERT);
 	ASSERT_PTR_NE(k1, NULL);
 	ASSERT_PTR_NE(k1->cert, NULL);
