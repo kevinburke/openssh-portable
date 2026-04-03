@@ -173,6 +173,7 @@ keyimpl_nentries(void)
 		;
 	return i;
 }
+#define OSSH_RUST_NO_IMPL_INDEX (-1)
 #endif /* WITH_RUST_CRYPTO */
 
 static const struct sshkey_impl *
@@ -997,7 +998,7 @@ sshkey_free_contents(struct sshkey *k)
 {
 	const struct sshkey_impl *impl;
 #ifdef WITH_RUST_CRYPTO
-	int has_cert = 0, impl_index = KEY_UNSPEC;
+	int has_cert = 0, impl_index = OSSH_RUST_NO_IMPL_INDEX;
 #endif
 
 	if (k == NULL)
@@ -1009,7 +1010,7 @@ sshkey_free_contents(struct sshkey *k)
 	if (ossh_rust_sshkey_free_contents_plan(k->type,
 	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
 	    keyimpl_nentries(), &has_cert, &impl_index) == 0 &&
-	    impl_index != KEY_UNSPEC) {
+	    impl_index != OSSH_RUST_NO_IMPL_INDEX) {
 		impl = keyimpls[impl_index];
 	}
 	if (impl != NULL && impl->funcs->cleanup != NULL)
@@ -2478,10 +2479,10 @@ sshkey_from_blob_internal(struct sshbuf *b, struct sshkey **keyp,
 	int type, ret = SSH_ERR_INTERNAL_ERROR;
 	char *ktype = NULL;
 	struct sshkey *key = NULL;
-	struct sshbuf *copy;
+	struct sshbuf *copy = NULL, *namebuf = NULL;
 	const struct sshkey_impl *impl;
 #ifdef WITH_RUST_CRYPTO
-	int impl_index = KEY_UNSPEC, use_noec_fallback = 0;
+	int impl_index = OSSH_RUST_NO_IMPL_INDEX, use_noec_fallback = 0;
 #endif
 
 #ifdef DEBUG_PK /* XXX */
@@ -2489,14 +2490,16 @@ sshkey_from_blob_internal(struct sshbuf *b, struct sshkey **keyp,
 #endif
 	if (keyp != NULL)
 		*keyp = NULL;
-	if ((copy = sshbuf_fromb(b)) == NULL) {
+	if ((namebuf = sshbuf_fromb(b)) == NULL) {
 		ret = SSH_ERR_ALLOC_FAIL;
 		goto out;
 	}
-	if (sshbuf_get_cstring(b, &ktype, NULL) != 0) {
+	if (sshbuf_get_cstring(namebuf, &ktype, NULL) != 0) {
 		ret = SSH_ERR_INVALID_FORMAT;
 		goto out;
 	}
+	sshbuf_free(namebuf);
+	namebuf = NULL;
 
 #ifdef WITH_RUST_CRYPTO
 	ret = ossh_rust_sshkey_from_blob_plan((const u_char *)ktype,
@@ -2505,7 +2508,7 @@ sshkey_from_blob_internal(struct sshbuf *b, struct sshkey **keyp,
 	    keyimpl_nentries(), &type, &impl_index, &use_noec_fallback);
 	if (ret != 0)
 		goto out;
-	impl = impl_index == KEY_UNSPEC ? NULL : keyimpls[impl_index];
+	impl = impl_index == OSSH_RUST_NO_IMPL_INDEX ? NULL : keyimpls[impl_index];
 #else
 	type = sshkey_type_from_name(ktype);
 	if (!allow_cert && sshkey_type_is_cert(type)) {
@@ -2526,6 +2529,18 @@ sshkey_from_blob_internal(struct sshbuf *b, struct sshkey **keyp,
 		goto out;
 	}
 #endif
+	if (sshkey_type_is_cert(type)) {
+		if ((copy = sshbuf_new()) == NULL) {
+			ret = SSH_ERR_ALLOC_FAIL;
+			goto out;
+		}
+		if ((ret = sshbuf_putb(copy, b)) != 0)
+			goto out;
+	}
+	if ((ret = sshbuf_skip_string(b)) != 0) {
+		ret = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
 	if ((key = sshkey_new(type)) == NULL) {
 		ret = SSH_ERR_ALLOC_FAIL;
 		goto out;
@@ -2564,6 +2579,7 @@ sshkey_from_blob_internal(struct sshbuf *b, struct sshkey **keyp,
 		key = NULL;
 	}
  out:
+	sshbuf_free(namebuf);
 	sshbuf_free(copy);
 	sshkey_free(key);
 	free(ktype);
@@ -3065,7 +3081,7 @@ sshkey_private_serialize_opt(struct sshkey *key, struct sshbuf *buf,
 	struct sshbuf *b = NULL;
 	const struct sshkey_impl *impl;
 #ifdef WITH_RUST_CRYPTO
-	int impl_index = KEY_UNSPEC;
+	int impl_index = OSSH_RUST_NO_IMPL_INDEX;
 #endif
 
 	if (key == NULL)
@@ -3157,7 +3173,8 @@ sshkey_private_deserialize(struct sshbuf *buf, struct sshkey **kp)
 	struct sshkey *k = NULL;
 	int type, r = SSH_ERR_INTERNAL_ERROR;
 #ifdef WITH_RUST_CRYPTO
-	int is_cert = 0, impl_index = KEY_UNSPEC, expected_cert_nid = -1;
+	int is_cert = 0, impl_index = OSSH_RUST_NO_IMPL_INDEX,
+	    expected_cert_nid = -1;
 #endif
 
 	if (kp != NULL)
@@ -3215,7 +3232,7 @@ sshkey_private_deserialize(struct sshbuf *buf, struct sshkey **kp)
 		}
 	}
 #ifdef WITH_RUST_CRYPTO
-	impl = impl_index == KEY_UNSPEC ? NULL : keyimpls[impl_index];
+	impl = impl_index == OSSH_RUST_NO_IMPL_INDEX ? NULL : keyimpls[impl_index];
 #else
 	if ((impl = sshkey_impl_from_type(type)) == NULL) {
 		r = SSH_ERR_INTERNAL_ERROR;
