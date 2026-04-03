@@ -7,6 +7,15 @@ repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
 
 cd "$repo_root"
 
+if ! git diff --quiet --ignore-submodules -- . ':(exclude)local'; then
+	echo "prepush-rust requires a clean worktree; commit or stash changes first" >&2
+	exit 1
+fi
+if ! git diff --cached --quiet --ignore-submodules -- . ':(exclude)local'; then
+	echo "prepush-rust requires a clean index; commit or unstage changes first" >&2
+	exit 1
+fi
+
 if ! command -v docker >/dev/null 2>&1; then
 	echo "docker is required for pre-push Rust checks" >&2
 	exit 1
