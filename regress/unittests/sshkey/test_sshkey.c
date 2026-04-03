@@ -561,6 +561,56 @@ sshkey_tests(void)
 	ASSERT_PTR_EQ(sshkey_new(4242), NULL);
 	TEST_DONE();
 
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
+	TEST_START("public blob roundtrip RSA");
+	{
+		char *line = load_public_text_line("rsa_1.pub");
+		char *cp = line, *blob = NULL, *blob_end = NULL;
+		struct sshbuf *raw = NULL, *ro = NULL;
+
+		blob = strchr(line, ' ');
+		ASSERT_PTR_NE(blob, NULL);
+		while (*blob == ' ' || *blob == '\t')
+			blob++;
+		blob_end = strpbrk(blob, " \t");
+		ASSERT_PTR_NE(blob_end, NULL);
+		*blob_end = '\0';
+		raw = sshbuf_new();
+		ASSERT_PTR_NE(raw, NULL);
+		ASSERT_INT_EQ(sshbuf_b64tod(raw, blob), 0);
+		ro = sshbuf_from(sshbuf_ptr(raw), sshbuf_len(raw));
+		ASSERT_PTR_NE(ro, NULL);
+		ASSERT_INT_EQ(sshkey_fromb(ro, &k2), 0);
+		ASSERT_PTR_NE(k2, NULL);
+		sshkey_free(k2);
+		k2 = NULL;
+		sshbuf_free(ro);
+		ro = NULL;
+		ASSERT_INT_EQ(sshkey_from_blob(sshbuf_ptr(raw), sshbuf_len(raw), &k3), 0);
+		k1 = sshkey_new(KEY_UNSPEC);
+		ASSERT_PTR_NE(k1, NULL);
+		ASSERT_INT_EQ(sshkey_read(k1, &cp), 0);
+		sshbuf_free(raw);
+		raw = NULL;
+		free(line);
+	}
+	ASSERT_PTR_NE(k1, NULL);
+	ASSERT_PTR_NE(k3, NULL);
+	b = sshbuf_new();
+	ASSERT_PTR_NE(b, NULL);
+	ASSERT_INT_EQ(sshkey_putb(k1, b), 0);
+	sshkey_free(k3);
+	k3 = NULL;
+	ASSERT_INT_EQ(sshkey_from_blob(sshbuf_ptr(b), sshbuf_len(b), &k3), 0);
+	ASSERT_INT_EQ(sshkey_equal_public(k1, k3), 1);
+	sshbuf_free(b);
+	b = NULL;
+	sshkey_free(k1);
+	sshkey_free(k3);
+	k1 = k3 = NULL;
+	TEST_DONE();
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
+
 #ifdef WITH_OPENSSL
 	sshkey_free(kr);
 	sshkey_free(kd);
