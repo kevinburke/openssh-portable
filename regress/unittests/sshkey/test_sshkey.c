@@ -563,6 +563,10 @@ sshkey_tests(void)
 		ASSERT_PTR_EQ(strstr(algs, "ssh-rsa-cert-v01@openssh.com"), NULL);
 		free(algs);
 	}
+	ASSERT_INT_EQ(sshkey_names_valid2("ssh-ed25519,rsa-sha2-256", 0, 1), 1);
+	ASSERT_INT_EQ(sshkey_names_valid2("ssh-rsa-cert-v01@openssh.com", 0, 1), 0);
+	ASSERT_INT_EQ(sshkey_names_valid2("ssh-*", 1, 0), 1);
+	ASSERT_INT_EQ(sshkey_names_valid2("bogus-*", 1, 0), 0);
 #endif
 #if defined(OPENSSL_HAS_ECC) || defined(WITH_RUST_CRYPTO)
 	ASSERT_INT_EQ(sshkey_ecdsa_nid_from_name("ecdsa-sha2-nistp384"),
