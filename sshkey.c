@@ -503,11 +503,12 @@ sshkey_alg_list(int certs_only, int plain_only, int include_sigonly, char sep)
 	size_t i;
 	const struct sshkey_impl *impl;
 	char sep_str[2] = {sep, '\0'};
-	int include = 0;
 
 	for (i = 0; keyimpls[i] != NULL; i++) {
 		impl = keyimpls[i];
 #ifdef WITH_RUST_CRYPTO
+		int include;
+
 		if (ossh_rust_sshkey_alg_list_include(certs_only, plain_only,
 		    include_sigonly, (const struct ossh_rust_sshkey_impl *)impl,
 		    &include) == 0) {
@@ -2745,10 +2746,11 @@ const char *
 sshkey_sigalg_by_name(const char *name)
 {
 	const struct sshkey_impl *impl;
-	const char *sigalg = NULL;
 	int i;
 
 #ifdef WITH_RUST_CRYPTO
+	const char *sigalg = NULL;
+
 	if (name != NULL &&
 	    ossh_rust_sshkey_sigalg_by_name((const u_char *)name, strlen(name),
 	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
