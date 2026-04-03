@@ -723,7 +723,8 @@ sshkey_tests(void)
 	sshkey_free(k3);
 	sshkey_free(kcert);
 	k1 = k2 = k3 = kcert = NULL;
-	sshbuf_reset(b);
+	sshbuf_free(b);
+	b = NULL;
 	TEST_DONE();
 
 	TEST_START("certified private roundtrip preserves cert");
@@ -840,6 +841,8 @@ sshkey_tests(void)
 
 #ifdef WITH_OPENSSL
 	TEST_START("nested certificate");
+	b = sshbuf_new();
+	ASSERT_PTR_NE(b, NULL);
 	ASSERT_INT_EQ(sshkey_load_cert(test_data_file("rsa_1"), &k1), 0);
 	ASSERT_INT_EQ(sshkey_load_public(test_data_file("rsa_1.pub"), &k2,
 	    NULL), 0);
