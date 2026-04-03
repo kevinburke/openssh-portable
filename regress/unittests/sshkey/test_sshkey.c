@@ -868,6 +868,31 @@ sshkey_tests(void)
 	sshbuf_reset(b);
 	TEST_DONE();
 
+	TEST_START("load private cert preserves cert");
+	ASSERT_INT_EQ(sshkey_load_private_cert(KEY_UNSPEC,
+	    test_data_file("ed25519_1"), "", &k1), 0);
+	ASSERT_PTR_NE(k1, NULL);
+	ASSERT_PTR_NE(k1->cert, NULL);
+	ASSERT_INT_EQ(sshbuf_len(k1->cert->certblob) > 0, 1);
+	ASSERT_INT_EQ(sshkey_load_cert(test_data_file("ed25519_1"), &k2), 0);
+	ASSERT_PTR_NE(k2, NULL);
+	ASSERT_PTR_NE(k2->cert, NULL);
+	ASSERT_INT_EQ(sshkey_equal(k1, k2), 1);
+	b = sshbuf_new();
+	ASSERT_PTR_NE(b, NULL);
+	ASSERT_INT_EQ(sshkey_private_serialize(k1, b), 0);
+	ASSERT_INT_EQ(sshkey_private_deserialize(b, &k3), 0);
+	ASSERT_PTR_NE(k3, NULL);
+	ASSERT_PTR_NE(k3->cert, NULL);
+	ASSERT_INT_EQ(sshkey_equal(k1, k3), 1);
+	sshkey_free(k1);
+	sshkey_free(k2);
+	sshkey_free(k3);
+	k1 = k2 = k3 = NULL;
+	sshbuf_free(b);
+	b = NULL;
+	TEST_DONE();
+
 #ifdef WITH_OPENSSL
 	TEST_START("sign and verify RSA");
 	k1 = get_private("rsa_1");
