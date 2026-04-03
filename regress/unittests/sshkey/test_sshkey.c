@@ -571,6 +571,8 @@ sshkey_tests(void)
 #if defined(OPENSSL_HAS_ECC) || defined(WITH_RUST_CRYPTO)
 	ASSERT_INT_EQ(sshkey_ecdsa_nid_from_name("ecdsa-sha2-nistp384"),
 	    NID_secp384r1);
+	ASSERT_INT_EQ(sshkey_curve_name_to_nid("nistp384"), NID_secp384r1);
+	ASSERT_INT_EQ(sshkey_curve_name_to_nid("bogus"), -1);
 #endif
 	k1 = sshkey_new(KEY_ED25519);
 	ASSERT_PTR_NE(k1, NULL);
