@@ -573,6 +573,8 @@ sshkey_tests(void)
 	    NID_secp384r1);
 	ASSERT_INT_EQ(sshkey_curve_name_to_nid("nistp384"), NID_secp384r1);
 	ASSERT_INT_EQ(sshkey_curve_name_to_nid("bogus"), -1);
+	ASSERT_INT_EQ(sshkey_curve_nid_to_bits(NID_secp384r1), 384);
+	ASSERT_INT_EQ(sshkey_curve_nid_to_bits(-1), 0);
 #endif
 	k1 = sshkey_new(KEY_ED25519);
 	ASSERT_PTR_NE(k1, NULL);
