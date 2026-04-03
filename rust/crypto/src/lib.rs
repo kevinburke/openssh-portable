@@ -56,6 +56,7 @@ use rsa::{
 };
 use sshkey_meta::{
     sshkey_cert_copy_plan as rust_sshkey_cert_copy_plan,
+    sshkey_copy_public_sk_plan as rust_sshkey_copy_public_sk_plan,
     sshkey_equal_plan as rust_sshkey_equal_plan,
     sshkey_ecdsa_nid_from_name as rust_sshkey_ecdsa_nid_from_name,
     sshkey_equal_public_plan as rust_sshkey_equal_public_plan,
@@ -2183,6 +2184,16 @@ pub extern "C" fn ossh_rust_sshkey_cert_copy_plan(
             }
             0
         }
+        Err(err) => err,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_copy_public_sk_plan(
+    has_application: c_int,
+) -> c_int {
+    match rust_sshkey_copy_public_sk_plan(has_application != 0) {
+        Ok(()) => 0,
         Err(err) => err,
     }
 }

@@ -35,6 +35,7 @@
 
 void sshkey_tests(void);
 void sshkey_benchmarks(void);
+int sshkey_copy_public_sk(const struct sshkey *from, struct sshkey *to);
 
 static void
 put_opt(struct sshbuf *b, const char *name, const char *value)
@@ -929,6 +930,19 @@ sshkey_tests(void)
 	ASSERT_PTR_NE(k1->cert, NULL);
 	k1->cert->nprincipals = SSHKEY_CERT_MAX_PRINCIPALS + 1;
 	ASSERT_INT_EQ(sshkey_cert_copy(k1, k2), SSH_ERR_INVALID_ARGUMENT);
+	k1->cert->nprincipals = 0;
+	sshkey_free(k1);
+	sshkey_free(k2);
+	k1 = k2 = NULL;
+	TEST_DONE();
+
+	TEST_START("copy public sk rejects missing application");
+	k1 = sshkey_new(KEY_ED25519_SK);
+	k2 = sshkey_new(KEY_ED25519_SK);
+	ASSERT_PTR_NE(k1, NULL);
+	ASSERT_PTR_NE(k2, NULL);
+	ASSERT_PTR_EQ(k1->sk_application, NULL);
+	ASSERT_INT_EQ(sshkey_copy_public_sk(k1, k2), SSH_ERR_INVALID_ARGUMENT);
 	sshkey_free(k1);
 	sshkey_free(k2);
 	k1 = k2 = NULL;
