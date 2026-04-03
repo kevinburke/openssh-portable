@@ -69,6 +69,7 @@ use sshkey_meta::{
     sshkey_impl_index_from_type as rust_sshkey_impl_index_from_type,
     sshkey_impl_index_from_type_nid as rust_sshkey_impl_index_from_type_nid,
     sshkey_impl_name_from_type_nid as rust_sshkey_impl_name_from_type_nid,
+    sshkey_sigalg_match_plan as rust_sshkey_sigalg_match_plan,
     sshkey_serialize_plan as rust_sshkey_serialize_plan,
     sshkey_type_can_new as rust_sshkey_type_can_new,
     sshkey_type_certified as rust_sshkey_type_certified,
@@ -2195,6 +2196,28 @@ pub extern "C" fn ossh_rust_sshkey_copy_public_sk_plan(
     match rust_sshkey_copy_public_sk_plan(has_application != 0) {
         Ok(()) => 0,
         Err(err) => err,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_sigalg_match_plan(
+    input: *const u8,
+    input_len: usize,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    out_match_kind: *mut c_int,
+) -> c_int {
+    if out_match_kind.is_null() {
+        return -1;
+    }
+    match rust_sshkey_sigalg_match_plan(input, input_len, entries, nentries) {
+        Some(kind) => {
+            unsafe {
+                *out_match_kind = kind;
+            }
+            0
+        }
+        None => -1,
     }
 }
 

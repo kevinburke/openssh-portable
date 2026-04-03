@@ -18,6 +18,11 @@ const SSH_ERR_KEY_CERT_INVALID_SIGN_KEY: c_int = -19;
 const SSH_ERR_INVALID_ARGUMENT: c_int = -10;
 const SSH_ERR_EXPECTED_CERT: c_int = -16;
 const SSH_ERR_KEY_LACKS_CERTBLOB: c_int = -17;
+pub(crate) const SSHKEY_SIGALG_MATCH_DIRECT: c_int = 0;
+pub(crate) const SSHKEY_SIGALG_MATCH_RSA: c_int = 1;
+pub(crate) const SSHKEY_SIGALG_MATCH_RSA_CERT: c_int = 2;
+pub(crate) const SSHKEY_SIGALG_MATCH_ECDSA_SK: c_int = 3;
+pub(crate) const SSHKEY_SIGALG_MATCH_ECDSA_SK_CERT: c_int = 4;
 
 #[repr(C)]
 pub struct RustSshkeyImpl {
@@ -199,6 +204,22 @@ pub(crate) fn sshkey_copy_public_sk_plan(has_application: bool) -> Result<(), c_
         return Err(SSH_ERR_INVALID_ARGUMENT);
     }
     Ok(())
+}
+
+pub(crate) fn sshkey_sigalg_match_plan(
+    input: *const u8,
+    input_len: usize,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Option<c_int> {
+    let type_ = sshkey_type_from_name(input, input_len, entries, nentries, false)?;
+    Some(match type_ {
+        KEY_RSA => SSHKEY_SIGALG_MATCH_RSA,
+        KEY_RSA_CERT => SSHKEY_SIGALG_MATCH_RSA_CERT,
+        KEY_ECDSA_SK => SSHKEY_SIGALG_MATCH_ECDSA_SK,
+        KEY_ECDSA_SK_CERT => SSHKEY_SIGALG_MATCH_ECDSA_SK_CERT,
+        _ => SSHKEY_SIGALG_MATCH_DIRECT,
+    })
 }
 
 pub(crate) fn sshkey_equal_public_plan(
@@ -826,6 +847,47 @@ mod tests {
         assert_eq!(
             sshkey_copy_public_sk_plan(false),
             Err(SSH_ERR_INVALID_ARGUMENT)
+        );
+    }
+
+    #[test]
+    fn sigalg_match_plan_classifies_special_cases() {
+        let entry_ptrs = entry_ptrs();
+        assert_eq!(
+            sshkey_sigalg_match_plan(
+                b"ssh-ed25519".as_ptr(),
+                b"ssh-ed25519".len(),
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Some(SSHKEY_SIGALG_MATCH_DIRECT)
+        );
+        assert_eq!(
+            sshkey_sigalg_match_plan(
+                b"ssh-rsa".as_ptr(),
+                b"ssh-rsa".len(),
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Some(SSHKEY_SIGALG_MATCH_RSA)
+        );
+        assert_eq!(
+            sshkey_sigalg_match_plan(
+                b"ssh-rsa-cert-v01@openssh.com".as_ptr(),
+                b"ssh-rsa-cert-v01@openssh.com".len(),
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Some(SSHKEY_SIGALG_MATCH_RSA_CERT)
+        );
+        assert_eq!(
+            sshkey_sigalg_match_plan(
+                b"sk-ecdsa-sha2-nistp256@openssh.com".as_ptr(),
+                b"sk-ecdsa-sha2-nistp256@openssh.com".len(),
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Some(SSHKEY_SIGALG_MATCH_ECDSA_SK)
         );
     }
 

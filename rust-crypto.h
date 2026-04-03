@@ -555,6 +555,9 @@ int ossh_rust_sshkey_from_private_plan(int type, int nid,
 int ossh_rust_sshkey_cert_copy_plan(int has_cert, int has_signature_key,
     size_t nprincipals, int *out_copy_signature_key);
 int ossh_rust_sshkey_copy_public_sk_plan(int has_application);
+int ossh_rust_sshkey_sigalg_match_plan(const uint8_t *input, size_t input_len,
+    const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
+    int *out_match_kind);
 int ossh_rust_sshkey_equal_public_plan(int lhs_type, int rhs_type,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     int *out_comparable, int *out_dispatch_type);
