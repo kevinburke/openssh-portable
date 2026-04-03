@@ -63,6 +63,7 @@ Rust-backed today:
   - `sshkey_alg_list()` key-algorithm list filtering
   - `sshkey_names_valid2()` key-name and wildcard validation
   - `sshkey_curve_name_to_nid()` short curve-name lookup
+  - `sshkey_curve_nid_to_bits()` curve-size lookup
   - `sshkey_from_blob_internal()` load-path planning
   - `sshkey_private_deserialize()` load-path planning
   - `sshkey_private_serialize_opt()` load-path planning
