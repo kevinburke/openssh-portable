@@ -55,6 +55,8 @@ Rust-backed today:
   - `sshkey_generate()` type validation and dispatch planning
   - `sshkey_free_contents()` cleanup planning
   - `sshkey_equal()` full-equality planning
+  - `sshkey_cert_copy()` certificate-shape validation and signature-key copy
+    planning
   - `sshkey_from_blob_internal()` load-path planning
   - `sshkey_private_deserialize()` load-path planning
   - `sshkey_private_serialize_opt()` load-path planning
