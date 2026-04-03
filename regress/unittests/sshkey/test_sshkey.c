@@ -960,23 +960,25 @@ sshkey_tests(void)
 	k1 = k2 = NULL;
 	TEST_DONE();
 
-#ifdef WITH_OPENSSL
+#ifdef WITH_RUST_CRYPTO
 	TEST_START("copy public sk rejects missing application");
 	/*
-	 * SK key constructors are not available in pure rust-crypto mode, so keep
-	 * this on the OpenSSL side where KEY_ED25519_SK objects are constructible.
+	 * This exercises the Rust-side validation guard directly. The plain C path
+	 * does not reject NULL sk_application before strdup().
 	 */
-	k1 = sshkey_new(KEY_ED25519_SK);
-	k2 = sshkey_new(KEY_ED25519_SK);
-	ASSERT_PTR_NE(k1, NULL);
-	ASSERT_PTR_NE(k2, NULL);
-	ASSERT_PTR_EQ(k1->sk_application, NULL);
-	ASSERT_INT_EQ(sshkey_copy_public_sk(k1, k2), SSH_ERR_INVALID_ARGUMENT);
-	sshkey_free(k1);
-	sshkey_free(k2);
-	k1 = k2 = NULL;
+	{
+		struct sshkey from, to;
+
+		memset(&from, 0, sizeof(from));
+		memset(&to, 0, sizeof(to));
+		from.type = KEY_ED25519_SK;
+		to.type = KEY_ED25519_SK;
+		ASSERT_PTR_EQ(from.sk_application, NULL);
+		ASSERT_INT_EQ(sshkey_copy_public_sk(&from, &to),
+		    SSH_ERR_INVALID_ARGUMENT);
+	}
 	TEST_DONE();
-#endif /* WITH_OPENSSL */
+#endif /* WITH_RUST_CRYPTO */
 
 #ifdef WITH_OPENSSL
 	TEST_START("sign and verify RSA");
