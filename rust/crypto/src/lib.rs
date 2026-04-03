@@ -55,6 +55,7 @@ use rsa::{
     rsa_private_pem_len, rsa_private_pem_write, rsa_sign_prehashed, rsa_verify_prehashed,
 };
 use sshkey_meta::{
+    sshkey_cert_copy_plan as rust_sshkey_cert_copy_plan,
     sshkey_equal_plan as rust_sshkey_equal_plan,
     sshkey_ecdsa_nid_from_name as rust_sshkey_ecdsa_nid_from_name,
     sshkey_equal_public_plan as rust_sshkey_equal_public_plan,
@@ -2162,6 +2163,27 @@ pub extern "C" fn ossh_rust_sshkey_from_private_plan(
             0
         }
         None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_cert_copy_plan(
+    has_cert: c_int,
+    has_signature_key: c_int,
+    nprincipals: usize,
+    out_copy_signature_key: *mut c_int,
+) -> c_int {
+    if out_copy_signature_key.is_null() {
+        return -1;
+    }
+    match rust_sshkey_cert_copy_plan(has_cert != 0, has_signature_key != 0, nprincipals) {
+        Ok(copy_signature_key) => {
+            unsafe {
+                *out_copy_signature_key = c_int::from(copy_signature_key);
+            }
+            0
+        }
+        Err(err) => err,
     }
 }
 

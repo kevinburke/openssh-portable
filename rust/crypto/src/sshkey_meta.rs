@@ -13,6 +13,7 @@ const KEY_ED25519_SK: c_int = 8;
 const KEY_ED25519_SK_CERT: c_int = 9;
 const KEY_UNSPEC: c_int = 10;
 const NO_IMPL_INDEX: c_int = -1;
+const SSHKEY_CERT_MAX_PRINCIPALS: usize = 256;
 const SSH_ERR_KEY_CERT_INVALID_SIGN_KEY: c_int = -19;
 const SSH_ERR_INVALID_ARGUMENT: c_int = -10;
 const SSH_ERR_EXPECTED_CERT: c_int = -16;
@@ -177,6 +178,20 @@ pub(crate) fn sshkey_from_private_plan(
 ) -> Option<(c_int, bool)> {
     sshkey_impl_index_from_type_nid(type_, nid, entries, nentries)?;
     Some((type_, sshkey_type_is_cert(type_)))
+}
+
+pub(crate) fn sshkey_cert_copy_plan(
+    has_cert: bool,
+    has_signature_key: bool,
+    nprincipals: usize,
+) -> Result<bool, c_int> {
+    if !has_cert {
+        return Err(SSH_ERR_INVALID_ARGUMENT);
+    }
+    if nprincipals > SSHKEY_CERT_MAX_PRINCIPALS as usize {
+        return Err(SSH_ERR_INVALID_ARGUMENT);
+    }
+    Ok(has_signature_key)
 }
 
 pub(crate) fn sshkey_equal_public_plan(
@@ -777,6 +792,24 @@ mod tests {
                 noec_entry_ptrs.len(),
             ),
             Ok((KEY_ECDSA_CERT, NO_IMPL_INDEX, true))
+        );
+    }
+
+    #[test]
+    fn cert_copy_plan_tracks_signature_key_and_principal_limits() {
+        assert_eq!(sshkey_cert_copy_plan(true, false, 0), Ok(false));
+        assert_eq!(sshkey_cert_copy_plan(true, true, 1), Ok(true));
+        assert_eq!(
+            sshkey_cert_copy_plan(false, false, 0),
+            Err(SSH_ERR_INVALID_ARGUMENT)
+        );
+        assert_eq!(
+            sshkey_cert_copy_plan(
+                true,
+                false,
+                (SSHKEY_CERT_MAX_PRINCIPALS as usize).saturating_add(1),
+            ),
+            Err(SSH_ERR_INVALID_ARGUMENT)
         );
     }
 
