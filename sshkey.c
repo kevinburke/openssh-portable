@@ -805,6 +805,14 @@ sshkey_pkey_digest_verify(EVP_PKEY *pkey, int hash_alg, const u_char *data,
 int
 sshkey_curve_name_to_nid(const char *name)
 {
+#ifdef WITH_RUST_CRYPTO
+	int nid;
+
+	if (name != NULL &&
+	    ossh_rust_sshkey_curve_name_to_nid((const u_char *)name, strlen(name),
+	    &nid) == 0)
+		return nid;
+#endif /* WITH_RUST_CRYPTO */
 	if (strcmp(name, "nistp256") == 0)
 		return NID_X9_62_prime256v1;
 	else if (strcmp(name, "nistp384") == 0)
