@@ -517,6 +517,16 @@ pub(crate) fn sshkey_ecdsa_nid_from_name(
     None
 }
 
+pub(crate) fn sshkey_curve_name_to_nid(input: *const u8, input_len: usize) -> Option<c_int> {
+    let input = read_input(input, input_len)?;
+    match input {
+        b"nistp256" => Some(415),
+        b"nistp384" => Some(715),
+        b"nistp521" => Some(716),
+        _ => None,
+    }
+}
+
 pub(crate) fn sshkey_type_is_valid_ca(
     type_: c_int,
     entries: *const *const RustSshkeyImpl,
@@ -1093,6 +1103,18 @@ mod tests {
                 entry_ptrs.len(),
             ),
             Some(false)
+        );
+    }
+
+    #[test]
+    fn curve_name_to_nid_matches_short_curve_names() {
+        assert_eq!(
+            sshkey_curve_name_to_nid(b"nistp384".as_ptr(), b"nistp384".len()),
+            Some(715)
+        );
+        assert_eq!(
+            sshkey_curve_name_to_nid(b"bogus".as_ptr(), b"bogus".len()),
+            None
         );
     }
 

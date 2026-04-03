@@ -59,6 +59,7 @@ use sshkey_meta::{
     sshkey_copy_public_sk_plan as rust_sshkey_copy_public_sk_plan,
     sshkey_equal_plan as rust_sshkey_equal_plan,
     sshkey_ecdsa_nid_from_name as rust_sshkey_ecdsa_nid_from_name,
+    sshkey_curve_name_to_nid as rust_sshkey_curve_name_to_nid,
     sshkey_equal_public_plan as rust_sshkey_equal_public_plan,
     sshkey_from_blob_plan as rust_sshkey_from_blob_plan,
     sshkey_private_deserialize_plan as rust_sshkey_private_deserialize_plan,
@@ -2001,6 +2002,26 @@ pub extern "C" fn ossh_rust_sshkey_ecdsa_nid_from_name(
         return -1;
     }
     match rust_sshkey_ecdsa_nid_from_name(input, input_len, entries, nentries) {
+        Some(parsed) => {
+            unsafe {
+                *out = parsed;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_curve_name_to_nid(
+    input: *const u8,
+    input_len: usize,
+    out: *mut c_int,
+) -> c_int {
+    if out.is_null() {
+        return -1;
+    }
+    match rust_sshkey_curve_name_to_nid(input, input_len) {
         Some(parsed) => {
             unsafe {
                 *out = parsed;
