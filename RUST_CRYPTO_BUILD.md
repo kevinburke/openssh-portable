@@ -916,6 +916,9 @@ Current targets:
 - `chachapoly_decrypt`
 - `sshkey_metadata`
 - `sshkey_lifecycle`
+  exercises Rust-backed `sshkey.c` lifecycle planning together with
+  OpenSSH public-line parsing, public-blob base64 decoding, and
+  `openssh-key-v1` armored/header/plaintext parsing
 - `packet_mac`
 
 Notes:
