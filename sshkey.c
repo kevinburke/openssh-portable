@@ -828,6 +828,12 @@ sshkey_curve_name_to_nid(const char *name)
 u_int
 sshkey_curve_nid_to_bits(int nid)
 {
+#ifdef WITH_RUST_CRYPTO
+	int bits;
+
+	if (ossh_rust_sshkey_curve_nid_to_bits(nid, &bits) == 0)
+		return bits;
+#endif /* WITH_RUST_CRYPTO */
 	switch (nid) {
 	case NID_X9_62_prime256v1:
 		return 256;
