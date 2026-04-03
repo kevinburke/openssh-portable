@@ -69,6 +69,7 @@ use sshkey_meta::{
     sshkey_impl_index_from_type as rust_sshkey_impl_index_from_type,
     sshkey_impl_index_from_type_nid as rust_sshkey_impl_index_from_type_nid,
     sshkey_impl_name_from_type_nid as rust_sshkey_impl_name_from_type_nid,
+    sshkey_alg_list_include as rust_sshkey_alg_list_include,
     sshkey_sigalg_by_name as rust_sshkey_sigalg_by_name,
     sshkey_sigalg_match_plan as rust_sshkey_sigalg_match_plan,
     sshkey_serialize_plan as rust_sshkey_serialize_plan,
@@ -2237,6 +2238,33 @@ pub extern "C" fn ossh_rust_sshkey_sigalg_by_name(
         Some(sigalg) => {
             unsafe {
                 *out = sigalg;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_alg_list_include(
+    certs_only: c_int,
+    plain_only: c_int,
+    include_sigonly: c_int,
+    entry: *const RustSshkeyImplEntry,
+    out_include: *mut c_int,
+) -> c_int {
+    if out_include.is_null() {
+        return -1;
+    }
+    match rust_sshkey_alg_list_include(
+        certs_only != 0,
+        plain_only != 0,
+        include_sigonly != 0,
+        entry,
+    ) {
+        Some(include) => {
+            unsafe {
+                *out_include = c_int::from(include);
             }
             0
         }
