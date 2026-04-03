@@ -222,6 +222,33 @@ pub(crate) fn sshkey_sigalg_match_plan(
     })
 }
 
+pub(crate) fn sshkey_sigalg_by_name(
+    input: *const u8,
+    input_len: usize,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Option<*const c_char> {
+    let input = read_input(input, input_len)?;
+    let entries_slice = keyimpls(entries, nentries)?;
+
+    for entry_ptr in entries_slice {
+        let entry = entry_ref(*entry_ptr)?;
+        let name = entry_bytes(entry.name)?;
+        if name != input {
+            continue;
+        }
+        if !entry.sigalg.is_null() {
+            return Some(entry.sigalg);
+        }
+        if entry.cert == 0 {
+            return Some(entry.name);
+        }
+        let plain = sshkey_type_plain(entry.type_);
+        return sshkey_impl_name_from_type_nid(plain, entry.nid, false, entries, nentries);
+    }
+    None
+}
+
 pub(crate) fn sshkey_equal_public_plan(
     lhs_type: c_int,
     rhs_type: c_int,
@@ -888,6 +915,41 @@ mod tests {
                 entry_ptrs.len(),
             ),
             Some(SSHKEY_SIGALG_MATCH_ECDSA_SK)
+        );
+    }
+
+    #[test]
+    fn sigalg_by_name_returns_expected_name() {
+        let entry_ptrs = entry_ptrs();
+        assert_eq!(
+            unsafe {
+                CStr::from_ptr(
+                    sshkey_sigalg_by_name(
+                        b"rsa-sha2-256".as_ptr(),
+                        b"rsa-sha2-256".len(),
+                        entry_ptrs.as_ptr(),
+                        entry_ptrs.len(),
+                    )
+                    .unwrap(),
+                )
+            }
+            .to_bytes(),
+            b"rsa-sha2-256"
+        );
+        assert_eq!(
+            unsafe {
+                CStr::from_ptr(
+                    sshkey_sigalg_by_name(
+                        b"ssh-rsa-cert-v01@openssh.com".as_ptr(),
+                        b"ssh-rsa-cert-v01@openssh.com".len(),
+                        entry_ptrs.as_ptr(),
+                        entry_ptrs.len(),
+                    )
+                    .unwrap(),
+                )
+            }
+            .to_bytes(),
+            b"ssh-rsa"
         );
     }
 
