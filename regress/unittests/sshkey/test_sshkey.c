@@ -554,6 +554,15 @@ sshkey_tests(void)
 	ASSERT_STRING_EQ(sshkey_sigalg_by_name("rsa-sha2-256"), "rsa-sha2-256");
 	ASSERT_STRING_EQ(sshkey_sigalg_by_name("ssh-rsa-cert-v01@openssh.com"),
 	    "ssh-rsa");
+	{
+		char *algs = sshkey_alg_list(0, 1, 1, ',');
+
+		ASSERT_PTR_NE(algs, NULL);
+		ASSERT_PTR_NE(strstr(algs, "ssh-ed25519"), NULL);
+		ASSERT_PTR_NE(strstr(algs, "rsa-sha2-256"), NULL);
+		ASSERT_PTR_EQ(strstr(algs, "ssh-rsa-cert-v01@openssh.com"), NULL);
+		free(algs);
+	}
 #endif
 #if defined(OPENSSL_HAS_ECC) || defined(WITH_RUST_CRYPTO)
 	ASSERT_INT_EQ(sshkey_ecdsa_nid_from_name("ecdsa-sha2-nistp384"),
@@ -945,7 +954,12 @@ sshkey_tests(void)
 	k1 = k2 = NULL;
 	TEST_DONE();
 
+#ifdef WITH_OPENSSL
 	TEST_START("copy public sk rejects missing application");
+	/*
+	 * SK key constructors are not available in pure rust-crypto mode, so keep
+	 * this on the OpenSSL side where KEY_ED25519_SK objects are constructible.
+	 */
 	k1 = sshkey_new(KEY_ED25519_SK);
 	k2 = sshkey_new(KEY_ED25519_SK);
 	ASSERT_PTR_NE(k1, NULL);
@@ -956,6 +970,7 @@ sshkey_tests(void)
 	sshkey_free(k2);
 	k1 = k2 = NULL;
 	TEST_DONE();
+#endif /* WITH_OPENSSL */
 
 #ifdef WITH_OPENSSL
 	TEST_START("sign and verify RSA");

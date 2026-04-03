@@ -561,6 +561,9 @@ int ossh_rust_sshkey_sigalg_match_plan(const uint8_t *input, size_t input_len,
 int ossh_rust_sshkey_sigalg_by_name(const uint8_t *input, size_t input_len,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     const char **out);
+int ossh_rust_sshkey_alg_list_include(int certs_only, int plain_only,
+    int include_sigonly, const struct ossh_rust_sshkey_impl *entry,
+    int *out_include);
 int ossh_rust_sshkey_equal_public_plan(int lhs_type, int rhs_type,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     int *out_comparable, int *out_dispatch_type);

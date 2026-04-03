@@ -503,9 +503,20 @@ sshkey_alg_list(int certs_only, int plain_only, int include_sigonly, char sep)
 	size_t i;
 	const struct sshkey_impl *impl;
 	char sep_str[2] = {sep, '\0'};
+	int include = 0;
 
 	for (i = 0; keyimpls[i] != NULL; i++) {
 		impl = keyimpls[i];
+#ifdef WITH_RUST_CRYPTO
+		if (ossh_rust_sshkey_alg_list_include(certs_only, plain_only,
+		    include_sigonly, (const struct ossh_rust_sshkey_impl *)impl,
+		    &include) == 0) {
+			if (!include)
+				continue;
+			xextendf(&ret, sep_str, "%s", impl->name);
+			continue;
+		}
+#endif /* WITH_RUST_CRYPTO */
 		if (impl->name == NULL)
 			continue;
 		if (!include_sigonly && impl->sigonly)

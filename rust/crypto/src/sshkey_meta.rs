@@ -249,6 +249,25 @@ pub(crate) fn sshkey_sigalg_by_name(
     None
 }
 
+pub(crate) fn sshkey_alg_list_include(
+    certs_only: bool,
+    plain_only: bool,
+    include_sigonly: bool,
+    entry: *const RustSshkeyImpl,
+) -> Option<bool> {
+    let entry = entry_ref(entry)?;
+    if entry.name.is_null() {
+        return Some(false);
+    }
+    if !include_sigonly && entry.sigonly != 0 {
+        return Some(false);
+    }
+    if (certs_only && entry.cert == 0) || (plain_only && entry.cert != 0) {
+        return Some(false);
+    }
+    Some(true)
+}
+
 pub(crate) fn sshkey_equal_public_plan(
     lhs_type: c_int,
     rhs_type: c_int,
@@ -950,6 +969,32 @@ mod tests {
             }
             .to_bytes(),
             b"ssh-rsa"
+        );
+    }
+
+    #[test]
+    fn alg_list_include_matches_current_filters() {
+        let entry_ptrs = entry_ptrs();
+
+        assert_eq!(
+            sshkey_alg_list_include(false, false, false, entry_ptrs[0]),
+            Some(true)
+        );
+        assert_eq!(
+            sshkey_alg_list_include(true, false, false, entry_ptrs[0]),
+            Some(false)
+        );
+        assert_eq!(
+            sshkey_alg_list_include(false, true, false, entry_ptrs[0]),
+            Some(true)
+        );
+        assert_eq!(
+            sshkey_alg_list_include(false, false, false, entry_ptrs[7]),
+            Some(false)
+        );
+        assert_eq!(
+            sshkey_alg_list_include(false, false, true, entry_ptrs[7]),
+            Some(true)
         );
     }
 
