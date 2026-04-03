@@ -194,6 +194,13 @@ pub(crate) fn sshkey_cert_copy_plan(
     Ok(has_signature_key)
 }
 
+pub(crate) fn sshkey_copy_public_sk_plan(has_application: bool) -> Result<(), c_int> {
+    if !has_application {
+        return Err(SSH_ERR_INVALID_ARGUMENT);
+    }
+    Ok(())
+}
+
 pub(crate) fn sshkey_equal_public_plan(
     lhs_type: c_int,
     rhs_type: c_int,
@@ -809,6 +816,15 @@ mod tests {
                 false,
                 (SSHKEY_CERT_MAX_PRINCIPALS as usize).saturating_add(1),
             ),
+            Err(SSH_ERR_INVALID_ARGUMENT)
+        );
+    }
+
+    #[test]
+    fn copy_public_sk_plan_requires_application() {
+        assert_eq!(sshkey_copy_public_sk_plan(true), Ok(()));
+        assert_eq!(
+            sshkey_copy_public_sk_plan(false),
             Err(SSH_ERR_INVALID_ARGUMENT)
         );
     }
