@@ -2002,6 +2002,13 @@ sshkey_cert_copy(const struct sshkey *from_key, struct sshkey *to_key)
 int
 sshkey_copy_public_sk(const struct sshkey *from, struct sshkey *to)
 {
+#ifdef WITH_RUST_CRYPTO
+	int r;
+
+	if ((r = ossh_rust_sshkey_copy_public_sk_plan(
+	    from->sk_application != NULL)) != 0)
+		return r;
+#endif
 	/* Append security-key application string */
 	if ((to->sk_application = strdup(from->sk_application)) == NULL)
 		return SSH_ERR_ALLOC_FAIL;
