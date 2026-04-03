@@ -2706,7 +2706,16 @@ const char *
 sshkey_sigalg_by_name(const char *name)
 {
 	const struct sshkey_impl *impl;
+	const char *sigalg = NULL;
 	int i;
+
+#ifdef WITH_RUST_CRYPTO
+	if (name != NULL &&
+	    ossh_rust_sshkey_sigalg_by_name((const u_char *)name, strlen(name),
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &sigalg) == 0 && sigalg != NULL)
+		return sigalg;
+#endif /* WITH_RUST_CRYPTO */
 
 	for (i = 0; keyimpls[i] != NULL; i++) {
 		impl = keyimpls[i];

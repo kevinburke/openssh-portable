@@ -551,6 +551,9 @@ sshkey_tests(void)
 #if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	ASSERT_INT_EQ(sshkey_type_from_name("rsa-sha2-256"), KEY_RSA);
 	ASSERT_INT_EQ(sshkey_type_from_shortname("RSA"), KEY_RSA);
+	ASSERT_STRING_EQ(sshkey_sigalg_by_name("rsa-sha2-256"), "rsa-sha2-256");
+	ASSERT_STRING_EQ(sshkey_sigalg_by_name("ssh-rsa-cert-v01@openssh.com"),
+	    "ssh-rsa");
 #endif
 #if defined(OPENSSL_HAS_ECC) || defined(WITH_RUST_CRYPTO)
 	ASSERT_INT_EQ(sshkey_ecdsa_nid_from_name("ecdsa-sha2-nistp384"),

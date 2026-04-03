@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 47U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 48U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -558,6 +558,9 @@ int ossh_rust_sshkey_copy_public_sk_plan(int has_application);
 int ossh_rust_sshkey_sigalg_match_plan(const uint8_t *input, size_t input_len,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     int *out_match_kind);
+int ossh_rust_sshkey_sigalg_by_name(const uint8_t *input, size_t input_len,
+    const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
+    const char **out);
 int ossh_rust_sshkey_equal_public_plan(int lhs_type, int rhs_type,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     int *out_comparable, int *out_dispatch_type);
