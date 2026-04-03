@@ -59,6 +59,7 @@ Rust-backed today:
     planning
   - `sshkey_copy_public_sk()` security-key application validation
   - `sshkey_match_keyname_to_sigalgs()` signature-family classification
+  - `sshkey_sigalg_by_name()` signature-algorithm name resolution
   - `sshkey_from_blob_internal()` load-path planning
   - `sshkey_private_deserialize()` load-path planning
   - `sshkey_private_serialize_opt()` load-path planning
