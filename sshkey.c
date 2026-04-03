@@ -533,6 +533,9 @@ sshkey_names_valid2(const char *names, int allow_wildcard, int plain_only)
 {
 	char *s, *cp, *p;
 	const struct sshkey_impl *impl;
+#ifdef WITH_RUST_CRYPTO
+	int valid = 0;
+#endif
 	int i, type;
 
 	if (names == NULL || strcmp(names, "") == 0)
@@ -541,6 +544,17 @@ sshkey_names_valid2(const char *names, int allow_wildcard, int plain_only)
 		return 0;
 	for ((p = strsep(&cp, ",")); p && *p != '\0';
 	    (p = strsep(&cp, ","))) {
+#ifdef WITH_RUST_CRYPTO
+		if (ossh_rust_sshkey_names_valid_include((const u_char *)p,
+		    strlen(p), allow_wildcard, plain_only,
+		    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+		    keyimpl_nentries(), &valid) == 0) {
+			if (valid)
+				continue;
+			free(s);
+			return 0;
+		}
+#endif /* WITH_RUST_CRYPTO */
 		type = sshkey_type_from_name(p);
 		if (type == KEY_UNSPEC) {
 			if (allow_wildcard) {
