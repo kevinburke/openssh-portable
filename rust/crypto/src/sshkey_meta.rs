@@ -12,6 +12,7 @@ const KEY_ECDSA_SK_CERT: c_int = 7;
 const KEY_ED25519_SK: c_int = 8;
 const KEY_ED25519_SK_CERT: c_int = 9;
 const KEY_UNSPEC: c_int = 10;
+const NO_IMPL_INDEX: c_int = -1;
 const SSH_ERR_KEY_CERT_INVALID_SIGN_KEY: c_int = -19;
 const SSH_ERR_INVALID_ARGUMENT: c_int = -10;
 const SSH_ERR_EXPECTED_CERT: c_int = -16;
@@ -220,7 +221,7 @@ pub(crate) fn sshkey_from_blob_plan(
         return Ok((type_, index as c_int, false));
     }
     if is_ecdsa_variant(type_) && sshkey_type_plain(type_) == KEY_ECDSA {
-        return Ok((type_, KEY_UNSPEC, true));
+        return Ok((type_, NO_IMPL_INDEX, true));
     }
     Err(-14)
 }
@@ -235,7 +236,7 @@ pub(crate) fn sshkey_private_deserialize_plan(
     let is_cert = sshkey_type_is_cert(type_);
     let impl_index = sshkey_impl_index_from_type(type_, entries, nentries)
         .map(|idx| idx as c_int)
-        .unwrap_or(KEY_UNSPEC);
+        .unwrap_or(NO_IMPL_INDEX);
     let expected_cert_nid = if type_ == KEY_ECDSA_CERT {
         sshkey_ecdsa_nid_from_name(input, input_len, entries, nentries)?
     } else {
@@ -268,7 +269,7 @@ pub(crate) fn sshkey_free_contents_plan(
     if let Some(index) = sshkey_impl_index_from_type(type_, entries, nentries) {
         return Some((sshkey_type_is_cert(type_), index as c_int));
     }
-    Some((sshkey_type_is_cert(type_), KEY_UNSPEC))
+    Some((sshkey_type_is_cert(type_), NO_IMPL_INDEX))
 }
 
 pub(crate) fn sshkey_type_from_name(
@@ -775,7 +776,7 @@ mod tests {
                 noec_entry_ptrs.as_ptr(),
                 noec_entry_ptrs.len(),
             ),
-            Ok((KEY_ECDSA_CERT, KEY_UNSPEC, true))
+            Ok((KEY_ECDSA_CERT, NO_IMPL_INDEX, true))
         );
     }
 
@@ -860,7 +861,7 @@ mod tests {
         );
         assert_eq!(
             sshkey_free_contents_plan(KEY_UNSPEC, entry_ptrs.as_ptr(), entry_ptrs.len()),
-            Some((false, KEY_UNSPEC))
+            Some((false, NO_IMPL_INDEX))
         );
     }
 }
