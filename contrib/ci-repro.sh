@@ -17,6 +17,7 @@ Environment:
   JOBS=N           parallel make jobs (default: detected or 4)
   WORKDIR=PATH     worktree/build directory (default: /tmp/openssh-ci-<config>)
   KEEP_WORKTREE=1  leave the throwaway worktree behind after the run
+  ALLOW_DIRTY_WORKTREE=1  test the current dirty checkout instead of refusing
   MAKE_TARGETS=... override the default make targets for the config
 EOF
 }
@@ -85,6 +86,17 @@ script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
 workdir="${WORKDIR:-/tmp/openssh-ci-$config}"
 privsep_dir="$workdir/empty"
+
+if [ "${ALLOW_DIRTY_WORKTREE:-0}" != "1" ]; then
+	if ! git -C "$repo_root" diff --quiet --ignore-submodules -- . ':(exclude)local'; then
+		echo "ci-repro requires a clean worktree; commit or stash changes first" >&2
+		exit 1
+	fi
+	if ! git -C "$repo_root" diff --cached --quiet --ignore-submodules -- . ':(exclude)local'; then
+		echo "ci-repro requires a clean index; commit or unstage changes first" >&2
+		exit 1
+	fi
+fi
 
 cleanup() {
 	if [ "${KEEP_WORKTREE:-0}" = "1" ]; then
