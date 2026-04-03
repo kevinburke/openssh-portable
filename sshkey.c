@@ -426,7 +426,45 @@ sshkey_ecdsa_nid_from_name(const char *name)
 int
 sshkey_match_keyname_to_sigalgs(const char *keyname, const char *sigalgs)
 {
+#ifndef WITH_RUST_CRYPTO
 	int ktype;
+#endif
+#ifdef WITH_RUST_CRYPTO
+	int match_kind;
+
+	if (sigalgs == NULL || *sigalgs == '\0' ||
+	    ossh_rust_sshkey_sigalg_match_plan((const u_char *)keyname,
+	    keyname == NULL ? 0 : strlen(keyname),
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &match_kind) != 0)
+		return 0;
+	switch (match_kind) {
+	case 1:
+		return match_pattern_list("ssh-rsa", sigalgs, 0) == 1 ||
+		    match_pattern_list("rsa-sha2-256", sigalgs, 0) == 1 ||
+		    match_pattern_list("rsa-sha2-512", sigalgs, 0) == 1;
+	case 2:
+		return match_pattern_list("ssh-rsa-cert-v01@openssh.com",
+		    sigalgs, 0) == 1 ||
+		    match_pattern_list("rsa-sha2-256-cert-v01@openssh.com",
+		    sigalgs, 0) == 1 ||
+		    match_pattern_list("rsa-sha2-512-cert-v01@openssh.com",
+		    sigalgs, 0) == 1;
+	case 3:
+		return match_pattern_list("sk-ecdsa-sha2-nistp256@openssh.com",
+		    sigalgs, 0) == 1 || match_pattern_list(
+		    "webauthn-sk-ecdsa-sha2-nistp256@openssh.com",
+		    sigalgs, 0) == 1;
+	case 4:
+		return match_pattern_list(
+		    "sk-ecdsa-sha2-nistp256-cert-v01@openssh.com",
+		    sigalgs, 0) == 1 || match_pattern_list(
+		    "webauthn-sk-ecdsa-sha2-nistp256-cert-v01@openssh.com",
+		    sigalgs, 0) == 1;
+	default:
+		return match_pattern_list(keyname, sigalgs, 0) == 1;
+	}
+#else
 
 	if (sigalgs == NULL || *sigalgs == '\0' ||
 	    (ktype = sshkey_type_from_name(keyname)) == KEY_UNSPEC)
@@ -455,6 +493,7 @@ sshkey_match_keyname_to_sigalgs(const char *keyname, const char *sigalgs)
 		    sigalgs, 0) == 1;
 	} else
 		return match_pattern_list(keyname, sigalgs, 0) == 1;
+#endif
 }
 
 char *
