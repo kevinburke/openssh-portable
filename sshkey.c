@@ -1922,9 +1922,21 @@ sshkey_cert_copy(const struct sshkey *from_key, struct sshkey *to_key)
 	const struct sshkey_cert *from;
 	struct sshkey_cert *to;
 	int r = SSH_ERR_INTERNAL_ERROR;
+#ifdef WITH_RUST_CRYPTO
+	int copy_signature_key = 0;
+#endif
 
 	if (to_key == NULL || (from = from_key->cert) == NULL)
 		return SSH_ERR_INVALID_ARGUMENT;
+#ifdef WITH_RUST_CRYPTO
+	if ((r = ossh_rust_sshkey_cert_copy_plan(1,
+	    from->signature_key != NULL, from->nprincipals,
+	    &copy_signature_key)) != 0)
+		return r;
+#else
+	if (from->nprincipals > SSHKEY_CERT_MAX_PRINCIPALS)
+		return SSH_ERR_INVALID_ARGUMENT;
+#endif
 
 	if ((to = cert_new()) == NULL)
 		return SSH_ERR_ALLOC_FAIL;
@@ -1944,7 +1956,13 @@ sshkey_cert_copy(const struct sshkey *from_key, struct sshkey *to_key)
 	}
 	to->valid_after = from->valid_after;
 	to->valid_before = from->valid_before;
-	if (from->signature_key == NULL)
+	if (
+#ifdef WITH_RUST_CRYPTO
+	    !copy_signature_key
+#else
+	    from->signature_key == NULL
+#endif
+	    )
 		to->signature_key = NULL;
 	else if ((r = sshkey_from_private(from->signature_key,
 	    &to->signature_key)) != 0)
@@ -1952,10 +1970,6 @@ sshkey_cert_copy(const struct sshkey *from_key, struct sshkey *to_key)
 	if (from->signature_type != NULL &&
 	    (to->signature_type = strdup(from->signature_type)) == NULL) {
 		r = SSH_ERR_ALLOC_FAIL;
-		goto out;
-	}
-	if (from->nprincipals > SSHKEY_CERT_MAX_PRINCIPALS) {
-		r = SSH_ERR_INVALID_ARGUMENT;
 		goto out;
 	}
 	if (from->nprincipals > 0) {

@@ -922,6 +922,18 @@ sshkey_tests(void)
 	b = NULL;
 	TEST_DONE();
 
+	TEST_START("cert copy rejects principal overflow");
+	k1 = get_private("ed25519_1");
+	k2 = get_private("ed25519_2");
+	ASSERT_INT_EQ(sshkey_to_certified(k1), 0);
+	ASSERT_PTR_NE(k1->cert, NULL);
+	k1->cert->nprincipals = SSHKEY_CERT_MAX_PRINCIPALS + 1;
+	ASSERT_INT_EQ(sshkey_cert_copy(k1, k2), SSH_ERR_INVALID_ARGUMENT);
+	sshkey_free(k1);
+	sshkey_free(k2);
+	k1 = k2 = NULL;
+	TEST_DONE();
+
 #ifdef WITH_OPENSSL
 	TEST_START("sign and verify RSA");
 	k1 = get_private("rsa_1");
