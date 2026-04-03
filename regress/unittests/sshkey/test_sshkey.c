@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #ifdef WITH_OPENSSL
 #include <openssl/bn.h>
@@ -47,6 +48,18 @@ put_opt(struct sshbuf *b, const char *name, const char *value)
 		ASSERT_INT_EQ(sshbuf_put_cstring(sect, value), 0);
 	ASSERT_INT_EQ(sshbuf_put_stringb(b, sect), 0);
 	sshbuf_free(sect);
+}
+
+static void
+copy_file_mode(const char *src, const char *dst, mode_t mode)
+{
+	struct sshbuf *buf = NULL;
+
+	ASSERT_INT_EQ(sshbuf_load_file(src, &buf), 0);
+	ASSERT_PTR_NE(buf, NULL);
+	ASSERT_INT_EQ(sshbuf_write_file(dst, buf), 0);
+	ASSERT_INT_EQ(chmod(dst, mode), 0);
+	sshbuf_free(buf);
 }
 
 #ifdef WITH_OPENSSL
@@ -869,8 +882,24 @@ sshkey_tests(void)
 	TEST_DONE();
 
 	TEST_START("load private cert preserves cert");
-	ASSERT_INT_EQ(sshkey_load_private_cert(KEY_UNSPEC,
-	    test_data_file("ed25519_1"), "", &k1), 0);
+	{
+		char keypath[] = "/tmp/test_sshkey_load_private_cert.XXXXXX";
+		char certpath[PATH_MAX];
+		int fd, n;
+
+		ASSERT_INT_NE((fd = mkstemp(keypath)), -1);
+		ASSERT_INT_EQ(close(fd), 0);
+		n = snprintf(certpath, sizeof(certpath), "%s-cert.pub", keypath);
+		ASSERT_INT_GT(n, 0);
+		ASSERT_INT_LT(n, (int)sizeof(certpath));
+		copy_file_mode(test_data_file("ed25519_1"), keypath, 0600);
+		copy_file_mode(test_data_file("ed25519_1-cert.pub"), certpath,
+		    0644);
+		ASSERT_INT_EQ(sshkey_load_private_cert(KEY_UNSPEC,
+		    keypath, "", &k1), 0);
+		ASSERT_INT_EQ(unlink(certpath), 0);
+		ASSERT_INT_EQ(unlink(keypath), 0);
+	}
 	ASSERT_PTR_NE(k1, NULL);
 	ASSERT_PTR_NE(k1->cert, NULL);
 	ASSERT_INT_EQ(sshbuf_len(k1->cert->certblob) > 0, 1);
