@@ -869,6 +869,12 @@ sshkey_ecdsa_bits_to_nid(int bits)
 const char *
 sshkey_curve_nid_to_name(int nid)
 {
+#ifdef WITH_RUST_CRYPTO
+	const char *name;
+
+	if ((name = ossh_rust_sshkey_curve_nid_to_name(nid)) != NULL)
+		return name;
+#endif /* WITH_RUST_CRYPTO */
 	switch (nid) {
 	case NID_X9_62_prime256v1:
 		return "nistp256";
