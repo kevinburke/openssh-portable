@@ -61,6 +61,7 @@ use sshkey_meta::{
     sshkey_ecdsa_nid_from_name as rust_sshkey_ecdsa_nid_from_name,
     sshkey_curve_name_to_nid as rust_sshkey_curve_name_to_nid,
     sshkey_curve_nid_to_bits as rust_sshkey_curve_nid_to_bits,
+    sshkey_curve_nid_to_name as rust_sshkey_curve_nid_to_name,
     sshkey_equal_public_plan as rust_sshkey_equal_public_plan,
     sshkey_from_blob_plan as rust_sshkey_from_blob_plan,
     sshkey_private_deserialize_plan as rust_sshkey_private_deserialize_plan,
@@ -2046,6 +2047,14 @@ pub extern "C" fn ossh_rust_sshkey_curve_nid_to_bits(nid: c_int, out: *mut c_int
             0
         }
         None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_curve_nid_to_name(nid: c_int) -> *const c_char {
+    match rust_sshkey_curve_nid_to_name(nid) {
+        Some(name) => name.as_ptr() as *const c_char,
+        None => core::ptr::null(),
     }
 }
 
