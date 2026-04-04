@@ -577,6 +577,8 @@ sshkey_tests(void)
 	ASSERT_INT_EQ(sshkey_curve_nid_to_bits(-1), 0);
 	ASSERT_STRING_EQ(sshkey_curve_nid_to_name(NID_secp384r1), "nistp384");
 	ASSERT_PTR_EQ(sshkey_curve_nid_to_name(-1), NULL);
+	ASSERT_INT_EQ(sshkey_ecdsa_bits_to_nid(384), NID_secp384r1);
+	ASSERT_INT_EQ(sshkey_ecdsa_bits_to_nid(-1), -1);
 #endif
 	k1 = sshkey_new(KEY_ED25519);
 	ASSERT_PTR_NE(k1, NULL);

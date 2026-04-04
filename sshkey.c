@@ -852,6 +852,12 @@ sshkey_curve_nid_to_bits(int nid)
 int
 sshkey_ecdsa_bits_to_nid(int bits)
 {
+#ifdef WITH_RUST_CRYPTO
+	int nid;
+
+	if (ossh_rust_sshkey_ecdsa_bits_to_nid(bits, &nid) == 0)
+		return nid;
+#endif /* WITH_RUST_CRYPTO */
 	switch (bits) {
 	case 256:
 		return NID_X9_62_prime256v1;
