@@ -201,7 +201,7 @@ test_parse(void)
 	{
 		Options o;
 		memset(&o, 0, sizeof(o));
-		ASSERT_INT_EQ(parse_jump("jumpa,ssh://user@jumpb:2200", &o, 1), 0);
+		ASSERT_INT_EQ(parse_jump("jumpa,ssh://user@jumpb:2200", &o, 1, 1), 0);
 		ASSERT_STRING_EQ(o.jump_user, "user");
 		ASSERT_STRING_EQ(o.jump_host, "jumpb");
 		ASSERT_INT_EQ(o.jump_port, 2200);
@@ -215,7 +215,7 @@ test_parse(void)
 	{
 		Options o;
 		memset(&o, 0, sizeof(o));
-		ASSERT_INT_EQ(parse_jump("NoNe", &o, 1), 0);
+		ASSERT_INT_EQ(parse_jump("NoNe", &o, 1, 1), 0);
 		ASSERT_STRING_EQ(o.jump_host, "none");
 		ASSERT_INT_EQ(o.jump_port, 0);
 		ASSERT_PTR_EQ(o.jump_user, NULL);
@@ -228,7 +228,7 @@ test_parse(void)
 	{
 		Options o;
 		memset(&o, 0, sizeof(o));
-		ASSERT_INT_EQ(parse_jump("jumpa,,jumpb", &o, 1), -1);
+		ASSERT_INT_EQ(parse_jump("jumpa,,jumpb", &o, 1, 1), -1);
 		free_jump_options(&o);
 	}
 	TEST_DONE();
