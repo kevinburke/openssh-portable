@@ -268,6 +268,80 @@ pub(crate) fn sshkey_alg_list_include(
     Some(true)
 }
 
+pub(crate) fn sshkey_alg_list_len(
+    certs_only: bool,
+    plain_only: bool,
+    include_sigonly: bool,
+    sep: u8,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Option<usize> {
+    let entries_slice = keyimpls(entries, nentries)?;
+    let mut total = 0usize;
+    let mut emitted = 0usize;
+
+    for entry_ptr in entries_slice {
+        let entry = entry_ref(*entry_ptr)?;
+        if !sshkey_alg_list_include(certs_only, plain_only, include_sigonly, *entry_ptr)? {
+            continue;
+        }
+        let name = entry_bytes(entry.name)?;
+        if emitted != 0 {
+            total = total.checked_add(1)?;
+            let _ = sep;
+        }
+        total = total.checked_add(name.len())?;
+        emitted += 1;
+    }
+    Some(total)
+}
+
+pub(crate) fn sshkey_alg_list_write(
+    certs_only: bool,
+    plain_only: bool,
+    include_sigonly: bool,
+    sep: u8,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> Option<()> {
+    let entries_slice = keyimpls(entries, nentries)?;
+    let expected = sshkey_alg_list_len(
+        certs_only,
+        plain_only,
+        include_sigonly,
+        sep,
+        entries,
+        nentries,
+    )?;
+    if out.is_null() && out_len != 0 {
+        return None;
+    }
+    let out = unsafe { slice::from_raw_parts_mut(out, out_len) };
+    if out.len() != expected {
+        return None;
+    }
+
+    let mut pos = 0usize;
+    let mut emitted = 0usize;
+    for entry_ptr in entries_slice {
+        let entry = entry_ref(*entry_ptr)?;
+        if !sshkey_alg_list_include(certs_only, plain_only, include_sigonly, *entry_ptr)? {
+            continue;
+        }
+        let name = entry_bytes(entry.name)?;
+        if emitted != 0 {
+            out[pos] = sep;
+            pos += 1;
+        }
+        out[pos..pos + name.len()].copy_from_slice(name);
+        pos += name.len();
+        emitted += 1;
+    }
+    Some(())
+}
+
 pub(crate) fn sshkey_names_valid_include(
     input: *const u8,
     input_len: usize,
@@ -1081,6 +1155,31 @@ mod tests {
             sshkey_alg_list_include(false, false, true, entry_ptrs[7]),
             Some(true)
         );
+    }
+
+    #[test]
+    fn alg_list_write_matches_current_filters() {
+        let entry_ptrs = entry_ptrs();
+        let len = sshkey_alg_list_len(false, true, true, b',', entry_ptrs.as_ptr(), entry_ptrs.len())
+            .unwrap();
+        let mut out = vec![0u8; len];
+
+        sshkey_alg_list_write(
+            false,
+            true,
+            true,
+            b',',
+            entry_ptrs.as_ptr(),
+            entry_ptrs.len(),
+            out.as_mut_ptr(),
+            out.len(),
+        )
+        .unwrap();
+        let rendered = core::str::from_utf8(&out).unwrap();
+
+        assert!(rendered.contains("ssh-ed25519"));
+        assert!(rendered.contains("rsa-sha2-256"));
+        assert!(!rendered.contains("ssh-rsa-cert-v01@openssh.com"));
     }
 
     #[test]
