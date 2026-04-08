@@ -500,24 +500,38 @@ char *
 sshkey_alg_list(int certs_only, int plain_only, int include_sigonly, char sep)
 {
 	char *ret = NULL;
+#ifdef WITH_RUST_CRYPTO
+	size_t len = 0;
+	size_t nentries = 0;
+#endif
 	size_t i;
 	const struct sshkey_impl *impl;
 	char sep_str[2] = {sep, '\0'};
 
+#ifdef WITH_RUST_CRYPTO
+	for (nentries = 0; keyimpls[nentries] != NULL; nentries++)
+		;
+	if (ossh_rust_sshkey_alg_list_len(certs_only, plain_only,
+	    include_sigonly, (u_char)sep,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    nentries, &len) == 0) {
+		if (len == 0)
+			return NULL;
+		if ((ret = malloc(len + 1)) == NULL)
+			return NULL;
+		if (ossh_rust_sshkey_alg_list_write(certs_only, plain_only,
+		    include_sigonly, (u_char)sep,
+		    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+		    nentries, (u_char *)ret, len) == 0) {
+			ret[len] = '\0';
+			return ret;
+		}
+		free(ret);
+		ret = NULL;
+	}
+#endif /* WITH_RUST_CRYPTO */
 	for (i = 0; keyimpls[i] != NULL; i++) {
 		impl = keyimpls[i];
-#ifdef WITH_RUST_CRYPTO
-		int include;
-
-		if (ossh_rust_sshkey_alg_list_include(certs_only, plain_only,
-		    include_sigonly, (const struct ossh_rust_sshkey_impl *)impl,
-		    &include) == 0) {
-			if (!include)
-				continue;
-			xextendf(&ret, sep_str, "%s", impl->name);
-			continue;
-		}
-#endif /* WITH_RUST_CRYPTO */
 		if (impl->name == NULL)
 			continue;
 		if (!include_sigonly && impl->sigonly)
