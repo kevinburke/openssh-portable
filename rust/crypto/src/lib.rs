@@ -74,6 +74,8 @@ use sshkey_meta::{
     sshkey_impl_index_from_type_nid as rust_sshkey_impl_index_from_type_nid,
     sshkey_impl_name_from_type_nid as rust_sshkey_impl_name_from_type_nid,
     sshkey_alg_list_include as rust_sshkey_alg_list_include,
+    sshkey_alg_list_len as rust_sshkey_alg_list_len,
+    sshkey_alg_list_write as rust_sshkey_alg_list_write,
     sshkey_names_valid_include as rust_sshkey_names_valid_include,
     sshkey_sigalg_by_name as rust_sshkey_sigalg_by_name,
     sshkey_sigalg_match_plan as rust_sshkey_sigalg_match_plan,
@@ -2334,6 +2336,66 @@ pub extern "C" fn ossh_rust_sshkey_alg_list_include(
             0
         }
         None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_alg_list_len(
+    certs_only: c_int,
+    plain_only: c_int,
+    include_sigonly: c_int,
+    sep: u8,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    out_len: *mut usize,
+) -> c_int {
+    if out_len.is_null() {
+        return -1;
+    }
+    match rust_sshkey_alg_list_len(
+        certs_only != 0,
+        plain_only != 0,
+        include_sigonly != 0,
+        sep,
+        entries,
+        nentries,
+    ) {
+        Some(len) => {
+            unsafe {
+                *out_len = len;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_alg_list_write(
+    certs_only: c_int,
+    plain_only: c_int,
+    include_sigonly: c_int,
+    sep: u8,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> c_int {
+    if rust_sshkey_alg_list_write(
+        certs_only != 0,
+        plain_only != 0,
+        include_sigonly != 0,
+        sep,
+        entries,
+        nentries,
+        out,
+        out_len,
+    )
+    .is_some()
+    {
+        0
+    } else {
+        -1
     }
 }
 
