@@ -850,8 +850,8 @@ match_cfg_line(Options *options, const char *full_line, int *acp, char ***avp,
 			if (r == (negate ? 1 : 0))
 				this_result = result = 0;
 		} else if (strcasecmp(attrib, "version") == 0) {
-			criteria = xstrdup(SSH_RELEASE);
-			r = match_pattern_list(SSH_RELEASE, arg, 0) == 1;
+			criteria = xstrdup(SSH_RELEASE_BASE);
+			r = match_pattern_list(SSH_RELEASE_BASE, arg, 0) == 1;
 			if (r == (negate ? 1 : 0))
 				this_result = result = 0;
 		} else if (strcasecmp(attrib, "tagged") == 0) {
@@ -3036,6 +3036,8 @@ fill_default_options(Options * options)
 		options->obscure_keystroke_timing_interval =
 		    SSH_KEYSTROKE_DEFAULT_INTERVAL_MS;
 	}
+	if (options->version_addendum == NULL)
+		options->version_addendum = xstrdup(SSH_VERSION_ADDENDUM);
 
 	/* Expand KEX name lists */
 	all_cipher = cipher_alg_list(',', 0);

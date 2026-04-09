@@ -998,7 +998,7 @@ main(int ac, char **av)
 	log_init(__progname, options.log_level, options.log_facility,
 	    log_stderr || !inetd_flag || debug_flag);
 
-	debug("sshd-session version %s, %s", SSH_VERSION, SSH_OPENSSL_VERSION);
+	debug("sshd-session version %s, %s", SSH_RELEASE, SSH_OPENSSL_VERSION);
 
 	/* Store privilege separation user for later use if required. */
 	privsep_chroot = (getuid() == 0 || geteuid() == 0);

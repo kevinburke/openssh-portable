@@ -1507,7 +1507,7 @@ main(int ac, char **av)
 		fatal("Config test connection parameter (-C) provided without "
 		    "test mode (-T)");
 
-	debug("sshd version %s, %s", SSH_VERSION, SSH_OPENSSL_VERSION);
+	debug("sshd version %s, %s", SSH_RELEASE, SSH_OPENSSL_VERSION);
 	if (uname(&utsname) != 0) {
 		memset(&utsname, 0, sizeof(utsname));
 		strlcpy(utsname.sysname, "UNKNOWN", sizeof(utsname.sysname));
