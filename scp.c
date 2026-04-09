@@ -1521,15 +1521,23 @@ rsource(char *name, struct stat *statp)
 		return;
 	}
 	while ((dp = readdir(dirp)) != NULL) {
+		size_t namelen, d_namelen, pathlen;
+
 		if (dp->d_ino == 0)
 			continue;
 		if (!strcmp(dp->d_name, ".") || !strcmp(dp->d_name, ".."))
 			continue;
-		if (strlen(name) + 1 + strlen(dp->d_name) >= sizeof(path) - 1) {
+		namelen = strlen(name);
+		d_namelen = strlen(dp->d_name);
+		pathlen = namelen + 1 + d_namelen;
+		if (pathlen >= sizeof(path)) {
 			run_err("%s/%s: name too long", name, dp->d_name);
 			continue;
 		}
-		(void) snprintf(path, sizeof path, "%s/%s", name, dp->d_name);
+		memcpy(path, name, namelen);
+		path[namelen] = '/';
+		memcpy(path + namelen + 1, dp->d_name, d_namelen);
+		path[pathlen] = '\0';
 		vect[0] = path;
 		source(1, vect);
 	}

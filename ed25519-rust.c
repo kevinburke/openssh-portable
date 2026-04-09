@@ -59,7 +59,7 @@ crypto_sign_ed25519_open(unsigned char *m, unsigned long long *mlen,
     const unsigned char *sm, unsigned long long smlen, const unsigned char *pk)
 {
 	unsigned long long msglen;
-	unsigned long long outlen;
+	unsigned long long outlen = 0;
 
 	if (smlen < crypto_sign_ed25519_BYTES)
 		goto badsig;
