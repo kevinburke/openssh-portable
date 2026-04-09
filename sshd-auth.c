@@ -366,7 +366,7 @@ get_hostkey_index(struct sshkey *key, int compare, struct ssh *ssh)
 static void
 usage(void)
 {
-	fprintf(stderr, "%s, %s\n", SSH_VERSION, SSH_OPENSSL_VERSION);
+	fprintf(stderr, "%s, %s\n", SSH_RELEASE, SSH_OPENSSL_VERSION);
 	fprintf(stderr,
 "usage: sshd [-46DdeGiqTtV] [-C connection_spec] [-c host_cert_file]\n"
 "            [-E log_file] [-f config_file] [-g login_grace_time]\n"
@@ -553,7 +553,7 @@ main(int ac, char **av)
 			break;
 		case 'V':
 			fprintf(stderr, "%s, %s\n",
-			    SSH_VERSION, SSH_OPENSSL_VERSION);
+			    SSH_RELEASE, SSH_OPENSSL_VERSION);
 			exit(0);
 		default:
 			usage();
@@ -623,7 +623,7 @@ main(int ac, char **av)
 	log_init(__progname, options.log_level, options.log_facility, 1);
 	set_log_handler(mm_log_handler, pmonitor);
 
-	debug("sshd-auth version %s, %s", SSH_VERSION, SSH_OPENSSL_VERSION);
+	debug("sshd-auth version %s, %s", SSH_RELEASE, SSH_OPENSSL_VERSION);
 
 	/* Store privilege separation user for later use if required. */
 	privsep_chroot = (getuid() == 0 || geteuid() == 0);

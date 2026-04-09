@@ -398,7 +398,7 @@ fill_default_server_options(ServerOptions *options)
 	if (options->ip_qos_bulk == -1)
 		options->ip_qos_bulk = IPTOS_DSCP_CS0;
 	if (options->version_addendum == NULL)
-		options->version_addendum = xstrdup("");
+		options->version_addendum = xstrdup(SSH_VERSION_ADDENDUM);
 	if (options->fwd_opts.streamlocal_bind_mask == (mode_t)-1)
 		options->fwd_opts.streamlocal_bind_mask = 0177;
 	if (options->fwd_opts.streamlocal_bind_unlink == -1)
@@ -1012,12 +1012,12 @@ match_cfg_line(const char *full_line, int *acp, char ***avp,
 				    "'RDomain %.100s' at line %d",
 				    ci->rdomain, arg, line);
 		} else if (strcasecmp(attrib, "version") == 0) {
-			if (match_pattern_list(SSH_RELEASE, arg, 0) != 1)
+			if (match_pattern_list(SSH_RELEASE_BASE, arg, 0) != 1)
 				result = 0;
 			else
 				debug("version %.100s matched "
 				    "'version %.100s' at line %d",
-				    SSH_RELEASE, arg, line);
+				    SSH_RELEASE_BASE, arg, line);
 		} else {
 			error("Unsupported Match attribute %s", oattrib);
 			result = -1;
