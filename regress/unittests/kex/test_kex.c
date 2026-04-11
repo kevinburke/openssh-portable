@@ -318,6 +318,22 @@ rust_dh_substep_benchmarks(void)
 		    public_len, shared, public_len), 0);
 	BENCH_FINISH("ops");
 
+	BENCH_START("Rust DH group14 from params");
+		group = ossh_rust_dh_group_from_params(generator, generator_len,
+		    modulus, modulus_len);
+		ASSERT_PTR_NE(group, NULL);
+		ossh_rust_dh_free(group);
+	BENCH_FINISH("ops");
+
+	BENCH_START("Rust DH group14 export trio");
+		ASSERT_INT_EQ(ossh_rust_dh_export_public(client, client_pub,
+		    public_len), 0);
+		ASSERT_INT_EQ(ossh_rust_dh_export_modulus(client, modulus,
+		    modulus_len), 0);
+		ASSERT_INT_EQ(ossh_rust_dh_export_generator(client, generator,
+		    generator_len), 0);
+	BENCH_FINISH("ops");
+
 	BENCH_START("Rust DH-GEX hash build");
 		b = sshbuf_new();
 		ASSERT_PTR_NE(b, NULL);
