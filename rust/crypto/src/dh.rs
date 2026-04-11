@@ -1,5 +1,6 @@
 use core::ffi::{c_int, c_void};
 use core::slice;
+use std::sync::OnceLock;
 
 use num_bigint_dig::BigUint;
 use rand_core::{OsRng, RngCore};
@@ -95,17 +96,22 @@ const GROUP18_MODULUS_HEX: &str = concat!(
     "60C980DD", "98EDD3DF", "FFFFFFFF", "FFFFFFFF",
 );
 
+#[derive(Clone)]
 struct RustDhGroup {
     modulus: BigUint,
     generator: BigUint,
     private_key: Option<BigUint>,
     public_key: Option<BigUint>,
     modulus_len: usize,
+    modulus_bytes: Box<[u8]>,
+    generator_bytes: Box<[u8]>,
 }
 
 impl RustDhGroup {
     fn from_parts(generator: BigUint, modulus: BigUint) -> Option<Self> {
-        let modulus_len = modulus.to_bytes_be().len();
+        let modulus_bytes = modulus.to_bytes_be().into_boxed_slice();
+        let generator_bytes = generator.to_bytes_be().into_boxed_slice();
+        let modulus_len = modulus_bytes.len();
         if modulus_len == 0 || generator <= BigUint::from(1u8) || generator >= modulus {
             return None;
         }
@@ -115,6 +121,8 @@ impl RustDhGroup {
             private_key: None,
             public_key: None,
             modulus_len,
+            modulus_bytes,
+            generator_bytes,
         })
     }
 
@@ -124,6 +132,9 @@ impl RustDhGroup {
     }
 
     fn from_params(generator: &[u8], modulus: &[u8]) -> Option<Self> {
+        if let Some(group) = standard_group_from_params(generator, modulus) {
+            return Some(group.clone());
+        }
         let generator = BigUint::from_bytes_be(generator);
         let modulus = BigUint::from_bytes_be(modulus);
         Self::from_parts(generator, modulus)
@@ -205,20 +216,50 @@ impl RustDhGroup {
         if out.len() != self.modulus_len {
             return Err(());
         }
-        write_biguint_padded(&self.modulus, out)
+        out.copy_from_slice(self.modulus_bytes.as_ref());
+        Ok(())
     }
 
     fn generator_len(&self) -> usize {
-        self.generator.to_bytes_be().len()
+        self.generator_bytes.len()
     }
 
     fn export_generator(&self, out: &mut [u8]) -> Result<(), ()> {
-        let encoded = self.generator.to_bytes_be();
-        if encoded.len() != out.len() {
+        if self.generator_bytes.len() != out.len() {
             return Err(());
         }
-        out.copy_from_slice(&encoded);
+        out.copy_from_slice(self.generator_bytes.as_ref());
         Ok(())
+    }
+}
+
+fn standard_group_from_params(generator: &[u8], modulus: &[u8]) -> Option<&'static RustDhGroup> {
+    let groups = [
+        standard_group(OSSH_RUST_DH_GROUP14),
+        standard_group(OSSH_RUST_DH_GROUP16),
+        standard_group(OSSH_RUST_DH_GROUP18),
+    ];
+
+    groups.into_iter().find(|group| {
+        generator == group.generator_bytes.as_ref() && modulus == group.modulus_bytes.as_ref()
+    })
+}
+
+fn standard_group(group_id: c_int) -> &'static RustDhGroup {
+    match group_id {
+        OSSH_RUST_DH_GROUP14 => {
+            static GROUP: OnceLock<RustDhGroup> = OnceLock::new();
+            GROUP.get_or_init(|| RustDhGroup::new(OSSH_RUST_DH_GROUP14).expect("group14"))
+        }
+        OSSH_RUST_DH_GROUP16 => {
+            static GROUP: OnceLock<RustDhGroup> = OnceLock::new();
+            GROUP.get_or_init(|| RustDhGroup::new(OSSH_RUST_DH_GROUP16).expect("group16"))
+        }
+        OSSH_RUST_DH_GROUP18 => {
+            static GROUP: OnceLock<RustDhGroup> = OnceLock::new();
+            GROUP.get_or_init(|| RustDhGroup::new(OSSH_RUST_DH_GROUP18).expect("group18"))
+        }
+        _ => panic!("unsupported standard DH group"),
     }
 }
 
