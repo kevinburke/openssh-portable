@@ -21,7 +21,13 @@
 #include "sshbuf.h"
 #include "packet.h"
 #include "myproposal.h"
+#include "digest.h"
+#include "dh.h"
 #include "log.h"
+
+#ifdef WITH_RUST_CRYPTO
+#include "rust-crypto.h"
+#endif
 
 void kex_tests(void);
 static int do_debug = 0;
@@ -235,6 +241,124 @@ do_kex(char *kex)
 	do_kex_with_key(kex, NULL, NULL, NULL, KEY_ED25519, 256);
 }
 
+#ifdef WITH_RUST_CRYPTO
+static void
+rust_dh_substep_benchmarks(void)
+{
+	struct sshbuf *client_version = NULL, *server_version = NULL;
+	struct sshbuf *client_kexinit = NULL, *server_kexinit = NULL;
+	struct sshbuf *server_host_key_blob = NULL, *b = NULL;
+	void *client = NULL, *server = NULL, *group = NULL;
+	u_char *modulus = NULL, *generator = NULL, *client_pub = NULL, *server_pub = NULL;
+	u_char *shared = NULL;
+	u_char digest[SSH_DIGEST_MAX_LENGTH];
+	size_t modulus_len, generator_len, public_len, digest_len;
+
+	client = ossh_rust_dh_group_new(OSSH_RUST_DH_GROUP14);
+	server = ossh_rust_dh_group_new(OSSH_RUST_DH_GROUP14);
+	ASSERT_PTR_NE(client, NULL);
+	ASSERT_PTR_NE(server, NULL);
+	ASSERT_INT_EQ(ossh_rust_dh_generate_key(client, 256), 0);
+	ASSERT_INT_EQ(ossh_rust_dh_generate_key(server, 256), 0);
+
+	modulus_len = ossh_rust_dh_modulus_len(client);
+	generator_len = ossh_rust_dh_generator_len(client);
+	public_len = ossh_rust_dh_public_len(client);
+	ASSERT_SIZE_T_NE(modulus_len, 0);
+	ASSERT_SIZE_T_NE(generator_len, 0);
+	ASSERT_SIZE_T_NE(public_len, 0);
+
+	modulus = calloc(1, modulus_len);
+	generator = calloc(1, generator_len);
+	client_pub = calloc(1, public_len);
+	server_pub = calloc(1, public_len);
+	shared = calloc(1, public_len);
+	ASSERT_PTR_NE(modulus, NULL);
+	ASSERT_PTR_NE(generator, NULL);
+	ASSERT_PTR_NE(client_pub, NULL);
+	ASSERT_PTR_NE(server_pub, NULL);
+	ASSERT_PTR_NE(shared, NULL);
+	ASSERT_INT_EQ(ossh_rust_dh_export_modulus(client, modulus, modulus_len), 0);
+	ASSERT_INT_EQ(ossh_rust_dh_export_generator(client, generator, generator_len), 0);
+	ASSERT_INT_EQ(ossh_rust_dh_export_public(client, client_pub, public_len), 0);
+	ASSERT_INT_EQ(ossh_rust_dh_export_public(server, server_pub, public_len), 0);
+	ASSERT_INT_EQ(ossh_rust_dh_shared_secret(client, server_pub, public_len,
+	    shared, public_len), 0);
+
+	client_version = sshbuf_new();
+	server_version = sshbuf_new();
+	client_kexinit = sshbuf_new();
+	server_kexinit = sshbuf_new();
+	server_host_key_blob = sshbuf_new();
+	ASSERT_PTR_NE(client_version, NULL);
+	ASSERT_PTR_NE(server_version, NULL);
+	ASSERT_PTR_NE(client_kexinit, NULL);
+	ASSERT_PTR_NE(server_kexinit, NULL);
+	ASSERT_PTR_NE(server_host_key_blob, NULL);
+	ASSERT_INT_EQ(sshbuf_put(client_version, "SSH-2.0-test-client",
+	    sizeof("SSH-2.0-test-client") - 1), 0);
+	ASSERT_INT_EQ(sshbuf_put(server_version, "SSH-2.0-test-server",
+	    sizeof("SSH-2.0-test-server") - 1), 0);
+	ASSERT_INT_EQ(sshbuf_put(client_kexinit, "client-kexinit-payload",
+	    sizeof("client-kexinit-payload") - 1), 0);
+	ASSERT_INT_EQ(sshbuf_put(server_kexinit, "server-kexinit-payload",
+	    sizeof("server-kexinit-payload") - 1), 0);
+	ASSERT_INT_EQ(sshbuf_put(server_host_key_blob, "server-host-key-blob",
+	    sizeof("server-host-key-blob") - 1), 0);
+
+	BENCH_START("Rust DH group14 keygen");
+		group = ossh_rust_dh_group_new(OSSH_RUST_DH_GROUP14);
+		ASSERT_PTR_NE(group, NULL);
+		ASSERT_INT_EQ(ossh_rust_dh_generate_key(group, 256), 0);
+		ossh_rust_dh_free(group);
+	BENCH_FINISH("ops");
+
+	BENCH_START("Rust DH group14 shared secret");
+		ASSERT_INT_EQ(ossh_rust_dh_shared_secret(client, server_pub,
+		    public_len, shared, public_len), 0);
+	BENCH_FINISH("ops");
+
+	BENCH_START("Rust DH-GEX hash build");
+		b = sshbuf_new();
+		ASSERT_PTR_NE(b, NULL);
+		ASSERT_INT_EQ(sshbuf_put_stringb(b, client_version), 0);
+		ASSERT_INT_EQ(sshbuf_put_stringb(b, server_version), 0);
+		ASSERT_INT_EQ(sshbuf_put_u32(b, sshbuf_len(client_kexinit) + 1), 0);
+		ASSERT_INT_EQ(sshbuf_put_u8(b, SSH2_MSG_KEXINIT), 0);
+		ASSERT_INT_EQ(sshbuf_putb(b, client_kexinit), 0);
+		ASSERT_INT_EQ(sshbuf_put_u32(b, sshbuf_len(server_kexinit) + 1), 0);
+		ASSERT_INT_EQ(sshbuf_put_u8(b, SSH2_MSG_KEXINIT), 0);
+		ASSERT_INT_EQ(sshbuf_putb(b, server_kexinit), 0);
+		ASSERT_INT_EQ(sshbuf_put_stringb(b, server_host_key_blob), 0);
+		ASSERT_INT_EQ(sshbuf_put_u32(b, DH_GRP_MIN), 0);
+		ASSERT_INT_EQ(sshbuf_put_u32(b, 3072), 0);
+		ASSERT_INT_EQ(sshbuf_put_u32(b, DH_GRP_MAX), 0);
+		ASSERT_INT_EQ(sshbuf_put_bignum2_bytes(b, modulus, modulus_len), 0);
+		ASSERT_INT_EQ(sshbuf_put_bignum2_bytes(b, generator, generator_len), 0);
+		ASSERT_INT_EQ(sshbuf_put_bignum2_bytes(b, client_pub, public_len), 0);
+		ASSERT_INT_EQ(sshbuf_put_bignum2_bytes(b, server_pub, public_len), 0);
+		ASSERT_INT_EQ(sshbuf_put(b, shared, public_len), 0);
+		digest_len = sizeof(digest);
+		ASSERT_INT_EQ(ssh_digest_buffer(SSH_DIGEST_SHA256, b, digest,
+		    digest_len), 0);
+		sshbuf_free(b);
+	BENCH_FINISH("ops");
+
+	ossh_rust_dh_free(client);
+	ossh_rust_dh_free(server);
+	sshbuf_free(client_version);
+	sshbuf_free(server_version);
+	sshbuf_free(client_kexinit);
+	sshbuf_free(server_kexinit);
+	sshbuf_free(server_host_key_blob);
+	freezero(modulus, modulus_len);
+	freezero(generator, generator_len);
+	freezero(client_pub, public_len);
+	freezero(server_pub, public_len);
+	freezero(shared, public_len);
+}
+#endif
+
 void
 kex_tests(void)
 {
@@ -278,4 +402,8 @@ kex_tests(void)
 	do_kex("sntrup761x25519-sha512");
 # endif /* USE_SNTRUP761X25519 */
 #endif /* WITH_RUST_CRYPTO && !WITH_OPENSSL */
+#ifdef WITH_RUST_CRYPTO
+	if (test_is_benchmark())
+		rust_dh_substep_benchmarks();
+#endif
 }
