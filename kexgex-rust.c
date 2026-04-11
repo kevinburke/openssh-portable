@@ -208,8 +208,8 @@ rust_dh_shared_secret(const struct kex *kex, const u_char *peer_public,
     size_t peer_public_len, struct sshbuf **shared_secretp)
 {
 	struct sshbuf *shared_secret = NULL;
-	u_char *shared = NULL, *modulus = NULL;
-	size_t shared_len, modulus_len = 0;
+	u_char *shared = NULL;
+	size_t shared_len, modulus_len;
 	int r;
 
 	*shared_secretp = NULL;
@@ -217,8 +217,8 @@ rust_dh_shared_secret(const struct kex *kex, const u_char *peer_public,
 		return SSH_ERR_INVALID_ARGUMENT;
 	if ((shared_len = ossh_rust_dh_public_len(kex->dh)) == 0)
 		return SSH_ERR_INVALID_ARGUMENT;
-	if ((r = rust_dh_export_modulus(kex, &modulus, &modulus_len)) != 0)
-		return r;
+	if ((modulus_len = ossh_rust_dh_modulus_len(kex->dh)) == 0)
+		return SSH_ERR_INVALID_ARGUMENT;
 	if ((shared = calloc(1, shared_len)) == NULL) {
 		r = SSH_ERR_ALLOC_FAIL;
 		goto out;
@@ -228,7 +228,7 @@ rust_dh_shared_secret(const struct kex *kex, const u_char *peer_public,
 		goto out;
 	}
 	debug2("bits set: %d/%d", rust_count_set_bits(peer_public, peer_public_len),
-	    rust_mpint_bits(modulus, modulus_len));
+	    (int)(modulus_len * 8));
 	if (ossh_rust_dh_shared_secret(kex->dh, peer_public, peer_public_len,
 	    shared, shared_len) != 0) {
 		r = SSH_ERR_MESSAGE_INCOMPLETE;
@@ -240,7 +240,6 @@ rust_dh_shared_secret(const struct kex *kex, const u_char *peer_public,
 	shared_secret = NULL;
 	r = 0;
  out:
-	freezero(modulus, modulus_len);
 	freezero(shared, shared_len);
 	sshbuf_free(shared_secret);
 	return r;
@@ -358,7 +357,15 @@ input_kex_dh_gex_group(int type, uint32_t seq, struct ssh *ssh)
 		r = SSH_ERR_LIBCRYPTO_ERROR;
 		goto out;
 	}
+	sshbuf_free(kex->client_pub);
+	kex->client_pub = NULL;
 	if ((r = rust_dh_export_public(kex, &client_pub, &client_pub_len)) != 0)
+		goto out;
+	if ((kex->client_pub = sshbuf_new()) == NULL) {
+		r = SSH_ERR_ALLOC_FAIL;
+		goto out;
+	}
+	if ((r = sshbuf_put(kex->client_pub, client_pub, client_pub_len)) != 0)
 		goto out;
 	if ((r = sshpkt_start(ssh, SSH2_MSG_KEX_DH_GEX_INIT)) != 0 ||
 	    (r = sshpkt_put_bignum2_bytes_rust(ssh, client_pub,
@@ -384,10 +391,10 @@ input_kex_dh_gex_reply(int type, uint32_t seq, struct ssh *ssh)
 	struct sshbuf *tmp = NULL, *server_host_key_blob = NULL;
 	struct sshkey *server_host_key = NULL;
 	const u_char *dh_server_pub = NULL;
-	u_char *client_pub = NULL, *dh_p = NULL, *dh_g = NULL;
+	u_char *dh_p = NULL, *dh_g = NULL;
 	u_char *signature = NULL;
 	u_char hash[SSH_DIGEST_MAX_LENGTH];
-	size_t dh_server_pub_len = 0, client_pub_len = 0, dh_p_len = 0, dh_g_len = 0;
+	size_t dh_server_pub_len = 0, dh_p_len = 0, dh_g_len = 0;
 	size_t slen, hashlen;
 	int r;
 
@@ -410,10 +417,13 @@ input_kex_dh_gex_reply(int type, uint32_t seq, struct ssh *ssh)
 		goto out;
 	if ((r = rust_dh_shared_secret(kex, dh_server_pub, dh_server_pub_len,
 	    &shared_secret)) != 0 ||
-	    (r = rust_dh_export_public(kex, &client_pub, &client_pub_len)) != 0 ||
 	    (r = rust_dh_export_modulus(kex, &dh_p, &dh_p_len)) != 0 ||
 	    (r = rust_dh_export_generator(kex, &dh_g, &dh_g_len)) != 0)
 		goto out;
+	if (kex->client_pub == NULL) {
+		r = SSH_ERR_INTERNAL_ERROR;
+		goto out;
+	}
 	if (ssh->compat & SSH_OLD_DHGEX)
 		kex->min = kex->max = -1;
 
@@ -427,7 +437,7 @@ input_kex_dh_gex_reply(int type, uint32_t seq, struct ssh *ssh)
 	    server_host_key_blob,
 	    kex->min, kex->nbits, kex->max,
 	    dh_p, dh_p_len, dh_g, dh_g_len,
-	    client_pub, client_pub_len,
+	    sshbuf_ptr(kex->client_pub), sshbuf_len(kex->client_pub),
 	    dh_server_pub, dh_server_pub_len,
 	    sshbuf_ptr(shared_secret), sshbuf_len(shared_secret),
 	    hash, &hashlen)) != 0)
@@ -462,7 +472,6 @@ input_kex_dh_gex_reply(int type, uint32_t seq, struct ssh *ssh)
 	sshbuf_free(shared_secret);
 	sshbuf_free(server_host_key_blob);
 	free(signature);
-	freezero(client_pub, client_pub_len);
 	freezero(dh_p, dh_p_len);
 	freezero(dh_g, dh_g_len);
 	return r;
