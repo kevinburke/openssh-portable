@@ -18,9 +18,16 @@ start_sshd
 
 for t in $SSH_KEYTYPES; do
 	trace "keyscan type $t"
-	${SSHKEYSCAN} -t $t -T 15 -p $PORT 127.0.0.1 127.0.0.1 127.0.0.1 \
-		> /dev/null 2>&1
-	r=$?
+	r=0
+	for attempt in 1 2 3; do
+		${SSHKEYSCAN} -t $t -T 15 -p $PORT 127.0.0.1 > /dev/null 2>&1
+		r=$?
+		if [ $r -eq 0 ]; then
+			break
+		fi
+		trace "ssh-keyscan -t $t attempt $attempt failed with: $r"
+		sleep $attempt
+	done
 	if [ $r -ne 0 ]; then
 		fail "ssh-keyscan -t $t failed with: $r"
 	fi
