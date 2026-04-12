@@ -191,10 +191,26 @@ jobs:
        sh .github/run_test.sh ${{ matrix.config }}
     - name: chown logs
       if: failure()
-      run: sh -c 'SUDO="$(which sudo 2>/dev/null)"; $SUDO chown -R "${LOGNAME}" regress'
+      shell: sh
+      run: |
+        set -e
+        SUDO=
+        if command -v sudo >/dev/null 2>&1; then
+          SUDO=sudo
+        fi
+        $SUDO chown -R "${LOGNAME}" regress
     - name: show logs
       if: failure()
-      run: sh -c "for i in regress/failed*.log; do echo ====; echo logfile $i; echo =====; cat $i; done"
+      shell: sh
+      run: |
+        set -e
+        for i in regress/failed*.log; do
+          [ -e "$i" ] || continue
+          echo ====
+          echo logfile "$i"
+          echo =====
+          cat "$i"
+        done
     - name: save logs
       if: failure()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # main
