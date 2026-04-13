@@ -17,6 +17,14 @@ echo "HostKeyAlgorithms $algs" >> $OBJ/sshd_config
 start_sshd
 
 for t in $SSH_KEYTYPES; do
+	case `uname -s 2>/dev/null` in
+	CYGWIN*)
+		if [ "x$t" = "xssh-rsa" ]; then
+			verbose "skipping keyscan type $t on Cygwin"
+			continue
+		fi
+		;;
+	esac
 	trace "keyscan type $t"
 	r=0
 	for attempt in 1 2 3; do
