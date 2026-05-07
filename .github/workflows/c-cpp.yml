@@ -12,7 +12,9 @@ name: CI
 # TEST_SSH_TRACE: Set to yes for additional regress output.
 
 on:
+  workflow_dispatch:
   push:
+    branches: [ master ]
     paths: [ '**.c', '**.h', '**.m4', '**.rs', '**.sh', '**/Cargo.toml', '**/Makefile.in', 'configure.ac', '.github/configs', '.github/*.sh', '.github/workflows/c-cpp.yml' ]
   pull_request:
     paths: [ '**.c', '**.h', '**.m4', '**.rs', '**.sh', '**/Cargo.toml', '**/Makefile.in', 'configure.ac', '.github/configs', '.github/*.sh', '.github/workflows/c-cpp.yml' ]
@@ -24,104 +26,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # First we test all OSes in the default configuration.
-        target:
-          - ubuntu-22.04
-          - ubuntu-latest
-          - ubuntu-22.04-arm
-          - ubuntu-24.04-arm
-          - macos-14
-          - macos-15
-          - macos-15-intel
-          - windows-2022
-          - windows-2025
-        config: [default]
-        # Then we include any extra configs we want to test for specific VMs.
-        # Valgrind slows things down quite a bit, so start them first.
+        # Keep automatic CI small enough for fork credit limits while covering
+        # the Rust port, warning-clean builds, sanitizer coverage and major OSes.
         include:
-          - { target: windows-2022, config: cygwin-release }
-          - { target: windows-2025, config: cygwin-release }
-          - { target: ubuntu-22.04, config: c89 }
-          - { target: ubuntu-22.04, config: clang-11 }
-          - { target: ubuntu-22.04, config: clang-12-Werror }
-          - { target: ubuntu-22.04, config: clang-14 }
-          - { target: ubuntu-22.04, config: clang-sanitize-address }
-          - { target: ubuntu-22.04, config: clang-sanitize-undefined }
-          - { target: ubuntu-22.04, config: gcc-9 }
-          - { target: ubuntu-22.04, config: gcc-11-Werror }
-          - { target: ubuntu-22.04, config: gcc-12-Werror }
-          - { target: ubuntu-22.04, config: gcc-sanitize-address }
-          - { target: ubuntu-22.04, config: gcc-sanitize-undefined }
-          - { target: ubuntu-22.04, config: heimdal }
-          - { target: ubuntu-22.04, config: kitchensink }
-          - { target: ubuntu-22.04, config: krb5 }
-          - { target: ubuntu-22.04, config: libedit }
-          - { target: ubuntu-22.04, config: pam }
-          - { target: ubuntu-22.04, config: selinux }
-          - { target: ubuntu-22.04, config: sk }
-          - { target: ubuntu-22.04, config: valgrind-1 }
-          - { target: ubuntu-22.04, config: valgrind-2 }
-          - { target: ubuntu-22.04, config: valgrind-3 }
-          - { target: ubuntu-22.04, config: valgrind-4 }
-          # - { target: ubuntu-22.04, config: valgrind-pam-1 }
-          - { target: ubuntu-22.04, config: valgrind-unit }
-          - { target: ubuntu-22.04, config: without-openssl }
-          - { target: ubuntu-latest, config: gcc-14 }
-          - { target: ubuntu-latest, config: clang-15 }
-          - { target: ubuntu-latest, config: clang-19 }
+          - { target: ubuntu-latest, config: default }
           - { target: ubuntu-latest, config: rust-crypto }
-          - { target: ubuntu-latest, config: boringssl }
-          - { target: ubuntu-latest, config: aws-lc }
-          - { target: ubuntu-latest, config: hardenedmalloc }
-          - { target: ubuntu-latest, config: libressl-master }
-          - { target: ubuntu-latest, config: libressl-3.2.7 }
-          - { target: ubuntu-latest, config: libressl-3.3.6 }
-          - { target: ubuntu-latest, config: libressl-3.4.3 }
-          - { target: ubuntu-latest, config: libressl-3.5.4 }
-          - { target: ubuntu-latest, config: libressl-3.6.3 }
-          - { target: ubuntu-latest, config: libressl-3.7.3 }
-          - { target: ubuntu-latest, config: libressl-3.8.4 }
-          - { target: ubuntu-latest, config: libressl-3.9.2 }
-          - { target: ubuntu-latest, config: libressl-4.0.1 }
-          - { target: ubuntu-latest, config: libressl-4.1.1 }
-          - { target: ubuntu-latest, config: libressl-4.2.0 }
-          - { target: ubuntu-latest, config: libressl-4.3.2 }
-          - { target: ubuntu-latest, config: openssl-master }
-          - { target: ubuntu-latest, config: openssl-noec }
-          - { target: ubuntu-latest, config: openssl-1.1.1 }
-          - { target: ubuntu-latest, config: openssl-1.1.1t }
-          - { target: ubuntu-latest, config: openssl-1.1.1w }
-          - { target: ubuntu-latest, config: openssl-3.0.0 }
-          - { target: ubuntu-latest, config: openssl-3.0.18 }
-          - { target: ubuntu-latest, config: openssl-3.1.0 }
-          - { target: ubuntu-latest, config: openssl-3.1.8 }
-          - { target: ubuntu-latest, config: openssl-3.2.6 }
-          - { target: ubuntu-latest, config: openssl-3.3.7 }
-          - { target: ubuntu-latest, config: openssl-3.4.0 }
-          - { target: ubuntu-latest, config: openssl-3.4.5 }
-          - { target: ubuntu-latest, config: openssl-3.5.0 }
-          - { target: ubuntu-latest, config: openssl-3.5.3 }  # keep
-          - { target: ubuntu-latest, config: openssl-3.5.6 }
-          - { target: ubuntu-latest, config: openssl-3.6.2 }
-          - { target: ubuntu-latest, config: openssl-4.0.0 }
-          - { target: ubuntu-latest, config: openssl-1.1.1_stable }
-          - { target: ubuntu-latest, config: openssl-3.0 }  # stable branch
-          - { target: ubuntu-latest, config: openssl-3.1 }  # stable branch
-          - { target: ubuntu-latest, config: openssl-3.2 }  # stable branch
-          - { target: ubuntu-latest, config: openssl-3.3 }  # stable branch
-          - { target: ubuntu-latest, config: openssl-3.4 }  # stable branch
-          - { target: ubuntu-latest, config: openssl-3.5 }  # stable branch
-          - { target: ubuntu-latest, config: openssl-3.6 }  # stable branch
-          - { target: ubuntu-latest, config: openssl-4.0 }  # stable branch
-          - { target: ubuntu-latest, config: dropbear-versions }
-          - { target: ubuntu-latest, config: putty-versions }
-          - { target: ubuntu-latest, config: zlib-develop }
-          - { target: ubuntu-latest, config: tcmalloc }
-          - { target: ubuntu-latest, config: musl }
-          - { target: ubuntu-22.04-arm, config: kitchensink }
-          - { target: ubuntu-24.04-arm, config: kitchensink }
-          - { target: macos-14, config: pam }
-          - { target: macos-15, config: pam }
+          - { target: ubuntu-22.04, config: gcc-12-Werror }
+          - { target: ubuntu-22.04, config: clang-sanitize-undefined }
+          - { target: ubuntu-22.04, config: without-openssl }
+          - { target: ubuntu-24.04-arm, config: default }
+          - { target: macos-15, config: default }
+          - { target: windows-2025, config: cygwin-release }
     runs-on: ${{ matrix.target }}
     env:
       EPHEMERAL_VM: yes
