@@ -352,10 +352,10 @@ pub(crate) struct PatternIntervalParse {
     pub(crate) interval_len: usize,
 }
 
-const HOSTFILE_LINE_KIND_COMMENT: u32 = 1;
-const HOSTFILE_LINE_KIND_ENTRY: u32 = 2;
-const HOSTFILE_LINE_KIND_INVALID_MARKER: u32 = 3;
-const HOSTFILE_LINE_KIND_INVALID_ENTRY: u32 = 4;
+pub(crate) const HOSTFILE_LINE_KIND_COMMENT: u32 = 1;
+pub(crate) const HOSTFILE_LINE_KIND_ENTRY: u32 = 2;
+pub(crate) const HOSTFILE_LINE_KIND_INVALID_MARKER: u32 = 3;
+pub(crate) const HOSTFILE_LINE_KIND_INVALID_ENTRY: u32 = 4;
 const HOSTFILE_MARKER_NONE: u32 = 1;
 const HOSTFILE_MARKER_REVOKE: u32 = 2;
 const HOSTFILE_MARKER_CA: u32 = 3;
