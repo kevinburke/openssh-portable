@@ -149,6 +149,10 @@ fn parse_status(err: PrivatePemError) -> c_int {
 #[cfg(test)]
 mod abi_tests {
     use super::*;
+    use std::collections::BTreeMap;
+    use std::fs;
+    use std::path::Path;
+    use std::process::Command;
 
     const RUST_CRYPTO_H: &str = include_str!("../../../rust-crypto.h");
 
@@ -168,6 +172,346 @@ mod abi_tests {
 
     fn assert_define(name: &str, value: u64) {
         assert_eq!(header_define(name), value, "{name}");
+    }
+
+    #[derive(Debug, Default)]
+    struct CLayout {
+        size: usize,
+        align: usize,
+        fields: BTreeMap<String, usize>,
+    }
+
+    fn c_abi_probe_source() -> &'static str {
+        r#"
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+
+#include "rust-crypto.h"
+
+#define LAYOUT(name) \
+    printf("layout %s %zu %zu\n", #name, sizeof(struct name), _Alignof(struct name))
+#define FIELD(name, field) \
+    printf("field %s %s %zu\n", #name, #field, offsetof(struct name, field))
+#define TWO_FIELD_LAYOUT(name, first, second) do { \
+    LAYOUT(name); \
+    FIELD(name, first); \
+    FIELD(name, second); \
+} while (0)
+#define OUTPUT_EMIT_LAYOUT(name) TWO_FIELD_LAYOUT(name, output_len, emit)
+
+int
+main(void)
+{
+    TWO_FIELD_LAYOUT(ossh_rust_multistate_entry, key, value);
+    TWO_FIELD_LAYOUT(ossh_rust_keyword_entry, key, value);
+    TWO_FIELD_LAYOUT(ossh_rust_expand_entry, key, repl);
+    TWO_FIELD_LAYOUT(ossh_rust_opt_dequote_parse, output_len, next_offset);
+    TWO_FIELD_LAYOUT(ossh_rust_dollar_expand_parse, output_len, missing_var);
+    TWO_FIELD_LAYOUT(ossh_rust_fmt_intarg_parse, literal, index);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_forward_format_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_strarray_oneline_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_permit_list_line_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_strarray_lines_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_cfg_string_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_cfg_int_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_listenaddr_line_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_ipqos_line_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_tunneldevice_line_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_add_keys_to_agent_line_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_forwardagent_line_parse);
+    TWO_FIELD_LAYOUT(ossh_rust_allowed_cname_entry, source_list, target_list);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_canonicalize_permitted_cnames_line_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_proxyjump_line_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_rekeylimit_line_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_controlpersist_line_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_connecttimeout_line_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_pubkeyauthoptions_line_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_permituserenvironment_line_parse);
+    OUTPUT_EMIT_LAYOUT(ossh_rust_escapechar_line_parse);
+
+    LAYOUT(ossh_rust_cert_body_parse);
+    FIELD(ossh_rust_cert_body_parse, serial);
+    FIELD(ossh_rust_cert_body_parse, cert_type);
+    FIELD(ossh_rust_cert_body_parse, valid_after);
+    FIELD(ossh_rust_cert_body_parse, valid_before);
+    FIELD(ossh_rust_cert_body_parse, signed_consumed);
+    FIELD(ossh_rust_cert_body_parse, total_consumed);
+    FIELD(ossh_rust_cert_body_parse, key_id_offset);
+    FIELD(ossh_rust_cert_body_parse, key_id_len);
+    FIELD(ossh_rust_cert_body_parse, principals_offset);
+    FIELD(ossh_rust_cert_body_parse, principals_len);
+    FIELD(ossh_rust_cert_body_parse, critical_offset);
+    FIELD(ossh_rust_cert_body_parse, critical_len);
+    FIELD(ossh_rust_cert_body_parse, extensions_offset);
+    FIELD(ossh_rust_cert_body_parse, extensions_len);
+    FIELD(ossh_rust_cert_body_parse, ca_key_offset);
+    FIELD(ossh_rust_cert_body_parse, ca_key_len);
+    FIELD(ossh_rust_cert_body_parse, signature_offset);
+    FIELD(ossh_rust_cert_body_parse, signature_len);
+
+    LAYOUT(ossh_rust_private2_header_parse);
+    FIELD(ossh_rust_private2_header_parse, ciphername_offset);
+    FIELD(ossh_rust_private2_header_parse, ciphername_len);
+    FIELD(ossh_rust_private2_header_parse, kdfname_offset);
+    FIELD(ossh_rust_private2_header_parse, kdfname_len);
+    FIELD(ossh_rust_private2_header_parse, kdf_offset);
+    FIELD(ossh_rust_private2_header_parse, kdf_len);
+    FIELD(ossh_rust_private2_header_parse, public_key_offset);
+    FIELD(ossh_rust_private2_header_parse, public_key_len);
+    FIELD(ossh_rust_private2_header_parse, encrypted_offset);
+    FIELD(ossh_rust_private2_header_parse, encrypted_len);
+    FIELD(ossh_rust_private2_header_parse, bcrypt_salt_offset);
+    FIELD(ossh_rust_private2_header_parse, bcrypt_salt_len);
+    FIELD(ossh_rust_private2_header_parse, bcrypt_rounds);
+    FIELD(ossh_rust_private2_header_parse, kdf_kind);
+
+    LAYOUT(ossh_rust_private2_plaintext_parse);
+    FIELD(ossh_rust_private2_plaintext_parse, key_kind);
+    FIELD(ossh_rust_private2_plaintext_parse, curve_nid);
+    FIELD(ossh_rust_private2_plaintext_parse, is_cert);
+    FIELD(ossh_rust_private2_plaintext_parse, cert_offset);
+    FIELD(ossh_rust_private2_plaintext_parse, cert_len);
+    FIELD(ossh_rust_private2_plaintext_parse, comment_offset);
+    FIELD(ossh_rust_private2_plaintext_parse, comment_len);
+    FIELD(ossh_rust_private2_plaintext_parse, part1_offset);
+    FIELD(ossh_rust_private2_plaintext_parse, part1_len);
+    FIELD(ossh_rust_private2_plaintext_parse, part2_offset);
+    FIELD(ossh_rust_private2_plaintext_parse, part2_len);
+    FIELD(ossh_rust_private2_plaintext_parse, part3_offset);
+    FIELD(ossh_rust_private2_plaintext_parse, part3_len);
+    FIELD(ossh_rust_private2_plaintext_parse, part4_offset);
+    FIELD(ossh_rust_private2_plaintext_parse, part4_len);
+    FIELD(ossh_rust_private2_plaintext_parse, part5_offset);
+    FIELD(ossh_rust_private2_plaintext_parse, part5_len);
+    FIELD(ossh_rust_private2_plaintext_parse, part6_offset);
+    FIELD(ossh_rust_private2_plaintext_parse, part6_len);
+
+    LAYOUT(ossh_rust_public_line_parse);
+    FIELD(ossh_rust_public_line_parse, key_type_offset);
+    FIELD(ossh_rust_public_line_parse, key_type_len);
+    FIELD(ossh_rust_public_line_parse, key_blob_offset);
+    FIELD(ossh_rust_public_line_parse, key_blob_len);
+    FIELD(ossh_rust_public_line_parse, comment_offset);
+
+    TWO_FIELD_LAYOUT(ossh_rust_argv_split_parse, argc, packed_len);
+    TWO_FIELD_LAYOUT(ossh_rust_strdelim_parse, next_offset, next_is_null);
+
+    LAYOUT(ossh_rust_hpdelim_parse);
+    FIELD(ossh_rust_hpdelim_parse, next_offset);
+    FIELD(ossh_rust_hpdelim_parse, next_is_null);
+    FIELD(ossh_rust_hpdelim_parse, delim);
+
+    LAYOUT(ossh_rust_forward_field_parse);
+    FIELD(ossh_rust_forward_field_parse, arg_offset);
+    FIELD(ossh_rust_forward_field_parse, next_offset);
+    FIELD(ossh_rust_forward_field_parse, ispath);
+
+    LAYOUT(ossh_rust_forward_parse);
+    FIELD(ossh_rust_forward_parse, field_count);
+    FIELD(ossh_rust_forward_parse, listen_host_offset);
+    FIELD(ossh_rust_forward_parse, listen_host_len);
+    FIELD(ossh_rust_forward_parse, listen_port_offset);
+    FIELD(ossh_rust_forward_parse, listen_port_len);
+    FIELD(ossh_rust_forward_parse, listen_path_offset);
+    FIELD(ossh_rust_forward_parse, listen_path_len);
+    FIELD(ossh_rust_forward_parse, connect_host_offset);
+    FIELD(ossh_rust_forward_parse, connect_host_len);
+    FIELD(ossh_rust_forward_parse, connect_port_offset);
+    FIELD(ossh_rust_forward_parse, connect_port_len);
+    FIELD(ossh_rust_forward_parse, connect_path_offset);
+    FIELD(ossh_rust_forward_parse, connect_path_len);
+    FIELD(ossh_rust_forward_parse, has_listen_host);
+    FIELD(ossh_rust_forward_parse, has_listen_port);
+    FIELD(ossh_rust_forward_parse, has_listen_path);
+    FIELD(ossh_rust_forward_parse, has_connect_host);
+    FIELD(ossh_rust_forward_parse, has_connect_host_socks);
+    FIELD(ossh_rust_forward_parse, has_connect_port);
+    FIELD(ossh_rust_forward_parse, has_connect_path);
+    FIELD(ossh_rust_forward_parse, listen_port_value);
+    FIELD(ossh_rust_forward_parse, connect_port_value);
+
+    LAYOUT(ossh_rust_jump_parse);
+    FIELD(ossh_rust_jump_parse, first_offset);
+    FIELD(ossh_rust_jump_parse, first_len);
+    FIELD(ossh_rust_jump_parse, extra_len);
+    FIELD(ossh_rust_jump_parse, is_none);
+    FIELD(ossh_rust_jump_parse, first_is_uri);
+    FIELD(ossh_rust_jump_parse, has_extra);
+
+    LAYOUT(ossh_rust_hostfile_line_parse);
+    FIELD(ossh_rust_hostfile_line_parse, kind);
+    FIELD(ossh_rust_hostfile_line_parse, marker);
+    FIELD(ossh_rust_hostfile_line_parse, hosts_offset);
+    FIELD(ossh_rust_hostfile_line_parse, hosts_len);
+    FIELD(ossh_rust_hostfile_line_parse, rawkey_offset);
+    FIELD(ossh_rust_hostfile_line_parse, keytype_offset);
+    FIELD(ossh_rust_hostfile_line_parse, keytype_len);
+
+    LAYOUT(ossh_rust_user_host_port_parse);
+    FIELD(ossh_rust_user_host_port_parse, user_offset);
+    FIELD(ossh_rust_user_host_port_parse, user_len);
+    FIELD(ossh_rust_user_host_port_parse, host_offset);
+    FIELD(ossh_rust_user_host_port_parse, host_len);
+    FIELD(ossh_rust_user_host_port_parse, port_offset);
+    FIELD(ossh_rust_user_host_port_parse, port_len);
+    FIELD(ossh_rust_user_host_port_parse, has_user);
+    FIELD(ossh_rust_user_host_port_parse, has_port);
+
+    LAYOUT(ossh_rust_uri_parse);
+    FIELD(ossh_rust_uri_parse, user_offset);
+    FIELD(ossh_rust_uri_parse, user_len);
+    FIELD(ossh_rust_uri_parse, host_offset);
+    FIELD(ossh_rust_uri_parse, host_len);
+    FIELD(ossh_rust_uri_parse, port_offset);
+    FIELD(ossh_rust_uri_parse, port_len);
+    FIELD(ossh_rust_uri_parse, path_offset);
+    FIELD(ossh_rust_uri_parse, path_len);
+    FIELD(ossh_rust_uri_parse, has_user);
+    FIELD(ossh_rust_uri_parse, has_port);
+    FIELD(ossh_rust_uri_parse, has_path);
+
+    LAYOUT(ossh_rust_user_host_path_parse);
+    FIELD(ossh_rust_user_host_path_parse, user_offset);
+    FIELD(ossh_rust_user_host_path_parse, user_len);
+    FIELD(ossh_rust_user_host_path_parse, host_offset);
+    FIELD(ossh_rust_user_host_path_parse, host_len);
+    FIELD(ossh_rust_user_host_path_parse, path_offset);
+    FIELD(ossh_rust_user_host_path_parse, path_len);
+    FIELD(ossh_rust_user_host_path_parse, has_user);
+
+    LAYOUT(ossh_rust_pattern_interval_parse);
+    FIELD(ossh_rust_pattern_interval_parse, type_len);
+    FIELD(ossh_rust_pattern_interval_parse, interval_offset);
+    FIELD(ossh_rust_pattern_interval_parse, interval_len);
+
+    LAYOUT(ossh_rust_sshkey_impl);
+    FIELD(ossh_rust_sshkey_impl, name);
+    FIELD(ossh_rust_sshkey_impl, shortname);
+    FIELD(ossh_rust_sshkey_impl, sigalg);
+    FIELD(ossh_rust_sshkey_impl, type);
+    FIELD(ossh_rust_sshkey_impl, nid);
+    FIELD(ossh_rust_sshkey_impl, cert);
+    FIELD(ossh_rust_sshkey_impl, sigonly);
+    FIELD(ossh_rust_sshkey_impl, keybits);
+    FIELD(ossh_rust_sshkey_impl, funcs);
+
+    return 0;
+}
+"#
+    }
+
+    fn compile_and_run_c_abi_probe() -> String {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("rust/crypto should have a repository-root grandparent");
+        let dir = std::env::temp_dir().join(format!("ossh-rust-abi-layout-{}", std::process::id()));
+        let source = dir.join("abi_layout.c");
+        let exe = dir.join("abi_layout");
+
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir(&dir).expect("create ABI probe tempdir");
+        fs::write(&source, c_abi_probe_source()).expect("write ABI probe source");
+
+        let cc = std::env::var_os("CC").unwrap_or_else(|| "cc".into());
+        let compile = Command::new(&cc)
+            .arg("-std=c11")
+            .arg("-Wall")
+            .arg("-Wextra")
+            .arg("-Werror")
+            .arg("-I")
+            .arg(repo_root)
+            .arg(&source)
+            .arg("-o")
+            .arg(&exe)
+            .output()
+            .expect("run C ABI probe compiler");
+        assert!(
+            compile.status.success(),
+            "C ABI probe compile failed with {cc:?}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&compile.stdout),
+            String::from_utf8_lossy(&compile.stderr)
+        );
+
+        let run = Command::new(&exe).output().expect("run C ABI probe");
+        assert!(
+            run.status.success(),
+            "C ABI probe failed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        );
+        let stdout = String::from_utf8(run.stdout).expect("C ABI probe emitted UTF-8");
+        fs::remove_dir_all(&dir).expect("remove ABI probe tempdir");
+        stdout
+    }
+
+    fn c_layouts() -> BTreeMap<String, CLayout> {
+        let stdout = compile_and_run_c_abi_probe();
+        let mut layouts = BTreeMap::new();
+        for line in stdout.lines() {
+            let fields = line.split_whitespace().collect::<Vec<_>>();
+            match fields.as_slice() {
+                ["layout", name, size, align] => {
+                    let layout = layouts
+                        .entry((*name).to_owned())
+                        .or_insert_with(CLayout::default);
+                    layout.size = size.parse().expect("invalid C layout size");
+                    layout.align = align.parse().expect("invalid C layout alignment");
+                }
+                ["field", name, field, offset] => {
+                    let layout = layouts
+                        .entry((*name).to_owned())
+                        .or_insert_with(CLayout::default);
+                    layout.fields.insert(
+                        (*field).to_owned(),
+                        offset.parse().expect("invalid C field offset"),
+                    );
+                }
+                _ => panic!("unexpected C ABI probe line: {line}"),
+            }
+        }
+        layouts
+    }
+
+    fn assert_layout<T>(
+        layouts: &BTreeMap<String, CLayout>,
+        c_name: &str,
+        rust_fields: &[(&str, usize)],
+    ) {
+        let layout = layouts
+            .get(c_name)
+            .unwrap_or_else(|| panic!("missing C layout for {c_name}"));
+        assert_eq!(layout.size, std::mem::size_of::<T>(), "{c_name} size");
+        assert_eq!(
+            layout.align,
+            std::mem::align_of::<T>(),
+            "{c_name} alignment"
+        );
+        assert_eq!(
+            layout.fields.len(),
+            rust_fields.len(),
+            "{c_name} field count"
+        );
+        for (field, offset) in rust_fields {
+            assert_eq!(
+                layout.fields.get(*field).copied(),
+                Some(*offset),
+                "{c_name}.{field} offset"
+            );
+        }
+    }
+
+    macro_rules! fields {
+        ($ty:ty, $($field:ident),+ $(,)?) => {
+            &[$((stringify!($field), std::mem::offset_of!($ty, $field))),+]
+        };
+    }
+
+    macro_rules! assert_output_emit_layout {
+        ($layouts:expr, $c_name:literal, $ty:ty) => {
+            assert_layout::<$ty>($layouts, $c_name, fields!($ty, output_len, emit));
+        };
     }
 
     #[test]
@@ -388,6 +732,372 @@ mod abi_tests {
         assert_define(
             "OSSH_RUST_HOSTFILE_LINE_INVALID_ENTRY",
             crate::util::HOSTFILE_LINE_KIND_INVALID_ENTRY as u64,
+        );
+    }
+
+    #[test]
+    fn c_header_struct_layouts_match_rust() {
+        let layouts = c_layouts();
+
+        assert_layout::<RustMultistateEntry>(
+            &layouts,
+            "ossh_rust_multistate_entry",
+            fields!(RustMultistateEntry, key, value),
+        );
+        assert_layout::<RustKeywordEntry>(
+            &layouts,
+            "ossh_rust_keyword_entry",
+            fields!(RustKeywordEntry, key, value),
+        );
+        assert_layout::<RustExpandEntry>(
+            &layouts,
+            "ossh_rust_expand_entry",
+            fields!(RustExpandEntry, key, repl),
+        );
+        assert_layout::<RustOptDequoteParse>(
+            &layouts,
+            "ossh_rust_opt_dequote_parse",
+            fields!(RustOptDequoteParse, output_len, next_offset),
+        );
+        assert_layout::<RustDollarExpandParse>(
+            &layouts,
+            "ossh_rust_dollar_expand_parse",
+            fields!(RustDollarExpandParse, output_len, missing_var),
+        );
+        assert_layout::<RustFmtIntArgParse>(
+            &layouts,
+            "ossh_rust_fmt_intarg_parse",
+            fields!(RustFmtIntArgParse, literal, index),
+        );
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_forward_format_parse",
+            RustForwardFormatParse
+        );
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_strarray_oneline_parse",
+            RustStrarrayOnelineParse
+        );
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_permit_list_line_parse",
+            RustPermitListLineParse
+        );
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_strarray_lines_parse",
+            RustStrarrayLinesParse
+        );
+        assert_output_emit_layout!(&layouts, "ossh_rust_cfg_string_parse", RustCfgStringParse);
+        assert_output_emit_layout!(&layouts, "ossh_rust_cfg_int_parse", RustCfgIntParse);
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_listenaddr_line_parse",
+            RustListenaddrLineParse
+        );
+        assert_output_emit_layout!(&layouts, "ossh_rust_ipqos_line_parse", RustIpqosLineParse);
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_tunneldevice_line_parse",
+            RustTunneldeviceLineParse
+        );
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_add_keys_to_agent_line_parse",
+            RustAddKeysToAgentLineParse
+        );
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_forwardagent_line_parse",
+            RustForwardAgentLineParse
+        );
+        assert_layout::<RustAllowedCnameEntry>(
+            &layouts,
+            "ossh_rust_allowed_cname_entry",
+            fields!(RustAllowedCnameEntry, source_list, target_list),
+        );
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_canonicalize_permitted_cnames_line_parse",
+            RustCanonicalizePermittedCnamesLineParse
+        );
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_proxyjump_line_parse",
+            RustProxyjumpLineParse
+        );
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_rekeylimit_line_parse",
+            RustRekeyLimitLineParse
+        );
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_controlpersist_line_parse",
+            RustControlPersistLineParse
+        );
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_connecttimeout_line_parse",
+            RustConnectTimeoutLineParse
+        );
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_pubkeyauthoptions_line_parse",
+            RustPubkeyAuthOptionsLineParse
+        );
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_permituserenvironment_line_parse",
+            RustPermitUserEnvironmentLineParse
+        );
+        assert_output_emit_layout!(
+            &layouts,
+            "ossh_rust_escapechar_line_parse",
+            RustEscapeCharLineParse
+        );
+
+        assert_layout::<RustCertBodyParse>(
+            &layouts,
+            "ossh_rust_cert_body_parse",
+            fields!(
+                RustCertBodyParse,
+                serial,
+                cert_type,
+                valid_after,
+                valid_before,
+                signed_consumed,
+                total_consumed,
+                key_id_offset,
+                key_id_len,
+                principals_offset,
+                principals_len,
+                critical_offset,
+                critical_len,
+                extensions_offset,
+                extensions_len,
+                ca_key_offset,
+                ca_key_len,
+                signature_offset,
+                signature_len,
+            ),
+        );
+        assert_layout::<RustPrivate2HeaderParse>(
+            &layouts,
+            "ossh_rust_private2_header_parse",
+            fields!(
+                RustPrivate2HeaderParse,
+                ciphername_offset,
+                ciphername_len,
+                kdfname_offset,
+                kdfname_len,
+                kdf_offset,
+                kdf_len,
+                public_key_offset,
+                public_key_len,
+                encrypted_offset,
+                encrypted_len,
+                bcrypt_salt_offset,
+                bcrypt_salt_len,
+                bcrypt_rounds,
+                kdf_kind,
+            ),
+        );
+        assert_layout::<RustPrivate2PlaintextParse>(
+            &layouts,
+            "ossh_rust_private2_plaintext_parse",
+            fields!(
+                RustPrivate2PlaintextParse,
+                key_kind,
+                curve_nid,
+                is_cert,
+                cert_offset,
+                cert_len,
+                comment_offset,
+                comment_len,
+                part1_offset,
+                part1_len,
+                part2_offset,
+                part2_len,
+                part3_offset,
+                part3_len,
+                part4_offset,
+                part4_len,
+                part5_offset,
+                part5_len,
+                part6_offset,
+                part6_len,
+            ),
+        );
+        assert_layout::<RustPublicLineParse>(
+            &layouts,
+            "ossh_rust_public_line_parse",
+            fields!(
+                RustPublicLineParse,
+                key_type_offset,
+                key_type_len,
+                key_blob_offset,
+                key_blob_len,
+                comment_offset,
+            ),
+        );
+        assert_layout::<RustArgvSplitParse>(
+            &layouts,
+            "ossh_rust_argv_split_parse",
+            fields!(RustArgvSplitParse, argc, packed_len),
+        );
+        assert_layout::<RustStrdelimParse>(
+            &layouts,
+            "ossh_rust_strdelim_parse",
+            fields!(RustStrdelimParse, next_offset, next_is_null),
+        );
+        assert_layout::<RustHpdelimParse>(
+            &layouts,
+            "ossh_rust_hpdelim_parse",
+            fields!(RustHpdelimParse, next_offset, next_is_null, delim),
+        );
+        assert_layout::<RustForwardFieldParse>(
+            &layouts,
+            "ossh_rust_forward_field_parse",
+            fields!(RustForwardFieldParse, arg_offset, next_offset, ispath),
+        );
+        assert_layout::<RustForwardParse>(
+            &layouts,
+            "ossh_rust_forward_parse",
+            fields!(
+                RustForwardParse,
+                field_count,
+                listen_host_offset,
+                listen_host_len,
+                listen_port_offset,
+                listen_port_len,
+                listen_path_offset,
+                listen_path_len,
+                connect_host_offset,
+                connect_host_len,
+                connect_port_offset,
+                connect_port_len,
+                connect_path_offset,
+                connect_path_len,
+                has_listen_host,
+                has_listen_port,
+                has_listen_path,
+                has_connect_host,
+                has_connect_host_socks,
+                has_connect_port,
+                has_connect_path,
+                listen_port_value,
+                connect_port_value,
+            ),
+        );
+        assert_layout::<RustJumpParse>(
+            &layouts,
+            "ossh_rust_jump_parse",
+            fields!(
+                RustJumpParse,
+                first_offset,
+                first_len,
+                extra_len,
+                is_none,
+                first_is_uri,
+                has_extra,
+            ),
+        );
+        assert_layout::<RustHostfileLineParse>(
+            &layouts,
+            "ossh_rust_hostfile_line_parse",
+            fields!(
+                RustHostfileLineParse,
+                kind,
+                marker,
+                hosts_offset,
+                hosts_len,
+                rawkey_offset,
+                keytype_offset,
+                keytype_len,
+            ),
+        );
+        assert_layout::<RustUserHostPortParse>(
+            &layouts,
+            "ossh_rust_user_host_port_parse",
+            fields!(
+                RustUserHostPortParse,
+                user_offset,
+                user_len,
+                host_offset,
+                host_len,
+                port_offset,
+                port_len,
+                has_user,
+                has_port,
+            ),
+        );
+        assert_layout::<RustUriParse>(
+            &layouts,
+            "ossh_rust_uri_parse",
+            fields!(
+                RustUriParse,
+                user_offset,
+                user_len,
+                host_offset,
+                host_len,
+                port_offset,
+                port_len,
+                path_offset,
+                path_len,
+                has_user,
+                has_port,
+                has_path,
+            ),
+        );
+        assert_layout::<RustUserHostPathParse>(
+            &layouts,
+            "ossh_rust_user_host_path_parse",
+            fields!(
+                RustUserHostPathParse,
+                user_offset,
+                user_len,
+                host_offset,
+                host_len,
+                path_offset,
+                path_len,
+                has_user,
+            ),
+        );
+        assert_layout::<RustPatternIntervalParse>(
+            &layouts,
+            "ossh_rust_pattern_interval_parse",
+            fields!(
+                RustPatternIntervalParse,
+                type_len,
+                interval_offset,
+                interval_len
+            ),
+        );
+        assert_layout::<RustSshkeyImplEntry>(
+            &layouts,
+            "ossh_rust_sshkey_impl",
+            &[
+                ("name", std::mem::offset_of!(RustSshkeyImplEntry, name)),
+                (
+                    "shortname",
+                    std::mem::offset_of!(RustSshkeyImplEntry, shortname),
+                ),
+                ("sigalg", std::mem::offset_of!(RustSshkeyImplEntry, sigalg)),
+                ("type", std::mem::offset_of!(RustSshkeyImplEntry, type_)),
+                ("nid", std::mem::offset_of!(RustSshkeyImplEntry, nid)),
+                ("cert", std::mem::offset_of!(RustSshkeyImplEntry, cert)),
+                (
+                    "sigonly",
+                    std::mem::offset_of!(RustSshkeyImplEntry, sigonly),
+                ),
+                (
+                    "keybits",
+                    std::mem::offset_of!(RustSshkeyImplEntry, keybits),
+                ),
+                ("funcs", std::mem::offset_of!(RustSshkeyImplEntry, funcs)),
+            ],
         );
     }
 }
