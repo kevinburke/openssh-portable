@@ -156,6 +156,252 @@ fn parse_status(err: PrivatePemError) -> c_int {
     }
 }
 
+#[cfg(test)]
+mod abi_tests {
+    use super::*;
+
+    const RUST_CRYPTO_H: &str = include_str!("../../../rust-crypto.h");
+
+    fn header_define(name: &str) -> u64 {
+        for line in RUST_CRYPTO_H.lines() {
+            let mut fields = line.split_whitespace();
+            if fields.next() == Some("#define") && fields.next() == Some(name) {
+                let value = fields.next().expect("missing define value");
+                return value
+                    .trim_end_matches('U')
+                    .parse()
+                    .expect("non-numeric define value");
+            }
+        }
+        panic!("missing rust-crypto.h define {name}");
+    }
+
+    fn assert_define(name: &str, value: u64) {
+        assert_eq!(header_define(name), value, "{name}");
+    }
+
+    #[test]
+    fn c_header_numeric_constants_match_rust() {
+        assert_define(
+            "OSSH_RUST_CRYPTO_ABI_VERSION",
+            OSSH_RUST_CRYPTO_ABI_VERSION as u64,
+        );
+        assert_define(
+            "OSSH_RUST_PARSE_STATUS_OK",
+            OSSH_RUST_PARSE_STATUS_OK as u64,
+        );
+        assert_define(
+            "OSSH_RUST_PARSE_STATUS_INVALID_FORMAT",
+            OSSH_RUST_PARSE_STATUS_INVALID_FORMAT as u64,
+        );
+        assert_define(
+            "OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE",
+            OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE as u64,
+        );
+        assert_define(
+            "OSSH_RUST_PARSE_STATUS_EC_CURVE_MISMATCH",
+            OSSH_RUST_PARSE_STATUS_EC_CURVE_MISMATCH as u64,
+        );
+        assert_define(
+            "OSSH_RUST_DOMAIN_STATUS_EMPTY",
+            OSSH_RUST_DOMAIN_STATUS_EMPTY as u64,
+        );
+        assert_define(
+            "OSSH_RUST_DOMAIN_STATUS_START_INVALID",
+            OSSH_RUST_DOMAIN_STATUS_START_INVALID as u64,
+        );
+        assert_define(
+            "OSSH_RUST_DOMAIN_STATUS_CONSECUTIVE_SEPARATORS",
+            OSSH_RUST_DOMAIN_STATUS_CONSECUTIVE_SEPARATORS as u64,
+        );
+        assert_define(
+            "OSSH_RUST_DOMAIN_STATUS_INVALID_CHARS",
+            OSSH_RUST_DOMAIN_STATUS_INVALID_CHARS as u64,
+        );
+        assert_define(
+            "OSSH_RUST_ATOI_STATUS_MISSING",
+            OSSH_RUST_ATOI_STATUS_MISSING as u64,
+        );
+        assert_define(
+            "OSSH_RUST_ATOI_STATUS_INVALID",
+            OSSH_RUST_ATOI_STATUS_INVALID as u64,
+        );
+        assert_define(
+            "OSSH_RUST_ATOI_STATUS_TOO_SMALL",
+            OSSH_RUST_ATOI_STATUS_TOO_SMALL as u64,
+        );
+        assert_define(
+            "OSSH_RUST_ATOI_STATUS_TOO_LARGE",
+            OSSH_RUST_ATOI_STATUS_TOO_LARGE as u64,
+        );
+        assert_define(
+            "OSSH_RUST_OPT_DEQUOTE_MISSING_START",
+            OSSH_RUST_OPT_DEQUOTE_MISSING_START as u64,
+        );
+        assert_define(
+            "OSSH_RUST_OPT_DEQUOTE_MISSING_END",
+            OSSH_RUST_OPT_DEQUOTE_MISSING_END as u64,
+        );
+        assert_define(
+            "OSSH_RUST_DOLLAR_EXPAND_INVALID",
+            OSSH_RUST_DOLLAR_EXPAND_INVALID as u64,
+        );
+
+        assert_define(
+            "OSSH_RUST_FMT_INTARG_MULTISTATE",
+            crate::util::FMT_INTARG_MULTISTATE as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FMT_INTARG_YESNO",
+            crate::util::FMT_INTARG_YESNO as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FMT_INTARG_DIGEST",
+            crate::util::FMT_INTARG_DIGEST as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FMT_INTARG_LITERAL_UNSET",
+            crate::util::FMT_INTARG_LITERAL_UNSET as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FMT_INTARG_LITERAL_NO",
+            crate::util::FMT_INTARG_LITERAL_NO as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FMT_INTARG_LITERAL_YES",
+            crate::util::FMT_INTARG_LITERAL_YES as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FMT_INTARG_LITERAL_UNKNOWN",
+            crate::util::FMT_INTARG_LITERAL_UNKNOWN as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FMT_INTARG_LITERAL_MULTISTATE",
+            crate::util::FMT_INTARG_LITERAL_MULTISTATE as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FMT_INTARG_LITERAL_MD5",
+            crate::util::FMT_INTARG_LITERAL_MD5 as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FMT_INTARG_LITERAL_SHA1",
+            crate::util::FMT_INTARG_LITERAL_SHA1 as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FMT_INTARG_LITERAL_SHA256",
+            crate::util::FMT_INTARG_LITERAL_SHA256 as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FMT_INTARG_LITERAL_SHA384",
+            crate::util::FMT_INTARG_LITERAL_SHA384 as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FMT_INTARG_LITERAL_SHA512",
+            crate::util::FMT_INTARG_LITERAL_SHA512 as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FORWARD_FMT_LOCAL",
+            crate::util::FORWARD_FMT_LOCAL as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FORWARD_FMT_DYNAMIC",
+            crate::util::FORWARD_FMT_DYNAMIC as u64,
+        );
+        assert_define(
+            "OSSH_RUST_FORWARD_FMT_REMOTE",
+            crate::util::FORWARD_FMT_REMOTE as u64,
+        );
+
+        assert_define(
+            "OSSH_RUST_PRIVATE2_KDF_NONE",
+            crate::openssh_key::OSSH_RUST_PRIVATE2_KDF_NONE as u64,
+        );
+        assert_define(
+            "OSSH_RUST_PRIVATE2_KDF_BCRYPT",
+            crate::openssh_key::OSSH_RUST_PRIVATE2_KDF_BCRYPT as u64,
+        );
+        assert_define(
+            "OSSH_RUST_PRIVATE2_KEY_ED25519",
+            crate::openssh_key::OSSH_RUST_PRIVATE2_KEY_ED25519 as u64,
+        );
+        assert_define(
+            "OSSH_RUST_PRIVATE2_KEY_ECDSA",
+            crate::openssh_key::OSSH_RUST_PRIVATE2_KEY_ECDSA as u64,
+        );
+        assert_define(
+            "OSSH_RUST_PRIVATE2_KEY_RSA",
+            crate::openssh_key::OSSH_RUST_PRIVATE2_KEY_RSA as u64,
+        );
+
+        assert_define(
+            "OSSH_RUST_DH_GROUP14",
+            crate::dh::OSSH_RUST_DH_GROUP14 as u64,
+        );
+        assert_define(
+            "OSSH_RUST_DH_GROUP16",
+            crate::dh::OSSH_RUST_DH_GROUP16 as u64,
+        );
+        assert_define(
+            "OSSH_RUST_DH_GROUP18",
+            crate::dh::OSSH_RUST_DH_GROUP18 as u64,
+        );
+        assert_define(
+            "OSSH_RUST_ECDH_NISTP256",
+            crate::kex::OSSH_RUST_ECDH_NISTP256 as u64,
+        );
+        assert_define(
+            "OSSH_RUST_ECDH_NISTP384",
+            crate::kex::OSSH_RUST_ECDH_NISTP384 as u64,
+        );
+        assert_define(
+            "OSSH_RUST_ECDH_NISTP521",
+            crate::kex::OSSH_RUST_ECDH_NISTP521 as u64,
+        );
+
+        assert_define(
+            "OSSH_RUST_RSA_COMPONENT_N",
+            crate::rsa::OSSH_RUST_RSA_COMPONENT_N as u64,
+        );
+        assert_define(
+            "OSSH_RUST_RSA_COMPONENT_E",
+            crate::rsa::OSSH_RUST_RSA_COMPONENT_E as u64,
+        );
+        assert_define(
+            "OSSH_RUST_RSA_COMPONENT_D",
+            crate::rsa::OSSH_RUST_RSA_COMPONENT_D as u64,
+        );
+        assert_define(
+            "OSSH_RUST_RSA_COMPONENT_IQMP",
+            crate::rsa::OSSH_RUST_RSA_COMPONENT_IQMP as u64,
+        );
+        assert_define(
+            "OSSH_RUST_RSA_COMPONENT_P",
+            crate::rsa::OSSH_RUST_RSA_COMPONENT_P as u64,
+        );
+        assert_define(
+            "OSSH_RUST_RSA_COMPONENT_Q",
+            crate::rsa::OSSH_RUST_RSA_COMPONENT_Q as u64,
+        );
+
+        assert_define(
+            "OSSH_RUST_HOSTFILE_LINE_COMMENT",
+            crate::util::HOSTFILE_LINE_KIND_COMMENT as u64,
+        );
+        assert_define(
+            "OSSH_RUST_HOSTFILE_LINE_ENTRY",
+            crate::util::HOSTFILE_LINE_KIND_ENTRY as u64,
+        );
+        assert_define(
+            "OSSH_RUST_HOSTFILE_LINE_INVALID_MARKER",
+            crate::util::HOSTFILE_LINE_KIND_INVALID_MARKER as u64,
+        );
+        assert_define(
+            "OSSH_RUST_HOSTFILE_LINE_INVALID_ENTRY",
+            crate::util::HOSTFILE_LINE_KIND_INVALID_ENTRY as u64,
+        );
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn ossh_rust_crypto_abi_version() -> u32 {
     OSSH_RUST_CRYPTO_ABI_VERSION
