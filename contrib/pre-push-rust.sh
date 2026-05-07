@@ -32,7 +32,7 @@ if ! docker image inspect openssh-ci-repro-ubuntu22 >/dev/null 2>&1; then
 fi
 
 echo "==> cargo test"
-cargo test --manifest-path rust/crypto/Cargo.toml
+cargo test --manifest-path rust/crypto/Cargo.toml --locked
 
 echo "==> docker rust-crypto unit"
 docker run --rm -v "$repo_root:/src" -w /src openssh-ci-repro \
