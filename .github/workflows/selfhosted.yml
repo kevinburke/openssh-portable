@@ -2,7 +2,8 @@ name: CI self-hosted
 
 on:
   push:
-    paths: [ '**.c', '**.h', '**.m4', '**.sh', '**/Makefile.in', 'configure.ac','regress/Makefile',  '.github/configs', '.github/run_tests.sh', '.github/workflows/selfhosted.yml' ]
+    branches: [ master ]
+    paths: [ '**.c', '**.h', '**.m4', '**.sh', '**/Makefile.in', 'configure.ac', 'regress/Makefile', '.github/configs', '.github/run_tests.sh', '.github/workflows/selfhosted.yml' ]
 
 jobs:
   selfhosted:
