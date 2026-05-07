@@ -2,8 +2,8 @@ use core::ffi::c_int;
 
 use crate::digest::{
     MD5_DIGEST_LENGTH, SHA1_DIGEST_LENGTH, SHA256_DIGEST_LENGTH, SHA384_DIGEST_LENGTH,
-    SHA512_DIGEST_LENGTH, SSH_DIGEST_MD5, SSH_DIGEST_SHA1, SSH_DIGEST_SHA256,
-    SSH_DIGEST_SHA384, SSH_DIGEST_SHA512,
+    SHA512_DIGEST_LENGTH, SSH_DIGEST_MD5, SSH_DIGEST_SHA1, SSH_DIGEST_SHA256, SSH_DIGEST_SHA384,
+    SSH_DIGEST_SHA512,
 };
 use crate::hmac::HmacState;
 use crate::util::{read_slice, read_slice_mut};
@@ -130,10 +130,19 @@ mod tests {
 
         state.init(key.as_ptr(), key.len()).unwrap();
         state
-            .compute(seqno, data.as_ptr(), data.len(), out.as_mut_ptr(), out.len())
+            .compute(
+                seqno,
+                data.as_ptr(),
+                data.len(),
+                out.as_mut_ptr(),
+                out.len(),
+            )
             .unwrap();
 
-        assert_eq!(out.to_vec(), direct_hmac(SSH_DIGEST_SHA1, &key, seqno, data, 20));
+        assert_eq!(
+            out.to_vec(),
+            direct_hmac(SSH_DIGEST_SHA1, &key, seqno, data, 20)
+        );
     }
 
     #[test]
@@ -146,18 +155,20 @@ mod tests {
 
         state.init(key.as_ptr(), key.len()).unwrap();
         state
-            .compute(seqno, data.as_ptr(), data.len(), out.as_mut_ptr(), out.len())
+            .compute(
+                seqno,
+                data.as_ptr(),
+                data.len(),
+                out.as_mut_ptr(),
+                out.len(),
+            )
             .unwrap();
-        assert!(
-            state
-                .check(seqno, data.as_ptr(), data.len(), out.as_ptr(), 12)
-                .unwrap()
-        );
+        assert!(state
+            .check(seqno, data.as_ptr(), data.len(), out.as_ptr(), 12)
+            .unwrap());
         out[0] ^= 1;
-        assert!(
-            !state
-                .check(seqno, data.as_ptr(), data.len(), out.as_ptr(), 12)
-                .unwrap()
-        );
+        assert!(!state
+            .check(seqno, data.as_ptr(), data.len(), out.as_ptr(), 12)
+            .unwrap());
     }
 }

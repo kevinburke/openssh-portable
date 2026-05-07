@@ -1,9 +1,9 @@
 use core::ffi::c_int;
 
 use crate::digest::{
-    DigestState, MD5_DIGEST_LENGTH, SHA1_DIGEST_LENGTH, SHA256_DIGEST_LENGTH,
-    SHA384_DIGEST_LENGTH, SHA512_DIGEST_LENGTH, SSH_DIGEST_MD5, SSH_DIGEST_SHA1,
-    SSH_DIGEST_SHA256, SSH_DIGEST_SHA384, SSH_DIGEST_SHA512,
+    DigestState, MD5_DIGEST_LENGTH, SHA1_DIGEST_LENGTH, SHA256_DIGEST_LENGTH, SHA384_DIGEST_LENGTH,
+    SHA512_DIGEST_LENGTH, SSH_DIGEST_MD5, SSH_DIGEST_SHA1, SSH_DIGEST_SHA256, SSH_DIGEST_SHA384,
+    SSH_DIGEST_SHA512,
 };
 use crate::util::{read_slice, read_slice_mut};
 
@@ -68,7 +68,9 @@ impl HmacState {
                 let mut hashed = [0u8; SHA512_DIGEST_LENGTH];
                 let hashed_len = digest_len(self.alg).ok_or(())?;
                 digest.update(key);
-                digest.finalize_to(&mut hashed[..hashed_len]).map_err(|_| ())?;
+                digest
+                    .finalize_to(&mut hashed[..hashed_len])
+                    .map_err(|_| ())?;
                 self.buf[..hashed_len].copy_from_slice(&hashed[..hashed_len]);
             }
             for byte in &mut self.buf {
@@ -98,9 +100,7 @@ impl HmacState {
             return Err(());
         }
         let mut inner = [0u8; SHA512_DIGEST_LENGTH];
-        self.digest
-            .finalize_to(&mut inner[..len])
-            .map_err(|_| ())?;
+        self.digest.finalize_to(&mut inner[..len]).map_err(|_| ())?;
         self.digest = self.outer_base.clone();
         self.digest.update(&inner[..len]);
         self.digest.finalize_to(out).map_err(|_| ())?;

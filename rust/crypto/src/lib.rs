@@ -17,8 +17,8 @@ use core::slice;
 
 use cert::parse_cert_body;
 use cipher::{
-    aesctr_crypt, aesctr_free, aesctr_get_iv, aesctr_init, aesctr_set_iv,
-    chachapoly_crypt, chachapoly_free, chachapoly_get_length, chachapoly_new,
+    aesctr_crypt, aesctr_free, aesctr_get_iv, aesctr_init, aesctr_set_iv, chachapoly_crypt,
+    chachapoly_free, chachapoly_get_length, chachapoly_new,
 };
 use dh::{
     dh_export_generator, dh_export_modulus, dh_export_public, dh_free, dh_generate_key,
@@ -27,19 +27,19 @@ use dh::{
 };
 use digest::DigestState;
 use ecdsa::{
-    ecdsa_copy_public, ecdsa_equal_public, ecdsa_export_private, ecdsa_export_public,
-    ecdsa_free, ecdsa_from_private, ecdsa_from_public, ecdsa_generate, ecdsa_curve_nid,
+    ecdsa_copy_public, ecdsa_curve_nid, ecdsa_equal_public, ecdsa_export_private,
+    ecdsa_export_public, ecdsa_free, ecdsa_from_private, ecdsa_from_public, ecdsa_generate,
     ecdsa_parse_private_pem, ecdsa_parse_private_pem_with_passphrase, ecdsa_parse_public_blob,
-    ecdsa_private_pem_len, ecdsa_private_pem_write, ecdsa_sign_prehashed,
-    ecdsa_verify_prehashed, OSSH_RUST_ECDSA_PARSE_CURVE_MISMATCH,
-    OSSH_RUST_ECDSA_PARSE_INVALID_FORMAT, OSSH_RUST_ECDSA_PARSE_OK,
+    ecdsa_private_pem_len, ecdsa_private_pem_write, ecdsa_sign_prehashed, ecdsa_verify_prehashed,
+    OSSH_RUST_ECDSA_PARSE_CURVE_MISMATCH, OSSH_RUST_ECDSA_PARSE_INVALID_FORMAT,
+    OSSH_RUST_ECDSA_PARSE_OK,
 };
 use hmac::HmacState;
 use kex::{
     curve25519_public_from_secret, curve25519_shared_secret, ed25519_parse_public_blob,
-    ed25519_public_from_seed, ed25519_sign, ed25519_verify, mlkem768x25519_dec,
-    mlkem768x25519_enc, mlkem768x25519_keypair, sntrup761x25519_dec,
-    sntrup761x25519_enc, sntrup761x25519_keypair, EcdhCurve,
+    ed25519_public_from_seed, ed25519_sign, ed25519_verify, mlkem768x25519_dec, mlkem768x25519_enc,
+    mlkem768x25519_keypair, sntrup761x25519_dec, sntrup761x25519_enc, sntrup761x25519_keypair,
+    EcdhCurve,
 };
 use mac::PacketMacState;
 use openssh_key::{
@@ -51,74 +51,65 @@ use private_pem::PrivatePemError;
 use rsa::{
     rsa_bits, rsa_component_len, rsa_copy_public, rsa_equal_public, rsa_export_component, rsa_free,
     rsa_from_private, rsa_from_public, rsa_generate, rsa_parse_private_pem,
-    rsa_parse_private_pem_with_passphrase, rsa_parse_public_blob,
-    rsa_private_pem_len, rsa_private_pem_write, rsa_sign_prehashed, rsa_verify_prehashed,
+    rsa_parse_private_pem_with_passphrase, rsa_parse_public_blob, rsa_private_pem_len,
+    rsa_private_pem_write, rsa_sign_prehashed, rsa_verify_prehashed,
 };
 use sshkey_meta::{
+    sshkey_alg_list_include as rust_sshkey_alg_list_include,
+    sshkey_alg_list_len as rust_sshkey_alg_list_len,
+    sshkey_alg_list_write as rust_sshkey_alg_list_write,
     sshkey_cert_copy_plan as rust_sshkey_cert_copy_plan,
     sshkey_copy_public_sk_plan as rust_sshkey_copy_public_sk_plan,
-    sshkey_equal_plan as rust_sshkey_equal_plan,
-    sshkey_ecdsa_nid_from_name as rust_sshkey_ecdsa_nid_from_name,
     sshkey_curve_name_to_nid as rust_sshkey_curve_name_to_nid,
     sshkey_curve_nid_to_bits as rust_sshkey_curve_nid_to_bits,
     sshkey_curve_nid_to_name as rust_sshkey_curve_nid_to_name,
     sshkey_ecdsa_bits_to_nid as rust_sshkey_ecdsa_bits_to_nid,
+    sshkey_ecdsa_nid_from_name as rust_sshkey_ecdsa_nid_from_name,
+    sshkey_equal_plan as rust_sshkey_equal_plan,
     sshkey_equal_public_plan as rust_sshkey_equal_public_plan,
-    sshkey_from_blob_plan as rust_sshkey_from_blob_plan,
-    sshkey_private_deserialize_plan as rust_sshkey_private_deserialize_plan,
-    sshkey_private_serialize_plan as rust_sshkey_private_serialize_plan,
     sshkey_free_contents_plan as rust_sshkey_free_contents_plan,
+    sshkey_from_blob_plan as rust_sshkey_from_blob_plan,
     sshkey_from_private_plan as rust_sshkey_from_private_plan,
     sshkey_generate_plan as rust_sshkey_generate_plan,
     sshkey_impl_index_from_type as rust_sshkey_impl_index_from_type,
     sshkey_impl_index_from_type_nid as rust_sshkey_impl_index_from_type_nid,
     sshkey_impl_name_from_type_nid as rust_sshkey_impl_name_from_type_nid,
-    sshkey_alg_list_include as rust_sshkey_alg_list_include,
-    sshkey_alg_list_len as rust_sshkey_alg_list_len,
-    sshkey_alg_list_write as rust_sshkey_alg_list_write,
     sshkey_names_valid_include as rust_sshkey_names_valid_include,
+    sshkey_private_deserialize_plan as rust_sshkey_private_deserialize_plan,
+    sshkey_private_serialize_plan as rust_sshkey_private_serialize_plan,
+    sshkey_serialize_plan as rust_sshkey_serialize_plan,
     sshkey_sigalg_by_name as rust_sshkey_sigalg_by_name,
     sshkey_sigalg_match_plan as rust_sshkey_sigalg_match_plan,
-    sshkey_serialize_plan as rust_sshkey_serialize_plan,
     sshkey_type_can_new as rust_sshkey_type_can_new,
     sshkey_type_certified as rust_sshkey_type_certified,
     sshkey_type_from_name as rust_sshkey_type_from_name,
-    sshkey_type_is_cert as rust_sshkey_type_is_cert,
-    sshkey_type_is_sk as rust_sshkey_type_is_sk,
-    sshkey_type_is_valid_ca as rust_sshkey_type_is_valid_ca, RustSshkeyImpl,
-    sshkey_type_plain as rust_sshkey_type_plain,
+    sshkey_type_is_cert as rust_sshkey_type_is_cert, sshkey_type_is_sk as rust_sshkey_type_is_sk,
+    sshkey_type_is_valid_ca as rust_sshkey_type_is_valid_ca,
+    sshkey_type_plain as rust_sshkey_type_plain, RustSshkeyImpl,
 };
 use util::{
-    a2port, add_keys_to_agent_line_parse, add_keys_to_agent_line_write,
-    argv_split_parse, argv_split_write, host_hash_write, match_hashed_host,
-    atoi_err, cfg_int_parse, cfg_int_write, cfg_string_parse, cfg_string_write, dollar_expand_parse,
-    dollar_expand_write, expand_parse, expand_write, ipqos_line_parse, ipqos_line_write,
-    listenaddr_line_parse, listenaddr_line_write,
-    connecttimeout_line_parse, connecttimeout_line_write,
-    controlpersist_line_parse, controlpersist_line_write,
-    forwardagent_line_parse, forwardagent_line_write,
-    fmt_intarg_parse, forward_format_parse, forward_format_write,
-    keyword_lookup, keyword_name,
-    permituserenvironment_line_parse, permituserenvironment_line_write,
-    permit_list_line_parse, permit_list_line_write,
-    pubkeyauthoptions_line_parse, pubkeyauthoptions_line_write,
-    proxyjump_line_parse, proxyjump_line_write,
-    escapechar_line_parse, escapechar_line_write,
-    rekeylimit_line_parse, rekeylimit_line_write,
-    tunneldevice_line_parse, tunneldevice_line_write,
-    canonicalize_permitted_cnames_line_parse,
-    canonicalize_permitted_cnames_line_write,
-    lookup_env_in_list_parse, lookup_setenv_in_list_parse, multistate_lookup,
-    multistate_name, opt_dequote_parse, opt_dequote_write, opt_flag_parse,
-    opt_match_parse, parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
-    parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval, read_slice,
-    strarray_lines_parse, strarray_lines_write, strarray_oneline_parse,
-    strarray_oneline_write, strdelim_parse_in_place,
-    valid_domain, valid_env_name, validate_permit, write_prefix, ATOI_STATUS_INVALID,
-    ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL,
-    AllowedCnameEntry, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
-    DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID, DOLLAR_EXPAND_INVALID,
-    ExpandEntry, KeywordEntry, MultistateEntry, OPT_DEQUOTE_MISSING_END,
+    a2port, add_keys_to_agent_line_parse, add_keys_to_agent_line_write, argv_split_parse,
+    argv_split_write, atoi_err, canonicalize_permitted_cnames_line_parse,
+    canonicalize_permitted_cnames_line_write, cfg_int_parse, cfg_int_write, cfg_string_parse,
+    cfg_string_write, connecttimeout_line_parse, connecttimeout_line_write,
+    controlpersist_line_parse, controlpersist_line_write, dollar_expand_parse, dollar_expand_write,
+    escapechar_line_parse, escapechar_line_write, expand_parse, expand_write, fmt_intarg_parse,
+    forward_format_parse, forward_format_write, forwardagent_line_parse, forwardagent_line_write,
+    host_hash_write, ipqos_line_parse, ipqos_line_write, keyword_lookup, keyword_name,
+    listenaddr_line_parse, listenaddr_line_write, lookup_env_in_list_parse,
+    lookup_setenv_in_list_parse, match_hashed_host, multistate_lookup, multistate_name,
+    opt_dequote_parse, opt_dequote_write, opt_flag_parse, opt_match_parse, parse_convtime_double,
+    parse_forward_field_in_place, parse_forward_in_place, parse_hostfile_line, parse_ipqos,
+    parse_jump, parse_pattern_interval, permit_list_line_parse, permit_list_line_write,
+    permituserenvironment_line_parse, permituserenvironment_line_write, proxyjump_line_parse,
+    proxyjump_line_write, pubkeyauthoptions_line_parse, pubkeyauthoptions_line_write, read_slice,
+    rekeylimit_line_parse, rekeylimit_line_write, strarray_lines_parse, strarray_lines_write,
+    strarray_oneline_parse, strarray_oneline_write, strdelim_parse_in_place,
+    tunneldevice_line_parse, tunneldevice_line_write, valid_domain, valid_env_name,
+    validate_permit, write_prefix, AllowedCnameEntry, ExpandEntry, KeywordEntry, MultistateEntry,
+    ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE, ATOI_STATUS_TOO_SMALL,
+    DOLLAR_EXPAND_INVALID, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS, DOMAIN_STATUS_EMPTY,
+    DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID, OPT_DEQUOTE_MISSING_END,
     OPT_DEQUOTE_MISSING_START,
 };
 
@@ -129,8 +120,7 @@ const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
 const OSSH_RUST_PARSE_STATUS_EC_CURVE_MISMATCH: c_int = 3;
 const OSSH_RUST_DOMAIN_STATUS_EMPTY: c_int = DOMAIN_STATUS_EMPTY;
 const OSSH_RUST_DOMAIN_STATUS_START_INVALID: c_int = DOMAIN_STATUS_START_INVALID;
-const OSSH_RUST_DOMAIN_STATUS_CONSECUTIVE_SEPARATORS: c_int =
-    DOMAIN_STATUS_CONSECUTIVE_SEPARATORS;
+const OSSH_RUST_DOMAIN_STATUS_CONSECUTIVE_SEPARATORS: c_int = DOMAIN_STATUS_CONSECUTIVE_SEPARATORS;
 const OSSH_RUST_DOMAIN_STATUS_INVALID_CHARS: c_int = DOMAIN_STATUS_INVALID_CHARS;
 const OSSH_RUST_ATOI_STATUS_MISSING: c_int = ATOI_STATUS_MISSING;
 const OSSH_RUST_ATOI_STATUS_INVALID: c_int = ATOI_STATUS_INVALID;
@@ -1240,11 +1230,7 @@ pub extern "C" fn ossh_rust_parse_ipqos(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ossh_rust_a2port(
-    input: *const u8,
-    input_len: usize,
-    out: *mut c_int,
-) -> c_int {
+pub extern "C" fn ossh_rust_a2port(input: *const u8, input_len: usize, out: *mut c_int) -> c_int {
     if out.is_null() {
         return -1;
     }
@@ -2505,9 +2491,7 @@ pub extern "C" fn ossh_rust_sshkey_cert_copy_plan(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ossh_rust_sshkey_copy_public_sk_plan(
-    has_application: c_int,
-) -> c_int {
+pub extern "C" fn ossh_rust_sshkey_copy_public_sk_plan(has_application: c_int) -> c_int {
     match rust_sshkey_copy_public_sk_plan(has_application != 0) {
         Ok(()) => 0,
         Err(err) => err,
@@ -3711,9 +3695,7 @@ pub extern "C" fn ossh_rust_ecdsa_parse_public_blob(
         Err(status) => {
             let status = match status {
                 OSSH_RUST_ECDSA_PARSE_OK => OSSH_RUST_PARSE_STATUS_OK,
-                OSSH_RUST_ECDSA_PARSE_CURVE_MISMATCH => {
-                    OSSH_RUST_PARSE_STATUS_EC_CURVE_MISMATCH
-                }
+                OSSH_RUST_ECDSA_PARSE_CURVE_MISMATCH => OSSH_RUST_PARSE_STATUS_EC_CURVE_MISMATCH,
                 OSSH_RUST_ECDSA_PARSE_INVALID_FORMAT => OSSH_RUST_PARSE_STATUS_INVALID_FORMAT,
                 _ => OSSH_RUST_PARSE_STATUS_INVALID_FORMAT,
             };
@@ -3740,7 +3722,13 @@ pub extern "C" fn ossh_rust_ecdsa_from_private(
     private_key: *const u8,
     private_key_len: usize,
 ) -> *mut c_void {
-    ecdsa_from_private(curve_nid, public_key, public_key_len, private_key, private_key_len)
+    ecdsa_from_private(
+        curve_nid,
+        public_key,
+        public_key_len,
+        private_key,
+        private_key_len,
+    )
 }
 
 #[unsafe(no_mangle)]
@@ -3933,10 +3921,7 @@ pub extern "C" fn ossh_rust_rsa_export_component(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ossh_rust_rsa_parse_private_pem(
-    blob: *const u8,
-    blob_len: usize,
-) -> *mut c_void {
+pub extern "C" fn ossh_rust_rsa_parse_private_pem(blob: *const u8, blob_len: usize) -> *mut c_void {
     rsa_parse_private_pem(blob, blob_len)
 }
 
@@ -3977,7 +3962,12 @@ pub extern "C" fn ossh_rust_rsa_private_pem_write(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ossh_rust_write_prefix(out: *mut u8, out_len: usize, src: *const u8, src_len: usize) -> c_int {
+pub extern "C" fn ossh_rust_write_prefix(
+    out: *mut u8,
+    out_len: usize,
+    src: *const u8,
+    src_len: usize,
+) -> c_int {
     let Some(src) = read_slice(src, src_len) else {
         return -1;
     };
@@ -4067,16 +4057,7 @@ pub extern "C" fn ossh_rust_chachapoly_crypt(
     do_encrypt: c_int,
 ) -> c_int {
     chachapoly_crypt(
-        ctx,
-        seqnr,
-        dest,
-        dest_len,
-        src,
-        src_len,
-        len,
-        aadlen,
-        authlen,
-        do_encrypt,
+        ctx, seqnr, dest, dest_len, src, src_len, len, aadlen, authlen, do_encrypt,
     )
 }
 
