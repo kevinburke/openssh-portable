@@ -3,7 +3,10 @@ use base64ct::{Base64, Encoding};
 use cbc::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
 use des::{Des, TdesEde3};
 use md5::{Digest, Md5};
-use pkcs8::{der::{pem::PemLabel, SecretDocument}, EncryptedPrivateKeyInfo};
+use pkcs8::{
+    der::{pem::PemLabel, SecretDocument},
+    EncryptedPrivateKeyInfo,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PrivatePemError {
@@ -255,10 +258,8 @@ fn decrypt_legacy_cipher(
 mod tests {
     use super::{decrypt_legacy_private_pem, LegacyPemLabel, PrivatePemError};
 
-    const RSA_1_PW: &str =
-        include_str!("../../../regress/unittests/sshkey/testdata/rsa_1_pw");
-    const ECDSA_1_PW: &str =
-        include_str!("../../../regress/unittests/sshkey/testdata/ecdsa_1_pw");
+    const RSA_1_PW: &str = include_str!("../../../regress/unittests/sshkey/testdata/rsa_1_pw");
+    const ECDSA_1_PW: &str = include_str!("../../../regress/unittests/sshkey/testdata/ecdsa_1_pw");
     const PASSWORD: &[u8] = b"mekmitasdigoat";
 
     #[test]
