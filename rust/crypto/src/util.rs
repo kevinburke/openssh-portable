@@ -1,5 +1,5 @@
-use core::mem;
 use core::ffi::{c_char, c_int, CStr};
+use core::mem;
 use core::slice;
 use std::ffi::{CString, OsString};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
@@ -585,7 +585,10 @@ pub(crate) fn valid_domain(
     Ok(())
 }
 
-pub(crate) fn parse_pattern_interval(input: *const u8, input_len: usize) -> Option<PatternIntervalParse> {
+pub(crate) fn parse_pattern_interval(
+    input: *const u8,
+    input_len: usize,
+) -> Option<PatternIntervalParse> {
     let input = read_slice(input, input_len)?;
     let eq = input.iter().position(|byte| *byte == b'=')?;
     if eq == 0 || eq + 1 >= input.len() {
@@ -644,8 +647,8 @@ pub(crate) fn multistate_lookup(
     if nentries == 0 {
         return None;
     }
-    let entries = unsafe { entries.as_ref() }
-        .map(|_| unsafe { slice::from_raw_parts(entries, nentries) })?;
+    let entries =
+        unsafe { entries.as_ref() }.map(|_| unsafe { slice::from_raw_parts(entries, nentries) })?;
     entries.iter().find_map(|entry| {
         let key = unsafe { entry.key.as_ref() }
             .and_then(|_| unsafe { CStr::from_ptr(entry.key) }.to_str().ok())?;
@@ -665,8 +668,8 @@ pub(crate) fn multistate_name(
     if nentries == 0 {
         return None;
     }
-    let entries = unsafe { entries.as_ref() }
-        .map(|_| unsafe { slice::from_raw_parts(entries, nentries) })?;
+    let entries =
+        unsafe { entries.as_ref() }.map(|_| unsafe { slice::from_raw_parts(entries, nentries) })?;
     entries.iter().position(|entry| entry.value == value)
 }
 
@@ -1068,7 +1071,11 @@ pub(crate) fn proxyjump_line_write(
 
 pub(crate) fn rekeylimit_line_parse(limit: u64, interval: i32) -> Option<RekeyLimitLineParse> {
     Some(RekeyLimitLineParse {
-        output_len: "rekeylimit ".len() + limit.to_string().len() + 1 + interval.to_string().len() + 1,
+        output_len: "rekeylimit ".len()
+            + limit.to_string().len()
+            + 1
+            + interval.to_string().len()
+            + 1,
         emit: true,
     })
 }
@@ -1144,17 +1151,17 @@ pub(crate) fn connecttimeout_line_parse(value: i32) -> Option<ConnectTimeoutLine
     }
     Some(ConnectTimeoutLineParse {
         output_len: "connecttimeout ".len()
-            + if value == -1 { "none".len() } else { value.to_string().len() }
+            + if value == -1 {
+                "none".len()
+            } else {
+                value.to_string().len()
+            }
             + 1,
         emit: true,
     })
 }
 
-pub(crate) fn connecttimeout_line_write(
-    value: i32,
-    out: *mut u8,
-    out_len: usize,
-) -> Option<()> {
+pub(crate) fn connecttimeout_line_write(value: i32, out: *mut u8, out_len: usize) -> Option<()> {
     let parsed = connecttimeout_line_parse(value)?;
     let out = read_slice_mut(out, out_len)?;
     if out.len() != parsed.output_len {
@@ -1192,11 +1199,7 @@ pub(crate) fn pubkeyauthoptions_line_parse(value: i32) -> Option<PubkeyAuthOptio
     })
 }
 
-pub(crate) fn pubkeyauthoptions_line_write(
-    value: i32,
-    out: *mut u8,
-    out_len: usize,
-) -> Option<()> {
+pub(crate) fn pubkeyauthoptions_line_write(value: i32, out: *mut u8, out_len: usize) -> Option<()> {
     let parsed = pubkeyauthoptions_line_parse(value)?;
     let out = read_slice_mut(out, out_len)?;
     if out.len() != parsed.output_len {
@@ -1276,7 +1279,11 @@ fn vis_white_byte(c: u8) -> Vec<u8> {
     if c.is_ascii_control() || c == 0x7f {
         let mut out = Vec::with_capacity(2);
         out.push(b'^');
-        out.push(if c == 0x7f { b'?' } else { c.wrapping_add(b'@') });
+        out.push(if c == 0x7f {
+            b'?'
+        } else {
+            c.wrapping_add(b'@')
+        });
         return out;
     }
     if c & 0x80 != 0 {
@@ -1285,7 +1292,11 @@ fn vis_white_byte(c: u8) -> Vec<u8> {
         out.extend_from_slice(b"\\M");
         if low.is_ascii_control() || low == 0x7f {
             out.push(b'^');
-            out.push(if low == 0x7f { b'?' } else { low.wrapping_add(b'@') });
+            out.push(if low == 0x7f {
+                b'?'
+            } else {
+                low.wrapping_add(b'@')
+            });
         } else {
             out.push(b'-');
             out.push(low);
@@ -1308,11 +1319,7 @@ pub(crate) fn escapechar_line_parse(value: i32) -> Option<EscapeCharLineParse> {
     })
 }
 
-pub(crate) fn escapechar_line_write(
-    value: i32,
-    out: *mut u8,
-    out_len: usize,
-) -> Option<()> {
+pub(crate) fn escapechar_line_write(value: i32, out: *mut u8, out_len: usize) -> Option<()> {
     let parsed = escapechar_line_parse(value)?;
     let out = read_slice_mut(out, out_len)?;
     if out.len() != parsed.output_len {
@@ -1586,11 +1593,7 @@ fn cfg_int_value_bytes(value: i32, mode: u32) -> Option<Vec<u8>> {
     }
 }
 
-pub(crate) fn cfg_int_parse(
-    prefix: *const c_char,
-    value: i32,
-    mode: u32,
-) -> Option<CfgIntParse> {
+pub(crate) fn cfg_int_parse(prefix: *const c_char, value: i32, mode: u32) -> Option<CfgIntParse> {
     let prefix = read_cstr_bytes(prefix)?;
     let value = cfg_int_value_bytes(value, mode)?;
     Some(CfgIntParse {
@@ -1706,8 +1709,8 @@ pub(crate) fn keyword_lookup(
     if nentries == 0 {
         return None;
     }
-    let entries = unsafe { entries.as_ref() }
-        .map(|_| unsafe { slice::from_raw_parts(entries, nentries) })?;
+    let entries =
+        unsafe { entries.as_ref() }.map(|_| unsafe { slice::from_raw_parts(entries, nentries) })?;
     entries.iter().find_map(|entry| {
         let key = unsafe { entry.key.as_ref() }
             .and_then(|_| unsafe { CStr::from_ptr(entry.key) }.to_str().ok())?;
@@ -1732,8 +1735,8 @@ pub(crate) fn keyword_name(
     if nentries == 0 {
         return None;
     }
-    let entries = unsafe { entries.as_ref() }
-        .map(|_| unsafe { slice::from_raw_parts(entries, nentries) })?;
+    let entries =
+        unsafe { entries.as_ref() }.map(|_| unsafe { slice::from_raw_parts(entries, nentries) })?;
     entries.iter().position(|entry| entry.value == value)
 }
 
@@ -1809,7 +1812,11 @@ fn append_forward_endpoint(
     Some(())
 }
 
-fn lookup_env_bytes(env: &[u8], envs: *const *const c_char, nenvs: usize) -> Option<(usize, usize)> {
+fn lookup_env_bytes(
+    env: &[u8],
+    envs: *const *const c_char,
+    nenvs: usize,
+) -> Option<(usize, usize)> {
     let envs = read_ptr_slice(envs, nenvs)?;
     for (i, entry) in envs.iter().copied().enumerate() {
         let bytes = match read_cstr_bytes(entry) {
@@ -1989,8 +1996,8 @@ fn expand_parse_inner(
                 i += 1;
                 continue;
             }
-            let value = percent_expand_bytes(input[i], entries, nentries)
-                .ok_or(DOLLAR_EXPAND_INVALID)?;
+            let value =
+                percent_expand_bytes(input[i], entries, nentries).ok_or(DOLLAR_EXPAND_INVALID)?;
             output_len += value.len();
             i += 1;
             continue;
@@ -2211,7 +2218,8 @@ fn parse_decimal_component(input: &[u8]) -> Option<i32> {
 
 pub(crate) fn parse_absolute_time(input: *const u8, input_len: usize) -> Option<u64> {
     let input = read_slice(input, input_len)?;
-    let (digits, is_utc) = if input.len() > 1 && input[input.len() - 1..].eq_ignore_ascii_case(b"Z") {
+    let (digits, is_utc) = if input.len() > 1 && input[input.len() - 1..].eq_ignore_ascii_case(b"Z")
+    {
         (&input[..input.len() - 1], true)
     } else if input.len() > 3 && input[input.len() - 3..].eq_ignore_ascii_case(b"UTC") {
         (&input[..input.len() - 3], true)
@@ -2650,7 +2658,10 @@ impl<'a> SshWireReader<'a> {
         {
             return None;
         }
-        let first_nonzero = bytes.iter().position(|byte| *byte != 0).unwrap_or(bytes.len());
+        let first_nonzero = bytes
+            .iter()
+            .position(|byte| *byte != 0)
+            .unwrap_or(bytes.len());
         Some((offset + first_nonzero, &bytes[first_nonzero..]))
     }
 }
@@ -2723,9 +2734,7 @@ pub(crate) fn strdelim_parse_in_place(
     let split_equals = split_equals != 0;
     let mut delim = None;
     for (idx, byte) in input[..nul].iter().enumerate() {
-        if matches!(*byte, b' ' | b'\t' | b'\r' | b'\n' | b'"')
-            || (split_equals && *byte == b'=')
-        {
+        if matches!(*byte, b' ' | b'\t' | b'\r' | b'\n' | b'"') || (split_equals && *byte == b'=') {
             delim = Some(idx);
             break;
         }
@@ -2852,7 +2861,10 @@ pub(crate) fn parse_forward_field_in_place(
                 });
             }
             b'\\' => {
-                let nul = input[i..].iter().position(|byte| *byte == 0).map(|off| i + off)?;
+                let nul = input[i..]
+                    .iter()
+                    .position(|byte| *byte == 0)
+                    .map(|off| i + off)?;
                 input.copy_within(i + 1..=nul, i);
                 if input[i] == 0 {
                     return None;
@@ -2939,9 +2951,7 @@ pub(crate) fn parse_forward_in_place(
             parse_forward_field_in_place(input[offset..].as_mut_ptr(), input.len() - offset)?;
         let arg_offset = offset + parsed.arg_offset;
         let next_offset = offset + parsed.next_offset;
-        let arg_len = input[arg_offset..]
-            .iter()
-            .position(|byte| *byte == 0)?;
+        let arg_len = input[arg_offset..].iter().position(|byte| *byte == 0)?;
         tokens[count] = ForwardToken {
             offset: arg_offset,
             len: arg_len,
@@ -3134,16 +3144,14 @@ pub(crate) fn parse_forward_in_place(
         if !(count == 1 || count == 2) {
             return None;
         }
-    } else if !(count == 3 || count == 4)
-        && out.has_connect_path == 0
-        && out.has_listen_path == 0
-    {
+    } else if !(count == 3 || count == 4) && out.has_connect_path == 0 && out.has_listen_path == 0 {
         return None;
     }
 
     if out.has_listen_port != 0 {
-        out.listen_port_value =
-            parse_port_token(&input[out.listen_port_offset..out.listen_port_offset + out.listen_port_len])?;
+        out.listen_port_value = parse_port_token(
+            &input[out.listen_port_offset..out.listen_port_offset + out.listen_port_len],
+        )?;
         if _remotefwd == 0 && out.listen_port_value == 0 {
             return None;
         }
@@ -3233,21 +3241,25 @@ pub(crate) fn parse_jump(input: *const u8, input_len: usize) -> Option<JumpParse
     })
 }
 
-pub(crate) fn parse_user_host_port(input: *const u8, input_len: usize) -> Option<UserHostPortParse> {
+pub(crate) fn parse_user_host_port(
+    input: *const u8,
+    input_len: usize,
+) -> Option<UserHostPortParse> {
     let input = read_slice(input, input_len)?;
     if input.is_empty() {
         return None;
     }
 
-    let (user_offset, user_len, host_part_offset) = match input.iter().rposition(|byte| *byte == b'@') {
-        Some(at) => {
-            if at == 0 || at + 1 >= input.len() {
-                return None;
+    let (user_offset, user_len, host_part_offset) =
+        match input.iter().rposition(|byte| *byte == b'@') {
+            Some(at) => {
+                if at == 0 || at + 1 >= input.len() {
+                    return None;
+                }
+                (0, at, at + 1)
             }
-            (0, at, at + 1)
-        }
-        None => (0, 0, 0),
-    };
+            None => (0, 0, 0),
+        };
     let host_part = &input[host_part_offset..];
 
     let (host_offset, host_len, port_offset, port_len) = if host_part.first() == Some(&b'[') {
@@ -3321,22 +3333,23 @@ pub(crate) fn parse_uri(input: *const u8, input_len: usize) -> Option<UriParse> 
         return None;
     }
 
-    let (user_offset, user_len, authority_offset) = match authority.iter().position(|byte| *byte == b'@') {
-        Some(at) => {
-            if at == 0 || at + 1 >= authority.len() {
-                return None;
+    let (user_offset, user_len, authority_offset) =
+        match authority.iter().position(|byte| *byte == b'@') {
+            Some(at) => {
+                if at == 0 || at + 1 >= authority.len() {
+                    return None;
+                }
+                let user_len = authority[..at]
+                    .iter()
+                    .position(|byte| *byte == b';')
+                    .unwrap_or(at);
+                if user_len == 0 {
+                    return None;
+                }
+                (0, user_len, at + 1)
             }
-            let user_len = authority[..at]
-                .iter()
-                .position(|byte| *byte == b';')
-                .unwrap_or(at);
-            if user_len == 0 {
-                return None;
-            }
-            (0, user_len, at + 1)
-        }
-        None => (0, 0, 0),
-    };
+            None => (0, 0, 0),
+        };
     let host_port = &authority[authority_offset..];
 
     let (host_offset, host_len, port_offset, port_len) = if host_port.first() == Some(&b'[') {
@@ -3403,7 +3416,10 @@ pub(crate) fn parse_uri(input: *const u8, input_len: usize) -> Option<UriParse> 
     })
 }
 
-pub(crate) fn parse_user_host_path(input: *const u8, input_len: usize) -> Option<UserHostPathParse> {
+pub(crate) fn parse_user_host_path(
+    input: *const u8,
+    input_len: usize,
+) -> Option<UserHostPathParse> {
     let input = read_slice(input, input_len)?;
     if input.is_empty() || input[0] == b':' {
         return None;
@@ -3428,10 +3444,11 @@ pub(crate) fn parse_user_host_path(input: *const u8, input_len: usize) -> Option
     }
     let path_sep = path_sep?;
 
-    let (user_offset, user_len, host_offset) = match input[..path_sep].iter().rposition(|byte| *byte == b'@') {
-        Some(at) => (0, at, at + 1),
-        None => (0, 0, 0),
-    };
+    let (user_offset, user_len, host_offset) =
+        match input[..path_sep].iter().rposition(|byte| *byte == b'@') {
+            Some(at) => (0, at, at + 1),
+            None => (0, 0, 0),
+        };
     let host_len = path_sep.checked_sub(host_offset)?;
     let path_offset = path_sep + 1;
     let path_len = input.len() - path_offset;
@@ -3497,60 +3514,43 @@ fn parse_argv(input: &[u8], terminate_on_comment: bool) -> Option<Vec<Vec<u8>>> 
 #[cfg(test)]
 mod tests {
     use super::{
-        a2port, add_keys_to_agent_line_parse, add_keys_to_agent_line_write,
-        forwardagent_line_parse, forwardagent_line_write,
-        atoi_err, argv_split_parse, argv_split_write, cfg_int_parse,
-        canonicalize_permitted_cnames_line_parse,
-        canonicalize_permitted_cnames_line_write,
-        cfg_int_write, cfg_string_parse, cfg_string_write, host_hash_write,
-        ipqos_line_parse, ipqos_line_write, listenaddr_line_parse, listenaddr_line_write,
-        fmt_intarg_parse, forward_format_parse, forward_format_write,
-        hpdelim2_parse_in_place, keyword_lookup, keyword_name,
-        lookup_env_in_list_parse,
-        lookup_setenv_in_list_parse, match_hashed_host, multistate_lookup,
-        multistate_name, dollar_expand_parse, dollar_expand_write,
-        opt_dequote_parse, opt_dequote_write, opt_flag_parse, opt_match_parse,
-        parse_absolute_time, parse_convtime_double, parse_forward_field_in_place,
-        parse_forward_in_place, parse_hostfile_line, parse_ipqos, parse_jump,
-        parse_pattern_interval, parse_uri, parse_user_host_path, parse_user_host_port,
-        permituserenvironment_line_parse, permituserenvironment_line_write,
-        pubkeyauthoptions_line_parse, pubkeyauthoptions_line_write,
-        proxyjump_line_parse, proxyjump_line_write,
-        connecttimeout_line_parse, connecttimeout_line_write,
-        controlpersist_line_parse, controlpersist_line_write,
-        escapechar_line_parse, escapechar_line_write,
-        rekeylimit_line_parse, rekeylimit_line_write,
-        strdelim_parse_in_place, valid_domain, valid_env_name, validate_permit,
-        ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE,
-        ATOI_STATUS_TOO_SMALL, DollarExpandParse, DOLLAR_EXPAND_INVALID,
-        FORWARD_FMT_DYNAMIC, FORWARD_FMT_LOCAL, FORWARD_FMT_REMOTE,
-        FMT_INTARG_DIGEST, FMT_INTARG_LITERAL_MD5, FMT_INTARG_LITERAL_MULTISTATE,
-        FMT_INTARG_LITERAL_NO, FMT_INTARG_LITERAL_UNSET, FMT_INTARG_LITERAL_UNKNOWN,
-        FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO,
-        AddKeysToAgentLineParse, AllowedCnameEntry,
-        CanonicalizePermittedCnamesLineParse, CfgIntParse, CfgStringParse,
-        ConnectTimeoutLineParse,
-        ControlPersistLineParse,
-        EscapeCharLineParse,
-        ForwardAgentLineParse,
-        FmtIntArgParse, ForwardFormatParse, IpqosLineParse,
-        ListenaddrLineParse, PermitListLineParse, ProxyJumpLineParse,
-        PermitUserEnvironmentLineParse,
-        PubkeyAuthOptionsLineParse,
-        RekeyLimitLineParse,
-        TunnelDeviceLineParse,
-        StrarrayLinesParse, StrarrayOnelineParse, strarray_lines_parse,
-        strarray_lines_write, strarray_oneline_parse, strarray_oneline_write,
-        permit_list_line_parse, permit_list_line_write,
-        tunneldevice_line_parse, tunneldevice_line_write,
-        ExpandEntry, expand_parse, expand_write,
-        ForwardParse, HostfileLineParse, JumpParse,
-        KeywordEntry, MultistateEntry, OptDequoteParse, OPT_DEQUOTE_MISSING_END,
-        OPT_DEQUOTE_MISSING_START, PatternIntervalParse, UriParse,
-        UserHostPathParse, UserHostPortParse, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
+        a2port, add_keys_to_agent_line_parse, add_keys_to_agent_line_write, argv_split_parse,
+        argv_split_write, atoi_err, canonicalize_permitted_cnames_line_parse,
+        canonicalize_permitted_cnames_line_write, cfg_int_parse, cfg_int_write, cfg_string_parse,
+        cfg_string_write, connecttimeout_line_parse, connecttimeout_line_write,
+        controlpersist_line_parse, controlpersist_line_write, dollar_expand_parse,
+        dollar_expand_write, escapechar_line_parse, escapechar_line_write, expand_parse,
+        expand_write, fmt_intarg_parse, forward_format_parse, forward_format_write,
+        forwardagent_line_parse, forwardagent_line_write, host_hash_write, hpdelim2_parse_in_place,
+        ipqos_line_parse, ipqos_line_write, keyword_lookup, keyword_name, listenaddr_line_parse,
+        listenaddr_line_write, lookup_env_in_list_parse, lookup_setenv_in_list_parse,
+        match_hashed_host, multistate_lookup, multistate_name, opt_dequote_parse,
+        opt_dequote_write, opt_flag_parse, opt_match_parse, parse_absolute_time,
+        parse_convtime_double, parse_forward_field_in_place, parse_forward_in_place,
+        parse_hostfile_line, parse_ipqos, parse_jump, parse_pattern_interval, parse_uri,
+        parse_user_host_path, parse_user_host_port, permit_list_line_parse, permit_list_line_write,
+        permituserenvironment_line_parse, permituserenvironment_line_write, proxyjump_line_parse,
+        proxyjump_line_write, pubkeyauthoptions_line_parse, pubkeyauthoptions_line_write,
+        rekeylimit_line_parse, rekeylimit_line_write, strarray_lines_parse, strarray_lines_write,
+        strarray_oneline_parse, strarray_oneline_write, strdelim_parse_in_place,
+        tunneldevice_line_parse, tunneldevice_line_write, valid_domain, valid_env_name,
+        validate_permit, AddKeysToAgentLineParse, AllowedCnameEntry,
+        CanonicalizePermittedCnamesLineParse, CfgIntParse, CfgStringParse, ConnectTimeoutLineParse,
+        ControlPersistLineParse, DollarExpandParse, EscapeCharLineParse, ExpandEntry,
+        FmtIntArgParse, ForwardAgentLineParse, ForwardFormatParse, ForwardParse, HostfileLineParse,
+        IpqosLineParse, JumpParse, KeywordEntry, ListenaddrLineParse, MultistateEntry,
+        OptDequoteParse, PatternIntervalParse, PermitListLineParse, PermitUserEnvironmentLineParse,
+        ProxyJumpLineParse, PubkeyAuthOptionsLineParse, RekeyLimitLineParse, StrarrayLinesParse,
+        StrarrayOnelineParse, TunnelDeviceLineParse, UriParse, UserHostPathParse,
+        UserHostPortParse, ATOI_STATUS_INVALID, ATOI_STATUS_MISSING, ATOI_STATUS_TOO_LARGE,
+        ATOI_STATUS_TOO_SMALL, DOLLAR_EXPAND_INVALID, DOMAIN_STATUS_CONSECUTIVE_SEPARATORS,
         DOMAIN_STATUS_EMPTY, DOMAIN_STATUS_INVALID_CHARS, DOMAIN_STATUS_START_INVALID,
-        IPQOS_AF21, IPQOS_CS0, IPQOS_CS6, IPQOS_EF, IPQOS_NONE, SSH_TUNID_ANY,
-        PUBKEYAUTH_TOUCH_REQUIRED, PUBKEYAUTH_VERIFY_REQUIRED,
+        FMT_INTARG_DIGEST, FMT_INTARG_LITERAL_MD5, FMT_INTARG_LITERAL_MULTISTATE,
+        FMT_INTARG_LITERAL_NO, FMT_INTARG_LITERAL_UNKNOWN, FMT_INTARG_LITERAL_UNSET,
+        FMT_INTARG_LITERAL_YES, FMT_INTARG_MULTISTATE, FMT_INTARG_YESNO, FORWARD_FMT_DYNAMIC,
+        FORWARD_FMT_LOCAL, FORWARD_FMT_REMOTE, IPQOS_AF21, IPQOS_CS0, IPQOS_CS6, IPQOS_EF,
+        IPQOS_NONE, OPT_DEQUOTE_MISSING_END, OPT_DEQUOTE_MISSING_START, PUBKEYAUTH_TOUCH_REQUIRED,
+        PUBKEYAUTH_VERIFY_REQUIRED, SSH_TUNID_ANY,
     };
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
@@ -3741,10 +3741,7 @@ mod tests {
             parse_fwd_field(br#"host\/path:80"#),
             Some((br#"host/path"#.to_vec(), Some(b"80".to_vec()), 0))
         );
-        assert_eq!(
-            parse_fwd_field(b"host"),
-            Some((b"host".to_vec(), None, 0))
-        );
+        assert_eq!(parse_fwd_field(b"host"), Some((b"host".to_vec(), None, 0)));
     }
 
     #[test]
@@ -4052,7 +4049,10 @@ mod tests {
         assert_eq!(&lowered[..], b"example.com\0");
 
         let mut preserved = b"MiXeD.Example".to_vec();
-        assert_eq!(valid_domain(preserved.as_mut_ptr(), preserved.len(), 0), Ok(()));
+        assert_eq!(
+            valid_domain(preserved.as_mut_ptr(), preserved.len(), 0),
+            Ok(())
+        );
         assert_eq!(&preserved[..], b"MiXeD.Example");
     }
 
@@ -4145,7 +4145,10 @@ mod tests {
         assert_eq!(atoi_err(b"bogus".as_ptr(), 5), Err(ATOI_STATUS_INVALID));
         assert_eq!(atoi_err(b"+".as_ptr(), 1), Err(ATOI_STATUS_INVALID));
         assert_eq!(atoi_err(b"-1".as_ptr(), 2), Err(ATOI_STATUS_TOO_SMALL));
-        assert_eq!(atoi_err(b"2147483648".as_ptr(), 10), Err(ATOI_STATUS_TOO_LARGE));
+        assert_eq!(
+            atoi_err(b"2147483648".as_ptr(), 10),
+            Err(ATOI_STATUS_TOO_LARGE)
+        );
     }
 
     #[test]
@@ -4181,9 +4184,18 @@ mod tests {
             value: 1,
         }];
 
-        assert_eq!(multistate_lookup(core::ptr::null(), 0, entries.as_ptr(), 1), None);
-        assert_eq!(multistate_lookup(b"maybe".as_ptr(), 5, entries.as_ptr(), 1), None);
-        assert_eq!(multistate_lookup(b"yes".as_ptr(), 3, core::ptr::null(), 1), None);
+        assert_eq!(
+            multistate_lookup(core::ptr::null(), 0, entries.as_ptr(), 1),
+            None
+        );
+        assert_eq!(
+            multistate_lookup(b"maybe".as_ptr(), 5, entries.as_ptr(), 1),
+            None
+        );
+        assert_eq!(
+            multistate_lookup(b"yes".as_ptr(), 3, core::ptr::null(), 1),
+            None
+        );
     }
 
     #[test]
@@ -4282,10 +4294,7 @@ mod tests {
                 index: 0,
             })
         );
-        assert_eq!(
-            fmt_intarg_parse(1, 99, core::ptr::null(), 0),
-            None
-        );
+        assert_eq!(fmt_intarg_parse(1, 99, core::ptr::null(), 0), None);
     }
 
     #[test]
@@ -4452,7 +4461,13 @@ mod tests {
         assert_eq!(&out, b" one two");
         let mut none_out = vec![0u8; " none".len()];
         assert_eq!(
-            strarray_oneline_write(core::ptr::null(), 0, 1, none_out.as_mut_ptr(), none_out.len()),
+            strarray_oneline_write(
+                core::ptr::null(),
+                0,
+                1,
+                none_out.as_mut_ptr(),
+                none_out.len()
+            ),
             Some(())
         );
         assert_eq!(&none_out, b" none");
@@ -4555,12 +4570,7 @@ mod tests {
 
         let mut any_out = vec![0u8; "tunneldevice any:3\n".len()];
         assert_eq!(
-            tunneldevice_line_write(
-                SSH_TUNID_ANY,
-                3,
-                any_out.as_mut_ptr(),
-                any_out.len()
-            ),
+            tunneldevice_line_write(SSH_TUNID_ANY, 3, any_out.as_mut_ptr(), any_out.len()),
             Some(())
         );
         assert_eq!(&any_out, b"tunneldevice any:3\n");
@@ -4649,7 +4659,12 @@ mod tests {
 
         let mut socket_out = vec![0u8; "forwardagent /tmp/agent.sock\n".len()];
         assert_eq!(
-            forwardagent_line_write(1, socket.as_ptr(), socket_out.as_mut_ptr(), socket_out.len()),
+            forwardagent_line_write(
+                1,
+                socket.as_ptr(),
+                socket_out.as_mut_ptr(),
+                socket_out.len()
+            ),
             Some(())
         );
         assert_eq!(&socket_out, b"forwardagent /tmp/agent.sock\n");
@@ -4667,8 +4682,7 @@ mod tests {
         assert_eq!(
             canonicalize_permitted_cnames_line_parse(entries.as_ptr(), entries.len()),
             Some(CanonicalizePermittedCnamesLineParse {
-                output_len:
-                    "canonicalizePermittedcnames *.example.com:*.corp.example\n".len(),
+                output_len: "canonicalizePermittedcnames *.example.com:*.corp.example\n".len(),
                 emit: true,
             })
         );
@@ -4689,8 +4703,7 @@ mod tests {
             source_list: src.as_ptr(),
             target_list: dst.as_ptr(),
         }];
-        let mut out =
-            vec![0u8; "canonicalizePermittedcnames *.example.com:*.corp.example\n".len()];
+        let mut out = vec![0u8; "canonicalizePermittedcnames *.example.com:*.corp.example\n".len()];
         assert_eq!(
             canonicalize_permitted_cnames_line_write(
                 entries.as_ptr(),
@@ -4899,9 +4912,7 @@ mod tests {
             })
         );
         assert_eq!(
-            pubkeyauthoptions_line_parse(
-                PUBKEYAUTH_TOUCH_REQUIRED | PUBKEYAUTH_VERIFY_REQUIRED
-            ),
+            pubkeyauthoptions_line_parse(PUBKEYAUTH_TOUCH_REQUIRED | PUBKEYAUTH_VERIFY_REQUIRED),
             Some(PubkeyAuthOptionsLineParse {
                 output_len: "pubkeyauthoptions touch-required verify-required\n".len(),
                 emit: true,
@@ -4930,8 +4941,7 @@ mod tests {
         );
         assert_eq!(&touch_out, b"pubkeyauthoptions touch-required\n");
 
-        let mut both_out =
-            vec![0u8; "pubkeyauthoptions touch-required verify-required\n".len()];
+        let mut both_out = vec![0u8; "pubkeyauthoptions touch-required verify-required\n".len()];
         assert_eq!(
             pubkeyauthoptions_line_write(
                 PUBKEYAUTH_TOUCH_REQUIRED | PUBKEYAUTH_VERIFY_REQUIRED,
@@ -5104,7 +5114,13 @@ mod tests {
         );
         assert_eq!(&out, b"userknownhostsfile one\nuserknownhostsfile two\n");
         assert_eq!(
-            strarray_lines_write(prefix.as_ptr(), core::ptr::null(), 0, core::ptr::null_mut(), 0),
+            strarray_lines_write(
+                prefix.as_ptr(),
+                core::ptr::null(),
+                0,
+                core::ptr::null_mut(),
+                0
+            ),
             Some(())
         );
     }
@@ -5144,7 +5160,13 @@ mod tests {
         let mut out = vec![0u8; "hostname example.com\n".len()];
 
         assert_eq!(
-            cfg_string_write(prefix.as_ptr(), value.as_ptr(), 0, out.as_mut_ptr(), out.len()),
+            cfg_string_write(
+                prefix.as_ptr(),
+                value.as_ptr(),
+                0,
+                out.as_mut_ptr(),
+                out.len()
+            ),
             Some(())
         );
         assert_eq!(&out, b"hostname example.com\n");
@@ -5163,7 +5185,13 @@ mod tests {
         assert_eq!(&none_out, b"hostname none\n");
 
         assert_eq!(
-            cfg_string_write(prefix.as_ptr(), core::ptr::null(), 0, core::ptr::null_mut(), 0),
+            cfg_string_write(
+                prefix.as_ptr(),
+                core::ptr::null(),
+                0,
+                core::ptr::null_mut(),
+                0
+            ),
             Some(())
         );
     }
@@ -5213,7 +5241,13 @@ mod tests {
 
         let mut octal_out = vec![0u8; "port 0777\n".len()];
         assert_eq!(
-            cfg_int_write(prefix.as_ptr(), 0o777, 1, octal_out.as_mut_ptr(), octal_out.len()),
+            cfg_int_write(
+                prefix.as_ptr(),
+                0o777,
+                1,
+                octal_out.as_mut_ptr(),
+                octal_out.len()
+            ),
             Some(())
         );
         assert_eq!(&octal_out, b"port 0777\n");
@@ -5308,7 +5342,13 @@ mod tests {
             Some(1)
         );
         assert_eq!(
-            keyword_lookup(b"HOSTNAME".as_ptr(), 8, entries.as_ptr(), entries.len(), true),
+            keyword_lookup(
+                b"HOSTNAME".as_ptr(),
+                8,
+                entries.as_ptr(),
+                entries.len(),
+                true
+            ),
             Some(2)
         );
     }
@@ -5325,8 +5365,14 @@ mod tests {
             keyword_lookup(b"USER".as_ptr(), 4, entries.as_ptr(), entries.len(), false),
             None
         );
-        assert_eq!(keyword_lookup(core::ptr::null(), 0, entries.as_ptr(), 1, false), None);
-        assert_eq!(keyword_lookup(b"user".as_ptr(), 4, core::ptr::null(), 1, false), None);
+        assert_eq!(
+            keyword_lookup(core::ptr::null(), 0, entries.as_ptr(), 1, false),
+            None
+        );
+        assert_eq!(
+            keyword_lookup(b"user".as_ptr(), 4, core::ptr::null(), 1, false),
+            None
+        );
     }
 
     #[test]
@@ -5418,7 +5464,10 @@ mod tests {
             lookup_env_in_list_parse(b"MISSING".as_ptr(), 7, envs.as_ptr(), envs.len()),
             None
         );
-        assert_eq!(lookup_env_in_list_parse(core::ptr::null(), 0, envs.as_ptr(), envs.len()), None);
+        assert_eq!(
+            lookup_env_in_list_parse(core::ptr::null(), 0, envs.as_ptr(), envs.len()),
+            None
+        );
         assert_eq!(
             lookup_env_in_list_parse(b"TERM".as_ptr(), 4, core::ptr::null(), 1),
             None
@@ -5497,8 +5546,14 @@ mod tests {
 
     #[test]
     fn opt_dequote_parse_rejects_bad_forms() {
-        assert_eq!(opt_dequote_parse(b"plain".as_ptr(), 5), Err(OPT_DEQUOTE_MISSING_START));
-        assert_eq!(opt_dequote_parse(br#""unterminated"#.as_ptr(), 13), Err(OPT_DEQUOTE_MISSING_END));
+        assert_eq!(
+            opt_dequote_parse(b"plain".as_ptr(), 5),
+            Err(OPT_DEQUOTE_MISSING_START)
+        );
+        assert_eq!(
+            opt_dequote_parse(br#""unterminated"#.as_ptr(), 13),
+            Err(OPT_DEQUOTE_MISSING_END)
+        );
     }
 
     #[test]
@@ -5534,8 +5589,14 @@ mod tests {
     #[test]
     fn dollar_expand_parse_rejects_bad_forms() {
         let missing = br#"${MISSING_RUST_DOLLAR_EXPAND_TEST_VALUE}"#;
-        assert_eq!(dollar_expand_parse(b"${".as_ptr(), 2), Err(DOLLAR_EXPAND_INVALID));
-        assert_eq!(dollar_expand_parse(b"${}".as_ptr(), 3), Err(DOLLAR_EXPAND_INVALID));
+        assert_eq!(
+            dollar_expand_parse(b"${".as_ptr(), 2),
+            Err(DOLLAR_EXPAND_INVALID)
+        );
+        assert_eq!(
+            dollar_expand_parse(b"${}".as_ptr(), 3),
+            Err(DOLLAR_EXPAND_INVALID)
+        );
         assert_eq!(
             dollar_expand_parse(missing.as_ptr(), missing.len()),
             Ok(DollarExpandParse {
@@ -5645,7 +5706,10 @@ mod tests {
         assert_eq!(parse_convtime_double(b"1.5s".as_ptr(), 4), Some(1.5));
         assert_eq!(parse_convtime_double(b".5s".as_ptr(), 3), Some(0.5));
         assert_eq!(parse_convtime_double(b"1m.5s".as_ptr(), 5), Some(60.5));
-        assert_eq!(parse_convtime_double(b"1w2d3h4m5s".as_ptr(), 10), Some(788645.0));
+        assert_eq!(
+            parse_convtime_double(b"1w2d3h4m5s".as_ptr(), 10),
+            Some(788645.0)
+        );
     }
 
     #[test]
@@ -5673,17 +5737,12 @@ mod tests {
             Some(946729380)
         );
         assert_eq!(
-            parse_absolute_time(
-                b"20000101122345UTC".as_ptr(),
-                b"20000101122345UTC".len()
-            ),
+            parse_absolute_time(b"20000101122345UTC".as_ptr(), b"20000101122345UTC".len()),
             Some(946729425)
         );
         assert!(parse_absolute_time(b"20000101".as_ptr(), b"20000101".len()).is_some());
         assert!(parse_absolute_time(b"200001011223".as_ptr(), b"200001011223".len()).is_some());
-        assert!(
-            parse_absolute_time(b"20000101122345".as_ptr(), b"20000101122345".len()).is_some()
-        );
+        assert!(parse_absolute_time(b"20000101122345".as_ptr(), b"20000101122345".len()).is_some());
     }
 
     #[test]
@@ -5814,7 +5873,10 @@ mod tests {
         );
         let out_len = out.iter().position(|byte| *byte == 0).unwrap();
         assert_eq!(&out[..out_len], entry);
-        assert_eq!(match_hashed_host(host.as_ptr(), host.len(), entry.as_ptr(), entry.len()), 1);
+        assert_eq!(
+            match_hashed_host(host.as_ptr(), host.len(), entry.as_ptr(), entry.len()),
+            1
+        );
         assert_eq!(
             match_hashed_host(
                 b"prometheus.example.com".as_ptr(),
@@ -5830,7 +5892,12 @@ mod tests {
     fn host_hash_rejects_invalid_hashed_entries() {
         let host = b"sisyphus.example.com";
         assert_eq!(
-            match_hashed_host(host.as_ptr(), host.len(), b"|1|bad".as_ptr(), b"|1|bad".len()),
+            match_hashed_host(
+                host.as_ptr(),
+                host.len(),
+                b"|1|bad".as_ptr(),
+                b"|1|bad".len()
+            ),
             -1
         );
     }

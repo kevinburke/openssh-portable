@@ -130,9 +130,7 @@ impl ChachaPolyState {
         let len = len as usize;
         let authlen = authlen as usize;
         let nonce = (seqnr as u64).to_be_bytes();
-        let data_len = aadlen
-            .checked_add(len)
-            .ok_or(ChachaPolyError::Invalid)?;
+        let data_len = aadlen.checked_add(len).ok_or(ChachaPolyError::Invalid)?;
         let need_src = data_len
             .checked_add(if do_encrypt { 0 } else { authlen })
             .ok_or(ChachaPolyError::Invalid)?;
@@ -161,10 +159,8 @@ impl ChachaPolyState {
         .map_err(|_| ChachaPolyError::Invalid)?;
 
         if !do_encrypt {
-            let expected_tag = poly1305_auth(
-                unsafe { slice::from_raw_parts(src, data_len) },
-                &poly_key,
-            );
+            let expected_tag =
+                poly1305_auth(unsafe { slice::from_raw_parts(src, data_len) }, &poly_key);
             let tag = unsafe { slice::from_raw_parts(src.add(data_len), authlen) };
             if !constant_time_eq(&expected_tag, tag) {
                 return Err(ChachaPolyError::Mac);
@@ -188,10 +184,7 @@ impl ChachaPolyState {
         }
 
         if do_encrypt {
-            let tag = poly1305_auth(
-                unsafe { slice::from_raw_parts(dest, data_len) },
-                &poly_key,
-            );
+            let tag = poly1305_auth(unsafe { slice::from_raw_parts(dest, data_len) }, &poly_key);
             unsafe {
                 core::ptr::copy_nonoverlapping(tag.as_ptr(), dest.add(data_len), authlen);
             }
@@ -665,14 +658,10 @@ mod tests {
 
     #[test]
     fn aes128_ctr_nist_vector() {
-        let key = decode_hex(
-            "2b7e151628aed2a6abf7158809cf4f3c",
-        );
-        let iv: [u8; 16] = decode_hex(
-            "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
-        )
-        .try_into()
-        .unwrap();
+        let key = decode_hex("2b7e151628aed2a6abf7158809cf4f3c");
+        let iv: [u8; 16] = decode_hex("f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff")
+            .try_into()
+            .unwrap();
         let plaintext = decode_hex(
             "6bc1bee22e409f96e93d7e117393172a\
              ae2d8a571e03ac9c9eb76fac45af8e51\
@@ -688,7 +677,9 @@ mod tests {
         let mut out = vec![0u8; plaintext.len()];
         let mut state = AesCtrState::new(&key, iv).unwrap();
 
-        state.crypt(plaintext.as_ptr(), out.as_mut_ptr(), plaintext.len()).unwrap();
+        state
+            .crypt(plaintext.as_ptr(), out.as_mut_ptr(), plaintext.len())
+            .unwrap();
         assert_eq!(out, expected);
     }
 
@@ -698,11 +689,9 @@ mod tests {
             "8e73b0f7da0e6452c810f32b809079e5\
              62f8ead2522c6b7b",
         );
-        let iv: [u8; 16] = decode_hex(
-            "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
-        )
-        .try_into()
-        .unwrap();
+        let iv: [u8; 16] = decode_hex("f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff")
+            .try_into()
+            .unwrap();
         let plaintext = decode_hex(
             "6bc1bee22e409f96e93d7e117393172a\
              ae2d8a571e03ac9c9eb76fac45af8e51\
@@ -718,7 +707,9 @@ mod tests {
         let mut out = vec![0u8; plaintext.len()];
         let mut state = AesCtrState::new(&key, iv).unwrap();
 
-        state.crypt(plaintext.as_ptr(), out.as_mut_ptr(), plaintext.len()).unwrap();
+        state
+            .crypt(plaintext.as_ptr(), out.as_mut_ptr(), plaintext.len())
+            .unwrap();
         assert_eq!(out, expected);
     }
 
@@ -728,11 +719,9 @@ mod tests {
             "603deb1015ca71be2b73aef0857d7781\
              1f352c073b6108d72d9810a30914dff4",
         );
-        let iv: [u8; 16] = decode_hex(
-            "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
-        )
-        .try_into()
-        .unwrap();
+        let iv: [u8; 16] = decode_hex("f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff")
+            .try_into()
+            .unwrap();
         let plaintext = decode_hex(
             "6bc1bee22e409f96e93d7e117393172a\
              ae2d8a571e03ac9c9eb76fac45af8e51\
@@ -748,7 +737,9 @@ mod tests {
         let mut out = vec![0u8; plaintext.len()];
         let mut state = AesCtrState::new(&key, iv).unwrap();
 
-        state.crypt(plaintext.as_ptr(), out.as_mut_ptr(), plaintext.len()).unwrap();
+        state
+            .crypt(plaintext.as_ptr(), out.as_mut_ptr(), plaintext.len())
+            .unwrap();
         assert_eq!(out, expected);
     }
 

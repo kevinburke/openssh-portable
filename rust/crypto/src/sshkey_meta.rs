@@ -73,19 +73,21 @@ fn matches_type_nid(entry: &RustSshkeyImpl, type_: c_int, nid: c_int) -> bool {
 }
 
 fn is_ecdsa_variant(type_: c_int) -> bool {
-    matches!(type_, KEY_ECDSA | KEY_ECDSA_CERT | KEY_ECDSA_SK | KEY_ECDSA_SK_CERT)
+    matches!(
+        type_,
+        KEY_ECDSA | KEY_ECDSA_CERT | KEY_ECDSA_SK | KEY_ECDSA_SK_CERT
+    )
 }
 
 fn parse_ecdsa_type_name(input: &[u8]) -> Option<c_int> {
     match input {
-        b"ecdsa-sha2-nistp256"
-        | b"ecdsa-sha2-nistp384"
-        | b"ecdsa-sha2-nistp521" => Some(KEY_ECDSA),
+        b"ecdsa-sha2-nistp256" | b"ecdsa-sha2-nistp384" | b"ecdsa-sha2-nistp521" => Some(KEY_ECDSA),
         b"ecdsa-sha2-nistp256-cert-v01@openssh.com"
         | b"ecdsa-sha2-nistp384-cert-v01@openssh.com"
         | b"ecdsa-sha2-nistp521-cert-v01@openssh.com" => Some(KEY_ECDSA_CERT),
-        b"sk-ecdsa-sha2-nistp256@openssh.com"
-        | b"webauthn-sk-ecdsa-sha2-nistp256@openssh.com" => Some(KEY_ECDSA_SK),
+        b"sk-ecdsa-sha2-nistp256@openssh.com" | b"webauthn-sk-ecdsa-sha2-nistp256@openssh.com" => {
+            Some(KEY_ECDSA_SK)
+        }
         b"sk-ecdsa-sha2-nistp256-cert-v01@openssh.com"
         | b"webauthn-sk-ecdsa-sha2-nistp256-cert-v01@openssh.com" => Some(KEY_ECDSA_SK_CERT),
         _ => None,
@@ -354,7 +356,8 @@ pub(crate) fn sshkey_names_valid_include(
     if input.is_empty() {
         return Some(false);
     }
-    if let Some(type_) = sshkey_type_from_name(input.as_ptr(), input.len(), entries, nentries, false)
+    if let Some(type_) =
+        sshkey_type_from_name(input.as_ptr(), input.len(), entries, nentries, false)
     {
         return Some(!(plain_only && sshkey_type_is_cert(type_)));
     }
@@ -423,8 +426,7 @@ pub(crate) fn sshkey_from_blob_plan(
     entries: *const *const RustSshkeyImpl,
     nentries: usize,
 ) -> Result<(c_int, c_int, bool), c_int> {
-    let type_ = sshkey_type_from_name(input, input_len, entries, nentries, false)
-        .ok_or(-14)?;
+    let type_ = sshkey_type_from_name(input, input_len, entries, nentries, false).ok_or(-14)?;
     if !allow_cert && sshkey_type_is_cert(type_) {
         return Err(SSH_ERR_KEY_CERT_INVALID_SIGN_KEY);
     }
@@ -526,7 +528,11 @@ pub(crate) fn sshkey_impl_name_from_type_nid(
     for entry_ptr in entries {
         let entry = entry_ref(*entry_ptr)?;
         if matches_type_nid(entry, type_, nid) {
-            let name = if want_short { entry.shortname } else { entry.name };
+            let name = if want_short {
+                entry.shortname
+            } else {
+                entry.name
+            };
             if !name.is_null() {
                 return Some(name);
             }
@@ -798,10 +804,22 @@ mod tests {
     #[test]
     fn name_lookup_preserves_entry_order() {
         let entry_ptrs = entry_ptrs();
-        let plain = sshkey_impl_name_from_type_nid(KEY_RSA, 0, false, entry_ptrs.as_ptr(), entry_ptrs.len())
-            .unwrap();
-        let short = sshkey_impl_name_from_type_nid(KEY_ECDSA, 715, true, entry_ptrs.as_ptr(), entry_ptrs.len())
-            .unwrap();
+        let plain = sshkey_impl_name_from_type_nid(
+            KEY_RSA,
+            0,
+            false,
+            entry_ptrs.as_ptr(),
+            entry_ptrs.len(),
+        )
+        .unwrap();
+        let short = sshkey_impl_name_from_type_nid(
+            KEY_ECDSA,
+            715,
+            true,
+            entry_ptrs.as_ptr(),
+            entry_ptrs.len(),
+        )
+        .unwrap();
         assert_eq!(unsafe { CStr::from_ptr(plain) }.to_bytes(), b"ssh-rsa");
         assert_eq!(unsafe { CStr::from_ptr(short) }.to_bytes(), b"ECDSA");
     }
@@ -950,7 +968,12 @@ mod tests {
     fn equal_public_plan_checks_plain_type_compatibility() {
         let entry_ptrs = entry_ptrs();
         assert_eq!(
-            sshkey_equal_public_plan(KEY_ED25519_CERT, KEY_ED25519, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            sshkey_equal_public_plan(
+                KEY_ED25519_CERT,
+                KEY_ED25519,
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len()
+            ),
             Some((true, KEY_ED25519_CERT))
         );
         assert_eq!(
@@ -958,7 +981,12 @@ mod tests {
             Some((false, KEY_ED25519))
         );
         assert_eq!(
-            sshkey_equal_public_plan(KEY_ECDSA_SK, KEY_ECDSA_SK, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            sshkey_equal_public_plan(
+                KEY_ECDSA_SK,
+                KEY_ECDSA_SK,
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len()
+            ),
             None
         );
     }
@@ -967,15 +995,30 @@ mod tests {
     fn equal_plan_requires_exact_type_and_tracks_cert_compare() {
         let entry_ptrs = entry_ptrs();
         assert_eq!(
-            sshkey_equal_plan(KEY_ED25519_CERT, KEY_ED25519_CERT, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            sshkey_equal_plan(
+                KEY_ED25519_CERT,
+                KEY_ED25519_CERT,
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len()
+            ),
             Some((true, KEY_ED25519_CERT))
         );
         assert_eq!(
-            sshkey_equal_plan(KEY_ED25519_CERT, KEY_ED25519, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            sshkey_equal_plan(
+                KEY_ED25519_CERT,
+                KEY_ED25519,
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len()
+            ),
             Some((false, KEY_UNSPEC))
         );
         assert_eq!(
-            sshkey_equal_plan(KEY_ECDSA_SK, KEY_ECDSA_SK, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            sshkey_equal_plan(
+                KEY_ECDSA_SK,
+                KEY_ECDSA_SK,
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len()
+            ),
             None
         );
     }
@@ -1160,8 +1203,15 @@ mod tests {
     #[test]
     fn alg_list_write_matches_current_filters() {
         let entry_ptrs = entry_ptrs();
-        let len = sshkey_alg_list_len(false, true, true, b',', entry_ptrs.as_ptr(), entry_ptrs.len())
-            .unwrap();
+        let len = sshkey_alg_list_len(
+            false,
+            true,
+            true,
+            b',',
+            entry_ptrs.as_ptr(),
+            entry_ptrs.len(),
+        )
+        .unwrap();
         let mut out = vec![0u8; len];
 
         sshkey_alg_list_write(
@@ -1252,7 +1302,10 @@ mod tests {
 
     #[test]
     fn curve_nid_to_name_matches_known_curves() {
-        assert_eq!(sshkey_curve_nid_to_name(715), Some(b"nistp384\0".as_slice()));
+        assert_eq!(
+            sshkey_curve_nid_to_name(715),
+            Some(b"nistp384\0".as_slice())
+        );
         assert_eq!(sshkey_curve_nid_to_name(-1), None);
     }
 
