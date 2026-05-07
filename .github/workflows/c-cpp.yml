@@ -15,9 +15,9 @@ on:
   workflow_dispatch:
   push:
     branches: [ master ]
-    paths: [ '**.c', '**.h', '**.m4', '**.rs', '**.sh', '**/Cargo.toml', '**/Makefile.in', 'configure.ac', '.github/configs', '.github/*.sh', '.github/workflows/c-cpp.yml' ]
+    paths: [ '**.c', '**.h', '**.m4', '**.rs', '**.sh', '**/Cargo.toml', '**/Cargo.lock', '**/Makefile.in', 'configure.ac', '.github/configs', '.github/*.sh', '.github/workflows/c-cpp.yml' ]
   pull_request:
-    paths: [ '**.c', '**.h', '**.m4', '**.rs', '**.sh', '**/Cargo.toml', '**/Makefile.in', 'configure.ac', '.github/configs', '.github/*.sh', '.github/workflows/c-cpp.yml' ]
+    paths: [ '**.c', '**.h', '**.m4', '**.rs', '**.sh', '**/Cargo.toml', '**/Cargo.lock', '**/Makefile.in', 'configure.ac', '.github/configs', '.github/*.sh', '.github/workflows/c-cpp.yml' ]
 
 jobs:
   ci:

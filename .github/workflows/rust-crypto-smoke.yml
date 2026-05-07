@@ -1,0 +1,34 @@
+name: Rust crypto smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore: [ master ]
+    paths:
+      - 'rust-crypto.h'
+      - 'rust/crypto/**'
+      - '.github/workflows/rust-crypto-smoke.yml'
+
+jobs:
+  rust-crypto-smoke:
+    if: github.repository != 'openssh/openssh-portable-selfhosted'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@main
+    - name: setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+    - name: show Rust version
+      run: |
+        rustc --version
+        cargo --version
+    - name: cargo fmt
+      run: cargo fmt --manifest-path rust/crypto/Cargo.toml --check
+    - name: cargo test
+      run: cargo test --manifest-path rust/crypto/Cargo.toml --locked
+    - name: cargo fuzz build
+      run: cargo build --manifest-path rust/crypto/fuzz/Cargo.toml --locked
+    - name: cargo fuzz smoke
+      run: |
+        for target in ed25519_verify ecdh_peer dh_peer ecdsa_parse rsa_parse chachapoly_decrypt config_helpers packet_mac sshkey_metadata sshkey_lifecycle; do
+          cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin "$target" -- -runs=1
+        done
