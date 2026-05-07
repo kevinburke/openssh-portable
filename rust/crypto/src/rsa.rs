@@ -16,12 +16,12 @@ const SSH_DIGEST_SHA1: c_int = 1;
 const SSH_DIGEST_SHA256: c_int = 2;
 const SSH_DIGEST_SHA512: c_int = 4;
 
-const OSSH_RUST_RSA_COMPONENT_N: c_int = 1;
-const OSSH_RUST_RSA_COMPONENT_E: c_int = 2;
-const OSSH_RUST_RSA_COMPONENT_D: c_int = 3;
-const OSSH_RUST_RSA_COMPONENT_IQMP: c_int = 4;
-const OSSH_RUST_RSA_COMPONENT_P: c_int = 5;
-const OSSH_RUST_RSA_COMPONENT_Q: c_int = 6;
+pub(crate) const OSSH_RUST_RSA_COMPONENT_N: c_int = 1;
+pub(crate) const OSSH_RUST_RSA_COMPONENT_E: c_int = 2;
+pub(crate) const OSSH_RUST_RSA_COMPONENT_D: c_int = 3;
+pub(crate) const OSSH_RUST_RSA_COMPONENT_IQMP: c_int = 4;
+pub(crate) const OSSH_RUST_RSA_COMPONENT_P: c_int = 5;
+pub(crate) const OSSH_RUST_RSA_COMPONENT_Q: c_int = 6;
 const SSHKEY_PRIVATE_PEM: c_int = 1;
 const SSHKEY_PRIVATE_PKCS8: c_int = 2;
 
