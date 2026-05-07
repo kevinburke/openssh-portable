@@ -188,12 +188,12 @@ cd /tmp/openssh-ci
 Then run the main checks from CI:
 
 ```sh
-cargo test --manifest-path rust/crypto/Cargo.toml
-cargo build --manifest-path rust/crypto/fuzz/Cargo.toml
-cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin ed25519_verify -- -runs=1
-cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin dh_peer -- -runs=1
-cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin ecdsa_parse -- -runs=1
-cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin rsa_parse -- -runs=1
+cargo test --manifest-path rust/crypto/Cargo.toml --locked
+cargo build --manifest-path rust/crypto/fuzz/Cargo.toml --locked
+cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin ed25519_verify -- -runs=1
+cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin dh_peer -- -runs=1
+cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin ecdsa_parse -- -runs=1
+cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin rsa_parse -- -runs=1
 make -j1 unit
 make -j1 t-exec
 ```

@@ -270,7 +270,6 @@ Rust-backed today:
 
 Still on the existing C path today:
 
-- MD5 and SHA1 digest support
 - PKCS#11 and security-key code paths
 - SK / FIDO private-key deserialization inside decrypted
   `openssh-key-v1` private sections
@@ -312,12 +311,12 @@ around OpenSSL.
 The `rust-crypto` GitHub Actions job exercises the Rust backend directly.
 Today it runs:
 
-- `cargo test --manifest-path rust/crypto/Cargo.toml`
-- `cargo build --manifest-path rust/crypto/fuzz/Cargo.toml`
-- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin ed25519_verify -- -runs=1`
-- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin dh_peer -- -runs=1`
-- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin ecdsa_parse -- -runs=1`
-- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --bin rsa_parse -- -runs=1`
+- `cargo test --manifest-path rust/crypto/Cargo.toml --locked`
+- `cargo build --manifest-path rust/crypto/fuzz/Cargo.toml --locked`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin ed25519_verify -- -runs=1`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin dh_peer -- -runs=1`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin ecdsa_parse -- -runs=1`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin rsa_parse -- -runs=1`
 - the OpenSSH `unit` and `t-exec` targets under `--with-rust-crypto`
 
 That gives both Rust-native coverage and OpenSSH integration coverage in CI.
@@ -335,7 +334,7 @@ The main local test commands for the current branch are:
 Rust unit and property tests:
 
 ```sh
-cargo test --manifest-path rust/crypto/Cargo.toml
+cargo test --manifest-path rust/crypto/Cargo.toml --locked
 ```
 
 OpenSSH unit tests in Rust mode:
@@ -879,7 +878,7 @@ The Rust crate now has standalone libFuzzer targets under `rust/crypto/fuzz`.
 Build all fuzz targets:
 
 ```sh
-cargo build --manifest-path rust/crypto/fuzz/Cargo.toml
+cargo build --manifest-path rust/crypto/fuzz/Cargo.toml --locked
 ```
 
 For real coverage-guided fuzzing, install `cargo-fuzz` and use nightly:
@@ -891,13 +890,13 @@ cargo install cargo-fuzz
 Run a short smoke test:
 
 ```sh
-cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
+cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked \
   --bin ed25519_verify -- -runs=1
-cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
+cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked \
   --bin sshkey_metadata -- -runs=1
-cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
+cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked \
   --bin sshkey_lifecycle -- -runs=1
-cargo run --manifest-path rust/crypto/fuzz/Cargo.toml \
+cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked \
   --bin packet_mac -- -runs=1
 ```
 
@@ -935,7 +934,7 @@ Current targets:
 Notes:
 
 - the CI job only does smoke runs of the configured Rust fuzz targets
-- `cargo run` is fine for a quick execute/build sanity check
+- `cargo run --locked` is fine for a quick execute/build sanity check
 - `cargo +nightly fuzz run ...` is the real coverage-guided path
 
 ## Useful targets
@@ -949,6 +948,8 @@ make rust-crypto-build
 The crate lives at:
 
 - `rust/crypto/Cargo.toml`
+- `rust/crypto/Cargo.lock`
+- `rust/crypto/fuzz/Cargo.lock`
 - `rust/crypto/src/lib.rs`
 
 The generated static library is placed under:
@@ -959,11 +960,21 @@ The generated static library is placed under:
 
 ## Current scope
 
-The intended next steps are described in `RUST_BACKEND_PLAN.md`.
-
 Until those phases land, do not assume that `--with-rust-crypto` means:
 
 - full replacement for libcrypto,
 - Rust-backed PKCS#11 or security-key support,
 - full Rust transport cipher coverage,
 - feature parity with the default OpenSSL build.
+
+Near-term roadmap:
+
+- keep Rust dependency resolution pinned with the committed Cargo lockfiles
+  and run CI/local cargo checks with `--locked`
+- add explicit C/Rust ABI drift checks for constants, struct sizes, and field
+  offsets mirrored across `rust-crypto.h` and `rust/crypto/src`
+- audit Rust FFI entry points for panic and unsafe-boundary behavior
+- debug the Cygwin RSA skips in `regress/keyscan.sh` and
+  `regress/cert-userkey.sh`
+- continue reducing the `sshkey.c` ownership split once the FFI guardrails are
+  stronger
