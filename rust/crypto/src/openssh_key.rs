@@ -118,7 +118,10 @@ pub(crate) fn openssh_private2_decode_write(
     write_prefix(out, out_len, &decoded)
 }
 
-pub(crate) fn openssh_private2_parse(decoded: *const u8, decoded_len: usize) -> Option<OpenSshPrivate2Parse> {
+pub(crate) fn openssh_private2_parse(
+    decoded: *const u8,
+    decoded_len: usize,
+) -> Option<OpenSshPrivate2Parse> {
     let decoded = read_slice(decoded, decoded_len)?;
     parse_private2_header(decoded)
 }
@@ -335,7 +338,9 @@ fn parse_private2_plaintext(decrypted: &[u8]) -> Option<OpenSshPrivate2Plaintext
 }
 
 fn parse_public_key_line(input: &[u8]) -> Option<OpenSshPublicLineParse> {
-    let key_type_len = input.iter().position(|byte| *byte == b' ' || *byte == b'\t')?;
+    let key_type_len = input
+        .iter()
+        .position(|byte| *byte == b' ' || *byte == b'\t')?;
     let key_type_offset = 0usize;
     if key_type_len == 0 {
         return None;
@@ -401,13 +406,12 @@ fn curve_nid_for_key_type(key_type: &[u8]) -> Option<i32> {
 #[cfg(test)]
 mod tests {
     use super::{
-        openssh_private2_parse, openssh_private2_parse_plaintext,
-        openssh_public_blob_decode_len, openssh_public_blob_decode_write,
-        openssh_public_line_parse, OSSH_RUST_PRIVATE2_KDF_BCRYPT, OSSH_RUST_PRIVATE2_KDF_NONE,
+        openssh_private2_parse, openssh_private2_parse_plaintext, openssh_public_blob_decode_len,
+        openssh_public_blob_decode_write, openssh_public_line_parse, OSSH_RUST_PRIVATE2_KDF_BCRYPT,
+        OSSH_RUST_PRIVATE2_KDF_NONE,
     };
 
-    const ED25519_1: &[u8] =
-        include_bytes!("../../../regress/unittests/sshkey/testdata/ed25519_1");
+    const ED25519_1: &[u8] = include_bytes!("../../../regress/unittests/sshkey/testdata/ed25519_1");
     const ED25519_1_PW: &[u8] =
         include_bytes!("../../../regress/unittests/sshkey/testdata/ed25519_1_pw");
 
@@ -433,7 +437,8 @@ mod tests {
 
     #[test]
     fn parses_bcrypt_openssh_private_key_header() {
-        let decoded_len = super::openssh_private2_decode_len(ED25519_1_PW.as_ptr(), ED25519_1_PW.len());
+        let decoded_len =
+            super::openssh_private2_decode_len(ED25519_1_PW.as_ptr(), ED25519_1_PW.len());
         assert!(decoded_len > 0);
         let mut decoded = vec![0u8; decoded_len];
         assert_eq!(
@@ -453,7 +458,10 @@ mod tests {
 
     #[test]
     fn rejects_missing_markers() {
-        assert_eq!(super::openssh_private2_decode_len(b"not a key".as_ptr(), 9), 0);
+        assert_eq!(
+            super::openssh_private2_decode_len(b"not a key".as_ptr(), 9),
+            0
+        );
     }
 
     fn decode_unencrypted_payload(key: &[u8]) -> Vec<u8> {
@@ -470,7 +478,8 @@ mod tests {
             )
         );
         let header = openssh_private2_parse(decoded.as_ptr(), decoded.len()).unwrap();
-        let decrypted = &decoded[header.encrypted_offset..header.encrypted_offset + header.encrypted_len];
+        let decrypted =
+            &decoded[header.encrypted_offset..header.encrypted_offset + header.encrypted_len];
         assert!(decrypted.len() >= 8);
         assert_eq!(&decrypted[..4], &decrypted[4..8]);
         decrypted[8..].to_vec()
@@ -530,16 +539,23 @@ mod tests {
         let line = b"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFOG6kY7Rf4UtCFvPwKgo/BztXck2xC4a2WyA34XtIwZ comment here";
         let parsed = openssh_public_line_parse(line.as_ptr(), line.len()).unwrap();
 
-        assert_eq!(&line[parsed.key_type_offset..parsed.key_type_offset + parsed.key_type_len], b"ssh-ed25519");
+        assert_eq!(
+            &line[parsed.key_type_offset..parsed.key_type_offset + parsed.key_type_len],
+            b"ssh-ed25519"
+        );
         assert_eq!(&line[parsed.comment_offset..], b"comment here");
     }
 
     #[test]
     fn parses_public_key_line_without_comment() {
-        let line = b"ssh-ed25519\tAAAAC3NzaC1lZDI1NTE5AAAAIFOG6kY7Rf4UtCFvPwKgo/BztXck2xC4a2WyA34XtIwZ";
+        let line =
+            b"ssh-ed25519\tAAAAC3NzaC1lZDI1NTE5AAAAIFOG6kY7Rf4UtCFvPwKgo/BztXck2xC4a2WyA34XtIwZ";
         let parsed = openssh_public_line_parse(line.as_ptr(), line.len()).unwrap();
 
-        assert_eq!(&line[parsed.key_type_offset..parsed.key_type_offset + parsed.key_type_len], b"ssh-ed25519");
+        assert_eq!(
+            &line[parsed.key_type_offset..parsed.key_type_offset + parsed.key_type_len],
+            b"ssh-ed25519"
+        );
         assert_eq!(parsed.comment_offset, line.len());
     }
 
@@ -549,7 +565,10 @@ mod tests {
             b"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFOG6kY7Rf4UtCFvPwKgo/BztXck2xC4a2WyA34XtIwZ\n";
         let parsed = openssh_public_line_parse(line.as_ptr(), line.len()).unwrap();
 
-        assert_eq!(&line[parsed.key_type_offset..parsed.key_type_offset + parsed.key_type_len], b"ssh-ed25519");
+        assert_eq!(
+            &line[parsed.key_type_offset..parsed.key_type_offset + parsed.key_type_len],
+            b"ssh-ed25519"
+        );
         assert_eq!(parsed.comment_offset, line.len() - 1);
     }
 
@@ -561,7 +580,8 @@ mod tests {
 
     #[test]
     fn rejects_public_key_line_with_leading_whitespace() {
-        let line = b" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFOG6kY7Rf4UtCFvPwKgo/BztXck2xC4a2WyA34XtIwZ";
+        let line =
+            b" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFOG6kY7Rf4UtCFvPwKgo/BztXck2xC4a2WyA34XtIwZ";
         assert!(openssh_public_line_parse(line.as_ptr(), line.len()).is_none());
     }
 
