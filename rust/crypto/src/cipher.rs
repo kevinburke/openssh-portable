@@ -269,23 +269,32 @@ fn chacha20_block(
     nonce: &[u8; CHACHA_NONCE_LENGTH],
     counter: u64,
 ) -> [u8; CHACHA_BLOCK_SIZE] {
+    fn read_le_u32(input: &[u8], offset: usize) -> u32 {
+        u32::from_le_bytes([
+            input[offset],
+            input[offset + 1],
+            input[offset + 2],
+            input[offset + 3],
+        ])
+    }
+
     let constants = *b"expand 32-byte k";
     let mut state = [0u32; 16];
     let mut working = [0u32; 16];
     let mut out = [0u8; CHACHA_BLOCK_SIZE];
 
-    state[0] = u32::from_le_bytes(constants[0..4].try_into().unwrap());
-    state[1] = u32::from_le_bytes(constants[4..8].try_into().unwrap());
-    state[2] = u32::from_le_bytes(constants[8..12].try_into().unwrap());
-    state[3] = u32::from_le_bytes(constants[12..16].try_into().unwrap());
+    state[0] = read_le_u32(&constants, 0);
+    state[1] = read_le_u32(&constants, 4);
+    state[2] = read_le_u32(&constants, 8);
+    state[3] = read_le_u32(&constants, 12);
     for i in 0..8 {
         let start = i * 4;
-        state[4 + i] = u32::from_le_bytes(key[start..start + 4].try_into().unwrap());
+        state[4 + i] = read_le_u32(key, start);
     }
     state[12] = counter as u32;
     state[13] = (counter >> 32) as u32;
-    state[14] = u32::from_le_bytes(nonce[0..4].try_into().unwrap());
-    state[15] = u32::from_le_bytes(nonce[4..8].try_into().unwrap());
+    state[14] = read_le_u32(nonce, 0);
+    state[15] = read_le_u32(nonce, 4);
 
     working.copy_from_slice(&state);
     for _ in 0..10 {
@@ -335,9 +344,10 @@ fn quarterround_state(state: &mut [u32; 16], ai: usize, bi: usize, ci: usize, di
 }
 
 fn poly1305_auth(message: &[u8], key: &[u8; POLY1305_KEY_LENGTH]) -> [u8; POLY1305_TAG_LENGTH] {
-    let tag = Poly1305::new_from_slice(key)
-        .unwrap()
-        .compute_unpadded(message);
+    let Ok(mac) = Poly1305::new_from_slice(key) else {
+        return [0u8; POLY1305_TAG_LENGTH];
+    };
+    let tag = mac.compute_unpadded(message);
     let mut out = [0u8; POLY1305_TAG_LENGTH];
     out.copy_from_slice(tag.as_slice());
     out
