@@ -21,6 +21,8 @@ jobs:
       run: |
         rustc --version
         cargo --version
+    - name: check production panic boundaries
+      run: python3 rust/crypto/check-no-production-panics.py
     - name: cargo fmt
       run: cargo fmt --manifest-path rust/crypto/Cargo.toml --check
     - name: cargo test
