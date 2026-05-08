@@ -311,15 +311,25 @@ around OpenSSL.
 The `rust-crypto` GitHub Actions job exercises the Rust backend directly.
 Today it runs:
 
+- `python3 rust/crypto/check-no-production-panics.py`
+- `cargo fmt --manifest-path rust/crypto/Cargo.toml --check`
 - `cargo test --manifest-path rust/crypto/Cargo.toml --locked`
 - `cargo build --manifest-path rust/crypto/fuzz/Cargo.toml --locked`
 - `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin ed25519_verify -- -runs=1`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin ecdh_peer -- -runs=1`
 - `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin dh_peer -- -runs=1`
 - `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin ecdsa_parse -- -runs=1`
 - `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin rsa_parse -- -runs=1`
-- the OpenSSH `unit` and `t-exec` targets under `--with-rust-crypto`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin chachapoly_decrypt -- -runs=1`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin config_helpers -- -runs=1`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin packet_mac -- -runs=1`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin sshkey_metadata -- -runs=1`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin sshkey_lifecycle -- -runs=1`
 
-That gives both Rust-native coverage and OpenSSH integration coverage in CI.
+That gives Rust-native coverage in a small job that usually finishes in about
+two minutes. Broader OpenSSH integration coverage (`unit`, `t-exec`, Docker
+CI repros, and VM jobs) is now run deliberately before tags/merge points rather
+than on every branch push.
 
 For reproducing `rust-crypto`, `openssl-noec`, and similar CI jobs locally in
 Docker, see [CI_REPRO.md](CI_REPRO.md).
@@ -334,6 +344,7 @@ The main local test commands for the current branch are:
 Rust unit and property tests:
 
 ```sh
+python3 rust/crypto/check-no-production-panics.py
 cargo test --manifest-path rust/crypto/Cargo.toml --locked
 ```
 
@@ -971,9 +982,11 @@ Near-term roadmap:
 
 - keep Rust dependency resolution pinned with the committed Cargo lockfiles
   and run CI/local cargo checks with `--locked`
-- add explicit C/Rust ABI drift checks for constants, struct sizes, and field
-  offsets mirrored across `rust-crypto.h` and `rust/crypto/src`
-- audit Rust FFI entry points for panic and unsafe-boundary behavior
+- keep the Rust smoke workflow cheap enough to run on each relevant branch
+  push, while leaving broader OpenSSH integration jobs manual or pre-merge
+- keep the C/Rust ABI drift tests for constants, struct sizes, and field
+  offsets mirrored across `rust-crypto.h` and `rust/crypto/src` green
+- continue auditing Rust FFI entry points for unsafe-boundary behavior
 - debug the Cygwin RSA skips in `regress/keyscan.sh` and
   `regress/cert-userkey.sh`
 - continue reducing the `sshkey.c` ownership split once the FFI guardrails are
