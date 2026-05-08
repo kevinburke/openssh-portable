@@ -220,26 +220,32 @@ fn standard_group_from_params(generator: &[u8], modulus: &[u8]) -> Option<&'stat
         standard_group(OSSH_RUST_DH_GROUP18),
     ];
 
-    groups.into_iter().find(|group| {
+    groups.into_iter().flatten().find(|group| {
         generator == group.generator_bytes.as_ref() && modulus == group.modulus_bytes.as_ref()
     })
 }
 
-fn standard_group(group_id: c_int) -> &'static RustDhGroup {
+fn standard_group(group_id: c_int) -> Option<&'static RustDhGroup> {
     match group_id {
         OSSH_RUST_DH_GROUP14 => {
-            static GROUP: OnceLock<RustDhGroup> = OnceLock::new();
-            GROUP.get_or_init(|| RustDhGroup::new(OSSH_RUST_DH_GROUP14).expect("group14"))
+            static GROUP: OnceLock<Option<RustDhGroup>> = OnceLock::new();
+            GROUP
+                .get_or_init(|| RustDhGroup::new(OSSH_RUST_DH_GROUP14))
+                .as_ref()
         }
         OSSH_RUST_DH_GROUP16 => {
-            static GROUP: OnceLock<RustDhGroup> = OnceLock::new();
-            GROUP.get_or_init(|| RustDhGroup::new(OSSH_RUST_DH_GROUP16).expect("group16"))
+            static GROUP: OnceLock<Option<RustDhGroup>> = OnceLock::new();
+            GROUP
+                .get_or_init(|| RustDhGroup::new(OSSH_RUST_DH_GROUP16))
+                .as_ref()
         }
         OSSH_RUST_DH_GROUP18 => {
-            static GROUP: OnceLock<RustDhGroup> = OnceLock::new();
-            GROUP.get_or_init(|| RustDhGroup::new(OSSH_RUST_DH_GROUP18).expect("group18"))
+            static GROUP: OnceLock<Option<RustDhGroup>> = OnceLock::new();
+            GROUP
+                .get_or_init(|| RustDhGroup::new(OSSH_RUST_DH_GROUP18))
+                .as_ref()
         }
-        _ => panic!("unsupported standard DH group"),
+        _ => None,
     }
 }
 
