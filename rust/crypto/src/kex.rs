@@ -47,6 +47,10 @@ const ECDH_NISTP384_PUBLIC_LENGTH: usize = 97;
 const ECDH_NISTP521_SECRET_LENGTH: usize = 66;
 const ECDH_NISTP521_PUBLIC_LENGTH: usize = 133;
 
+fn slice_array<const N: usize>(input: &[u8]) -> Result<[u8; N], ()> {
+    input.try_into().map_err(|_| ())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EcdhCurve {
     NistP256,
@@ -379,13 +383,10 @@ pub(crate) fn mlkem768x25519_keypair(
     client_blob[..MLKEM768_PUBLIC_KEY_LENGTH].copy_from_slice(&public_bytes);
     mlkem_secret.copy_from_slice(&secret_bytes);
 
-    OsRng.fill_bytes(curve25519_secret);
-    let curve_public = x25519(
-        curve25519_secret
-            .try_into()
-            .expect("curve25519 secret length"),
-        X25519_BASEPOINT_BYTES,
-    );
+    let mut curve_secret = [0u8; CURVE25519_KEY_LENGTH];
+    OsRng.fill_bytes(&mut curve_secret);
+    curve25519_secret.copy_from_slice(&curve_secret);
+    let curve_public = x25519(curve_secret, X25519_BASEPOINT_BYTES);
     client_blob[MLKEM768_PUBLIC_KEY_LENGTH..].copy_from_slice(&curve_public);
     0
 }
@@ -411,9 +412,12 @@ pub(crate) fn mlkem768x25519_enc(
     let server_blob = unsafe { slice::from_raw_parts_mut(server_blob, server_blob_len) };
     let shared_hash = unsafe { slice::from_raw_parts_mut(shared_hash, shared_hash_len) };
     let (mlkem_public, curve25519_public) = client_blob.split_at(MLKEM768_PUBLIC_KEY_LENGTH);
+    let Ok(mlkem_public) = slice_array::<MLKEM768_PUBLIC_KEY_LENGTH>(mlkem_public) else {
+        return -1;
+    };
 
     let encaps_key: ml_kem_768::EncapsKey =
-        match ml_kem_768::EncapsKey::try_from_bytes(mlkem_public.try_into().unwrap()) {
+        match ml_kem_768::EncapsKey::try_from_bytes(mlkem_public) {
             Ok(key) => key,
             Err(_) => return -1,
         };
@@ -476,13 +480,19 @@ pub(crate) fn mlkem768x25519_dec(
         unsafe { slice::from_raw_parts(curve25519_secret, curve25519_secret_len) };
     let shared_hash = unsafe { slice::from_raw_parts_mut(shared_hash, shared_hash_len) };
     let (ciphertext, server_curve_public) = server_blob.split_at(MLKEM768_CIPHERTEXT_LENGTH);
+    let Ok(mlkem_secret) = slice_array::<MLKEM768_SECRET_KEY_LENGTH>(mlkem_secret) else {
+        return -1;
+    };
+    let Ok(ciphertext) = slice_array::<MLKEM768_CIPHERTEXT_LENGTH>(ciphertext) else {
+        return -1;
+    };
 
     let decaps_key: ml_kem_768::DecapsKey =
-        match ml_kem_768::DecapsKey::try_from_bytes(mlkem_secret.try_into().unwrap()) {
+        match ml_kem_768::DecapsKey::try_from_bytes(mlkem_secret) {
             Ok(key) => key,
             Err(_) => return -1,
         };
-    let ciphertext = match ml_kem_768::CipherText::try_from_bytes(ciphertext.try_into().unwrap()) {
+    let ciphertext = match ml_kem_768::CipherText::try_from_bytes(ciphertext) {
         Ok(ct) => ct,
         Err(_) => return -1,
     };
@@ -527,13 +537,10 @@ pub(crate) fn sntrup761x25519_keypair(
     client_blob[..SNTRUP761_PUBLIC_KEY_LENGTH].copy_from_slice(encapsulation_key.as_ref());
     sntrup_secret.copy_from_slice(decapsulation_key.as_ref());
 
-    OsRng.fill_bytes(curve25519_secret);
-    let curve_public = x25519(
-        curve25519_secret
-            .try_into()
-            .expect("curve25519 secret length"),
-        X25519_BASEPOINT_BYTES,
-    );
+    let mut curve_secret = [0u8; CURVE25519_KEY_LENGTH];
+    OsRng.fill_bytes(&mut curve_secret);
+    curve25519_secret.copy_from_slice(&curve_secret);
+    let curve_public = x25519(curve_secret, X25519_BASEPOINT_BYTES);
     client_blob[SNTRUP761_PUBLIC_KEY_LENGTH..].copy_from_slice(&curve_public);
     0
 }

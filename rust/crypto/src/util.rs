@@ -2503,8 +2503,7 @@ pub(crate) fn host_hash_write(
 
     let result = hmac_sha1(&salt, host);
     let encoded = format!(
-        "{}{}{}{}",
-        core::str::from_utf8(HOST_HASH_MAGIC).unwrap(),
+        "|1|{}{}{}",
         Base64::encode_string(&salt),
         HOST_HASH_DELIM as char,
         Base64::encode_string(&result)
@@ -3285,7 +3284,8 @@ pub(crate) fn parse_user_host_port(
         let colon = host_part.iter().position(|byte| *byte == b':');
         let slash = host_part.iter().position(|byte| *byte == b'/');
         match (colon, slash) {
-            (_, Some(slash_pos)) if colon.is_none() || slash_pos < colon.unwrap() => return None,
+            (None, Some(_)) => return None,
+            (Some(colon_pos), Some(slash_pos)) if slash_pos < colon_pos => return None,
             (Some(colon_pos), _) => {
                 if colon_pos == 0 || colon_pos + 1 >= host_part.len() {
                     return None;
