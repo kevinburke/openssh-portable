@@ -51,6 +51,7 @@
 
 #include "ssh2.h"
 #include "ssherr.h"
+#include "log.h"
 #include "misc.h"
 #include "sshbuf.h"
 #include "cipher.h"
@@ -971,27 +972,26 @@ sshkey_new(int type)
 	struct sshkey *k;
 	const struct sshkey_impl *impl = NULL;
 #ifdef WITH_RUST_CRYPTO
-	int can_new = 0, have_plan = 0, is_cert = 0;
+	int can_new = 0, is_cert = 0;
 	int impl_index = OSSH_RUST_NO_IMPL_INDEX;
 #endif
 
 #ifdef WITH_RUST_CRYPTO
 	if (ossh_rust_sshkey_new_plan(type,
 	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
-	    keyimpl_nentries(), &can_new, &impl_index, &is_cert) == 0) {
-		have_plan = 1;
-		if (!can_new)
-			return NULL;
-		if (impl_index != OSSH_RUST_NO_IMPL_INDEX)
-			impl = keyimpls[impl_index];
-	} else
-#endif
+	    keyimpl_nentries(), &can_new, &impl_index, &is_cert) != 0 ||
+	    !can_new)
+		return NULL;
+	if (impl_index != OSSH_RUST_NO_IMPL_INDEX)
+		impl = keyimpls[impl_index];
+#else
 	if (type != KEY_UNSPEC &&
 	    (impl = sshkey_impl_from_type(type)) == NULL) {
 		if (!(key_type_is_ecdsa_variant(type) &&
 		    sshkey_type_plain(type) == KEY_ECDSA))
 			return NULL;
 	}
+#endif
 
 	/* All non-certificate types may act as CAs */
 	if ((k = calloc(1, sizeof(*k))) == NULL)
@@ -1007,7 +1007,7 @@ sshkey_new(int type)
 #ifndef WITH_RUST_CRYPTO
 	if (sshkey_is_cert(k)) {
 #else
-	if (have_plan ? is_cert : sshkey_is_cert(k)) {
+	if (is_cert) {
 #endif
 		if ((k->cert = cert_new()) == NULL) {
 			sshkey_free(k);
@@ -1114,10 +1114,11 @@ sshkey_free_contents(struct sshkey *k)
 	impl = NULL;
 	if (ossh_rust_sshkey_free_contents_plan(k->type,
 	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
-	    keyimpl_nentries(), &has_cert, &impl_index) == 0 &&
-	    impl_index != OSSH_RUST_NO_IMPL_INDEX) {
+	    keyimpl_nentries(), &has_cert, &impl_index) != 0)
+		fatal_f("Rust sshkey free-contents planning failed for type %d",
+		    k->type);
+	if (impl_index != OSSH_RUST_NO_IMPL_INDEX)
 		impl = keyimpls[impl_index];
-	}
 	if (impl != NULL && impl->funcs->cleanup != NULL)
 		impl->funcs->cleanup(k);
 	if (has_cert)
