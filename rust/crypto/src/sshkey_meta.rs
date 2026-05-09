@@ -132,13 +132,24 @@ pub(crate) fn sshkey_type_can_new(
     entries: *const *const RustSshkeyImpl,
     nentries: usize,
 ) -> Option<bool> {
+    sshkey_new_plan(type_, entries, nentries).map(|(can_new, _, _)| can_new)
+}
+
+pub(crate) fn sshkey_new_plan(
+    type_: c_int,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Option<(bool, c_int, bool)> {
     if type_ == KEY_UNSPEC {
-        return Some(true);
+        return Some((true, NO_IMPL_INDEX, false));
     }
-    if sshkey_impl_index_from_type(type_, entries, nentries).is_some() {
-        return Some(true);
+    if let Some(index) = sshkey_impl_index_from_type(type_, entries, nentries) {
+        return Some((true, index as c_int, sshkey_type_is_cert(type_)));
     }
-    Some(is_ecdsa_variant(type_) && sshkey_type_plain(type_) == KEY_ECDSA)
+    if is_ecdsa_variant(type_) && sshkey_type_plain(type_) == KEY_ECDSA {
+        return Some((true, NO_IMPL_INDEX, sshkey_type_is_cert(type_)));
+    }
+    Some((false, NO_IMPL_INDEX, false))
 }
 
 pub(crate) fn sshkey_generate_plan(
@@ -907,6 +918,46 @@ mod tests {
         assert_eq!(
             sshkey_type_can_new(4242, entry_ptrs.as_ptr(), entry_ptrs.len()),
             Some(false)
+        );
+    }
+
+    #[test]
+    fn new_plan_tracks_constructor_dispatch_and_cert_alloc() {
+        let entry_ptrs = entry_ptrs();
+        assert_eq!(
+            sshkey_new_plan(KEY_UNSPEC, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some((true, NO_IMPL_INDEX, false))
+        );
+        assert_eq!(
+            sshkey_new_plan(KEY_ED25519, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some((
+                true,
+                sshkey_impl_index_from_type(KEY_ED25519, entry_ptrs.as_ptr(), entry_ptrs.len())
+                    .unwrap() as c_int,
+                false,
+            ))
+        );
+        assert_eq!(
+            sshkey_new_plan(KEY_ED25519_CERT, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some((
+                true,
+                sshkey_impl_index_from_type(KEY_ED25519_CERT, entry_ptrs.as_ptr(), entry_ptrs.len())
+                    .unwrap() as c_int,
+                true,
+            ))
+        );
+        assert_eq!(
+            sshkey_new_plan(KEY_ECDSA_CERT, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some((
+                true,
+                sshkey_impl_index_from_type(KEY_ECDSA_CERT, entry_ptrs.as_ptr(), entry_ptrs.len())
+                    .unwrap() as c_int,
+                true,
+            ))
+        );
+        assert_eq!(
+            sshkey_new_plan(KEY_ECDSA_SK, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Some((false, NO_IMPL_INDEX, false))
         );
     }
 

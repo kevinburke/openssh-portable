@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-#define OSSH_RUST_CRYPTO_ABI_VERSION 48U
+#define OSSH_RUST_CRYPTO_ABI_VERSION 49U
 #define OSSH_RUST_PARSE_STATUS_OK 0
 #define OSSH_RUST_PARSE_STATUS_INVALID_FORMAT 1
 #define OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE 2
@@ -549,6 +549,9 @@ int ossh_rust_sshkey_type_is_sk(int type, int *out);
 int ossh_rust_sshkey_type_can_new(int type,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     int *out);
+int ossh_rust_sshkey_new_plan(int type,
+    const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
+    int *out_can_new, int *out_impl_index, int *out_is_cert);
 int ossh_rust_sshkey_generate_plan(int type,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     int *out_type);
