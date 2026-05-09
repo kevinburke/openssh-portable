@@ -9,5 +9,5 @@
  * peer heuristics. Expose the Rust backend release separately for version
  * reporting and the default banner addendum.
  */
-#define SSH_VERSION_ADDENDUM	"rust-crypto-v0.1.2"
+#define SSH_VERSION_ADDENDUM	"rust-crypto-v0.1.5"
 #define SSH_RELEASE	SSH_RELEASE_BASE " " SSH_VERSION_ADDENDUM
