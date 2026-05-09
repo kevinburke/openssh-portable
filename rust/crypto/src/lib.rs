@@ -81,7 +81,6 @@ use sshkey_meta::{
     sshkey_serialize_plan as rust_sshkey_serialize_plan,
     sshkey_sigalg_by_name as rust_sshkey_sigalg_by_name,
     sshkey_sigalg_match_plan as rust_sshkey_sigalg_match_plan,
-    sshkey_type_can_new as rust_sshkey_type_can_new,
     sshkey_type_certified as rust_sshkey_type_certified,
     sshkey_type_from_name as rust_sshkey_type_from_name,
     sshkey_type_is_cert as rust_sshkey_type_is_cert, sshkey_type_is_sk as rust_sshkey_type_is_sk,
@@ -3088,27 +3087,6 @@ pub extern "C" fn ossh_rust_sshkey_type_is_sk(type_: c_int, out: *mut c_int) -> 
         *out = c_int::from(rust_sshkey_type_is_sk(type_));
     }
     0
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn ossh_rust_sshkey_type_can_new(
-    type_: c_int,
-    entries: *const *const RustSshkeyImplEntry,
-    nentries: usize,
-    out: *mut c_int,
-) -> c_int {
-    if out.is_null() {
-        return -1;
-    }
-    match rust_sshkey_type_can_new(type_, entries, nentries) {
-        Some(parsed) => {
-            unsafe {
-                *out = c_int::from(parsed);
-            }
-            0
-        }
-        None => -1,
-    }
 }
 
 #[unsafe(no_mangle)]
