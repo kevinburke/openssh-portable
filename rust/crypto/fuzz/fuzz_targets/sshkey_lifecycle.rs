@@ -13,9 +13,9 @@ use rust_crypto::{
     ossh_rust_sshkey_free_contents_plan, ossh_rust_sshkey_from_blob_plan,
     ossh_rust_sshkey_from_private_plan, ossh_rust_sshkey_generate_plan,
     ossh_rust_sshkey_private_deserialize_plan, ossh_rust_sshkey_private_serialize_plan,
-    ossh_rust_sshkey_serialize_plan, ossh_rust_sshkey_type_can_new,
-    ossh_rust_sshkey_type_from_name, ossh_rust_sshkey_type_is_cert, ossh_rust_sshkey_type_plain,
-    RustPrivate2HeaderParse, RustPrivate2PlaintextParse, RustPublicLineParse, RustSshkeyImplEntry,
+    ossh_rust_sshkey_serialize_plan, ossh_rust_sshkey_new_plan, ossh_rust_sshkey_type_from_name,
+    ossh_rust_sshkey_type_is_cert, ossh_rust_sshkey_type_plain, RustPrivate2HeaderParse,
+    RustPrivate2PlaintextParse, RustPublicLineParse, RustSshkeyImplEntry,
 };
 
 const KEY_RSA: c_int = 0;
@@ -205,7 +205,14 @@ fuzz_target!(|input: Input| {
     );
     let _ = ossh_rust_sshkey_type_is_cert(lhs_type, &mut out_bool);
     let _ = ossh_rust_sshkey_type_plain(lhs_type, &mut out_type);
-    let _ = ossh_rust_sshkey_type_can_new(lhs_type, entries.as_ptr(), entries.len(), &mut out_bool);
+    let _ = ossh_rust_sshkey_new_plan(
+        lhs_type,
+        entries.as_ptr(),
+        entries.len(),
+        &mut out_bool,
+        &mut out_impl_index,
+        &mut out_dispatch_type,
+    );
     let _ = ossh_rust_sshkey_generate_plan(lhs_type, entries.as_ptr(), entries.len(), &mut out_type);
     let _ = ossh_rust_sshkey_serialize_plan(
         lhs_type,
