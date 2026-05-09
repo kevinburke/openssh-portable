@@ -75,6 +75,7 @@ use sshkey_meta::{
     sshkey_impl_index_from_type_nid as rust_sshkey_impl_index_from_type_nid,
     sshkey_impl_name_from_type_nid as rust_sshkey_impl_name_from_type_nid,
     sshkey_names_valid_include as rust_sshkey_names_valid_include,
+    sshkey_new_plan as rust_sshkey_new_plan,
     sshkey_private_deserialize_plan as rust_sshkey_private_deserialize_plan,
     sshkey_private_serialize_plan as rust_sshkey_private_serialize_plan,
     sshkey_serialize_plan as rust_sshkey_serialize_plan,
@@ -113,7 +114,7 @@ use util::{
     OPT_DEQUOTE_MISSING_START,
 };
 
-const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 48;
+const OSSH_RUST_CRYPTO_ABI_VERSION: u32 = 49;
 const OSSH_RUST_PARSE_STATUS_OK: c_int = 0;
 const OSSH_RUST_PARSE_STATUS_INVALID_FORMAT: c_int = 1;
 const OSSH_RUST_PARSE_STATUS_WRONG_PASSPHRASE: c_int = 2;
@@ -3103,6 +3104,31 @@ pub extern "C" fn ossh_rust_sshkey_type_can_new(
         Some(parsed) => {
             unsafe {
                 *out = c_int::from(parsed);
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_new_plan(
+    type_: c_int,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    out_can_new: *mut c_int,
+    out_impl_index: *mut c_int,
+    out_is_cert: *mut c_int,
+) -> c_int {
+    if out_can_new.is_null() || out_impl_index.is_null() || out_is_cert.is_null() {
+        return -1;
+    }
+    match rust_sshkey_new_plan(type_, entries, nentries) {
+        Some((can_new, impl_index, is_cert)) => {
+            unsafe {
+                *out_can_new = c_int::from(can_new);
+                *out_impl_index = impl_index;
+                *out_is_cert = c_int::from(is_cert);
             }
             0
         }
