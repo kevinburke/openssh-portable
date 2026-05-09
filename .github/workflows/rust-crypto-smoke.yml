@@ -4,10 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches-ignore: [ master ]
-    paths:
-      - 'rust-crypto.h'
-      - 'rust/crypto/**'
-      - '.github/workflows/rust-crypto-smoke.yml'
+    tags:
+      - 'rust-crypto-v*'
 
 jobs:
   rust-crypto-smoke:
@@ -21,6 +19,21 @@ jobs:
       run: |
         rustc --version
         cargo --version
+    - name: check release marker
+      shell: bash
+      run: |
+        set -euo pipefail
+        marker=$(sed -n 's/^#define SSH_VERSION_ADDENDUM[[:space:]]*"\(rust-crypto-v[^"]*\)"/\1/p' version.h)
+        test -n "$marker"
+        case "${GITHUB_REF:-}" in
+          refs/tags/rust-crypto-v*)
+            tag="${GITHUB_REF#refs/tags/}"
+            if [[ "$marker" != "$tag" ]]; then
+              echo "version.h marker $marker does not match pushed tag $tag" >&2
+              exit 1
+            fi
+            ;;
+        esac
     - name: check production panic boundaries
       run: python3 rust/crypto/check-no-production-panics.py
     - name: cargo fmt
