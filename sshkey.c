@@ -504,10 +504,11 @@ sshkey_alg_list(int certs_only, int plain_only, int include_sigonly, char sep)
 #ifdef WITH_RUST_CRYPTO
 	size_t len = 0;
 	size_t nentries = 0;
-#endif
+#else
 	size_t i;
 	const struct sshkey_impl *impl;
 	char sep_str[2] = {sep, '\0'};
+#endif
 
 #ifdef WITH_RUST_CRYPTO
 	for (nentries = 0; keyimpls[nentries] != NULL; nentries++)
@@ -515,22 +516,20 @@ sshkey_alg_list(int certs_only, int plain_only, int include_sigonly, char sep)
 	if (ossh_rust_sshkey_alg_list_len(certs_only, plain_only,
 	    include_sigonly, (u_char)sep,
 	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
-	    nentries, &len) == 0) {
-		if (len == 0)
-			return NULL;
-		if ((ret = malloc(len + 1)) == NULL)
-			return NULL;
-		if (ossh_rust_sshkey_alg_list_write(certs_only, plain_only,
-		    include_sigonly, (u_char)sep,
-		    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
-		    nentries, (u_char *)ret, len) == 0) {
-			ret[len] = '\0';
-			return ret;
-		}
+	    nentries, &len) != 0 || len == 0)
+		return NULL;
+	if ((ret = malloc(len + 1)) == NULL)
+		return NULL;
+	if (ossh_rust_sshkey_alg_list_write(certs_only, plain_only,
+	    include_sigonly, (u_char)sep,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    nentries, (u_char *)ret, len) != 0) {
 		free(ret);
-		ret = NULL;
+		return NULL;
 	}
-#endif /* WITH_RUST_CRYPTO */
+	ret[len] = '\0';
+	return ret;
+#else
 	for (i = 0; keyimpls[i] != NULL; i++) {
 		impl = keyimpls[i];
 		if (impl->name == NULL)
@@ -542,17 +541,19 @@ sshkey_alg_list(int certs_only, int plain_only, int include_sigonly, char sep)
 		xextendf(&ret, sep_str, "%s", impl->name);
 	}
 	return ret;
+#endif /* WITH_RUST_CRYPTO */
 }
 
 int
 sshkey_names_valid2(const char *names, int allow_wildcard, int plain_only)
 {
 	char *s, *cp, *p;
-	const struct sshkey_impl *impl;
 #ifdef WITH_RUST_CRYPTO
 	int valid = 0;
-#endif
+#else
+	const struct sshkey_impl *impl;
 	int i, type;
+#endif
 
 	if (names == NULL || strcmp(names, "") == 0)
 		return 0;
@@ -564,13 +565,12 @@ sshkey_names_valid2(const char *names, int allow_wildcard, int plain_only)
 		if (ossh_rust_sshkey_names_valid_include((const u_char *)p,
 		    strlen(p), allow_wildcard, plain_only,
 		    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
-		    keyimpl_nentries(), &valid) == 0) {
-			if (valid)
-				continue;
+		    keyimpl_nentries(), &valid) != 0 || !valid) {
 			free(s);
 			return 0;
 		}
-#endif /* WITH_RUST_CRYPTO */
+		continue;
+#else
 		type = sshkey_type_from_name(p);
 		if (type == KEY_UNSPEC) {
 			if (allow_wildcard) {
@@ -596,6 +596,7 @@ sshkey_names_valid2(const char *names, int allow_wildcard, int plain_only)
 			free(s);
 			return 0;
 		}
+#endif /* WITH_RUST_CRYPTO */
 	}
 	free(s);
 	return 1;
@@ -656,7 +657,8 @@ sshkey_is_sk(const struct sshkey *k)
 #ifdef WITH_RUST_CRYPTO
 	if (ossh_rust_sshkey_type_is_sk(k->type, &ret) == 0)
 		return ret;
-#endif
+	return 0;
+#else
 	switch (sshkey_type_plain(k->type)) {
 	case KEY_ECDSA_SK:
 	case KEY_ED25519_SK:
@@ -664,6 +666,7 @@ sshkey_is_sk(const struct sshkey *k)
 	default:
 		return 0;
 	}
+#endif
 }
 
 /* Return the cert-less equivalent to a certified key type */
@@ -675,7 +678,8 @@ sshkey_type_plain(int type)
 
 	if (ossh_rust_sshkey_type_plain(type, &ret) == 0)
 		return ret;
-#endif
+	fatal_f("Rust sshkey plain-type lookup failed for type %d", type);
+#else
 	switch (type) {
 	case KEY_RSA_CERT:
 		return KEY_RSA;
@@ -692,6 +696,7 @@ sshkey_type_plain(int type)
 	default:
 		return type;
 	}
+#endif
 }
 
 /* Return the cert equivalent to a plain key type */
@@ -703,7 +708,8 @@ sshkey_type_certified(int type)
 
 	if (ossh_rust_sshkey_type_certified(type, &ret) == 0)
 		return ret;
-#endif
+	fatal_f("Rust sshkey certified-type lookup failed for type %d", type);
+#else
 	switch (type) {
 	case KEY_RSA:
 		return KEY_RSA_CERT;
@@ -720,6 +726,7 @@ sshkey_type_certified(int type)
 	default:
 		return -1;
 	}
+#endif
 }
 
 #ifdef WITH_OPENSSL
@@ -824,11 +831,13 @@ sshkey_curve_name_to_nid(const char *name)
 #ifdef WITH_RUST_CRYPTO
 	int nid;
 
-	if (name != NULL &&
-	    ossh_rust_sshkey_curve_name_to_nid((const u_char *)name, strlen(name),
-	    &nid) == 0)
+	if (name == NULL)
+		return -1;
+	if (ossh_rust_sshkey_curve_name_to_nid((const u_char *)name,
+	    strlen(name), &nid) == 0)
 		return nid;
-#endif /* WITH_RUST_CRYPTO */
+	return -1;
+#else
 	if (strcmp(name, "nistp256") == 0)
 		return NID_X9_62_prime256v1;
 	else if (strcmp(name, "nistp384") == 0)
@@ -839,6 +848,7 @@ sshkey_curve_name_to_nid(const char *name)
 # endif /* OPENSSL_HAS_NISTP521 || WITH_RUST_CRYPTO */
 	else
 		return -1;
+#endif /* WITH_RUST_CRYPTO */
 }
 
 u_int
@@ -849,7 +859,8 @@ sshkey_curve_nid_to_bits(int nid)
 
 	if (ossh_rust_sshkey_curve_nid_to_bits(nid, &bits) == 0)
 		return bits;
-#endif /* WITH_RUST_CRYPTO */
+	return 0;
+#else
 	switch (nid) {
 	case NID_X9_62_prime256v1:
 		return 256;
@@ -862,6 +873,7 @@ sshkey_curve_nid_to_bits(int nid)
 	default:
 		return 0;
 	}
+#endif /* WITH_RUST_CRYPTO */
 }
 
 int
@@ -872,7 +884,8 @@ sshkey_ecdsa_bits_to_nid(int bits)
 
 	if (ossh_rust_sshkey_ecdsa_bits_to_nid(bits, &nid) == 0)
 		return nid;
-#endif /* WITH_RUST_CRYPTO */
+	return -1;
+#else
 	switch (bits) {
 	case 256:
 		return NID_X9_62_prime256v1;
@@ -885,17 +898,15 @@ sshkey_ecdsa_bits_to_nid(int bits)
 	default:
 		return -1;
 	}
+#endif /* WITH_RUST_CRYPTO */
 }
 
 const char *
 sshkey_curve_nid_to_name(int nid)
 {
 #ifdef WITH_RUST_CRYPTO
-	const char *name;
-
-	if ((name = ossh_rust_sshkey_curve_nid_to_name(nid)) != NULL)
-		return name;
-#endif /* WITH_RUST_CRYPTO */
+	return ossh_rust_sshkey_curve_nid_to_name(nid);
+#else
 	switch (nid) {
 	case NID_X9_62_prime256v1:
 		return "nistp256";
@@ -908,6 +919,7 @@ sshkey_curve_nid_to_name(int nid)
 	default:
 		return NULL;
 	}
+#endif /* WITH_RUST_CRYPTO */
 }
 
 int
