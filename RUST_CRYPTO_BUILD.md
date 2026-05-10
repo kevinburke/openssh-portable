@@ -337,6 +337,41 @@ Docker, see [CI_REPRO.md](CI_REPRO.md).
 The Docker repro image installs current stable Rust via `rustup`, so local
 repros do not depend on the distro `cargo` version inside the base image.
 
+## macOS local build and install
+
+For the local macOS Rust crypto build, use:
+
+```sh
+./contrib/build-rust-crypto-macos.sh
+```
+
+That helper regenerates `configure`, configures the tree as:
+
+```sh
+./configure \
+  --prefix="$PWD/local" \
+  --with-rust-crypto \
+  --without-openssl \
+  --disable-pkcs11 \
+  --disable-security-key
+```
+
+then runs `make clean` and `make rust-crypto-build all`. On macOS it puts
+Homebrew GNU sed first in `PATH` when available; otherwise `configure` can
+pick up a sed that fails while `config.status` generates `Makefile`.
+
+To replace only the local `ssh` binary used when `$PWD/local/bin` is first in
+`PATH`, run:
+
+```sh
+./contrib/build-rust-crypto-macos.sh install-ssh
+```
+
+The `install-ssh` mode copies only `./ssh` to `local/bin/ssh` and verifies
+that the installed binary reports the same `rust-crypto-v*` marker as
+`version.h`. It deliberately does not install host keys, config files, server
+binaries, or setuid helpers.
+
 ## Test commands
 
 The main local test commands for the current branch are:
