@@ -15,6 +15,7 @@ const KEY_UNSPEC: c_int = 10;
 const NO_IMPL_INDEX: c_int = -1;
 const SSHKEY_CERT_MAX_PRINCIPALS: usize = 256;
 const SSH_ERR_KEY_CERT_INVALID_SIGN_KEY: c_int = -19;
+const SSH_ERR_KEY_TYPE_UNKNOWN: c_int = -14;
 const SSH_ERR_INVALID_ARGUMENT: c_int = -10;
 const SSH_ERR_EXPECTED_CERT: c_int = -16;
 const SSH_ERR_KEY_LACKS_CERTBLOB: c_int = -17;
@@ -447,18 +448,19 @@ pub(crate) fn sshkey_private_deserialize_plan(
     input_len: usize,
     entries: *const *const RustSshkeyImpl,
     nentries: usize,
-) -> Option<(c_int, bool, c_int, c_int)> {
-    let type_ = sshkey_type_from_name(input, input_len, entries, nentries, false)?;
+) -> Result<(c_int, bool, c_int, c_int), c_int> {
+    let type_ = sshkey_type_from_name(input, input_len, entries, nentries, false)
+        .ok_or(SSH_ERR_KEY_TYPE_UNKNOWN)?;
     let is_cert = sshkey_type_is_cert(type_);
     let impl_index = sshkey_impl_index_from_type(type_, entries, nentries)
         .map(|idx| idx as c_int)
         .unwrap_or(NO_IMPL_INDEX);
     let expected_cert_nid = if type_ == KEY_ECDSA_CERT {
-        sshkey_ecdsa_nid_from_name(input, input_len, entries, nentries)?
+        sshkey_ecdsa_nid_from_name(input, input_len, entries, nentries).ok_or(-1)?
     } else {
         -1
     };
-    Some((type_, is_cert, impl_index, expected_cert_nid))
+    Ok((type_, is_cert, impl_index, expected_cert_nid))
 }
 
 pub(crate) fn sshkey_private_serialize_plan(
@@ -1343,7 +1345,7 @@ mod tests {
                 entry_ptrs.as_ptr(),
                 entry_ptrs.len(),
             ),
-            Some((
+            Ok((
                 KEY_ED25519,
                 false,
                 sshkey_impl_index_from_type(KEY_ED25519, entry_ptrs.as_ptr(), entry_ptrs.len())
@@ -1358,13 +1360,22 @@ mod tests {
                 entry_ptrs.as_ptr(),
                 entry_ptrs.len(),
             ),
-            Some((
+            Ok((
                 KEY_ECDSA_CERT,
                 true,
                 sshkey_impl_index_from_type(KEY_ECDSA_CERT, entry_ptrs.as_ptr(), entry_ptrs.len())
                     .unwrap() as c_int,
                 415,
             ))
+        );
+        assert_eq!(
+            sshkey_private_deserialize_plan(
+                b"ssh-unknown".as_ptr(),
+                b"ssh-unknown".len(),
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Err(SSH_ERR_KEY_TYPE_UNKNOWN)
         );
     }
 

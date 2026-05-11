@@ -3468,7 +3468,7 @@ pub extern "C" fn ossh_rust_sshkey_private_deserialize_plan(
         return -1;
     }
     match rust_sshkey_private_deserialize_plan(input, input_len, entries, nentries) {
-        Some((type_, is_cert, impl_index, expected_cert_nid)) => {
+        Ok((type_, is_cert, impl_index, expected_cert_nid)) => {
             unsafe {
                 *out_type = type_;
                 *out_is_cert = c_int::from(is_cert);
@@ -3477,7 +3477,7 @@ pub extern "C" fn ossh_rust_sshkey_private_deserialize_plan(
             }
             0
         }
-        None => -1,
+        Err(err) => err,
     }
 }
 
