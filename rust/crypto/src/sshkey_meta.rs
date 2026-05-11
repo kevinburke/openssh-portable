@@ -151,9 +151,9 @@ pub(crate) fn sshkey_generate_plan(
     nentries: usize,
 ) -> Result<c_int, c_int> {
     if sshkey_type_is_cert(type_) {
-        return Err(-1);
+        return Err(SSH_ERR_INVALID_ARGUMENT);
     }
-    sshkey_impl_index_from_type(type_, entries, nentries).ok_or(-2)?;
+    sshkey_impl_index_from_type(type_, entries, nentries).ok_or(SSH_ERR_KEY_TYPE_UNKNOWN)?;
     Ok(type_)
 }
 
@@ -959,11 +959,11 @@ mod tests {
         );
         assert_eq!(
             sshkey_generate_plan(KEY_ED25519_CERT, entry_ptrs.as_ptr(), entry_ptrs.len()),
-            Err(-1)
+            Err(SSH_ERR_INVALID_ARGUMENT)
         );
         assert_eq!(
             sshkey_generate_plan(4242, entry_ptrs.as_ptr(), entry_ptrs.len()),
-            Err(-2)
+            Err(SSH_ERR_KEY_TYPE_UNKNOWN)
         );
     }
 
