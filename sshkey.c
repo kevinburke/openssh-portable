@@ -3299,13 +3299,12 @@ sshkey_private_deserialize(struct sshbuf *buf, struct sshkey **kp)
 	if ((r = sshbuf_get_cstring(buf, &tname, NULL)) != 0)
 		goto out;
 #ifdef WITH_RUST_CRYPTO
-	if (ossh_rust_sshkey_private_deserialize_plan((const u_char *)tname,
+	r = ossh_rust_sshkey_private_deserialize_plan((const u_char *)tname,
 	    strlen(tname), (const struct ossh_rust_sshkey_impl * const *)keyimpls,
 	    keyimpl_nentries(), &type, &is_cert, &impl_index,
-	    &expected_cert_nid) != 0) {
-		r = SSH_ERR_INTERNAL_ERROR;
+	    &expected_cert_nid);
+	if (r != 0)
 		goto out;
-	}
 	if (is_cert) {
 #else
 	type = sshkey_type_from_name(tname);

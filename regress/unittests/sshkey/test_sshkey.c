@@ -407,6 +407,19 @@ sshkey_tests(void)
 	b = NULL;
 	TEST_DONE();
 
+#ifdef WITH_RUST_CRYPTO
+	TEST_START("private deserialize rejects unknown key type");
+	b = sshbuf_new();
+	ASSERT_PTR_NE(b, NULL);
+	ASSERT_INT_EQ(sshbuf_put_cstring(b, "ssh-unknown"), 0);
+	ASSERT_INT_EQ(sshkey_private_deserialize(b, &k1),
+	    SSH_ERR_KEY_TYPE_UNKNOWN);
+	ASSERT_PTR_EQ(k1, NULL);
+	sshbuf_free(b);
+	b = NULL;
+	TEST_DONE();
+#endif /* WITH_RUST_CRYPTO */
+
 	TEST_START("private serialize rejects cert without certblob");
 	k1 = sshkey_new(KEY_ED25519_CERT);
 	ASSERT_PTR_NE(k1, NULL);
