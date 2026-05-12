@@ -441,6 +441,16 @@ sshkey_tests(void)
 	ASSERT_PTR_EQ(k1, NULL);
 	TEST_DONE();
 
+	TEST_START("from private rejects invalid key type");
+	k1 = sshkey_new(KEY_UNSPEC);
+	ASSERT_PTR_NE(k1, NULL);
+	k1->type = 4242;
+	ASSERT_INT_EQ(sshkey_from_private(k1, &k2), SSH_ERR_KEY_TYPE_UNKNOWN);
+	ASSERT_PTR_EQ(k2, NULL);
+	sshkey_free(k1);
+	k1 = NULL;
+	TEST_DONE();
+
 #ifdef WITH_OPENSSL
 	TEST_START("demote KEY_RSA");
 	ASSERT_INT_EQ(sshkey_from_private(kr, &k1), 0);

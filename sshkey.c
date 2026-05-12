@@ -2146,10 +2146,11 @@ sshkey_from_private(const struct sshkey *k, struct sshkey **pkp)
 	if (k == NULL)
 		return SSH_ERR_KEY_TYPE_UNKNOWN;
 #ifdef WITH_RUST_CRYPTO
-	if (ossh_rust_sshkey_from_private_plan(k->type, k->ecdsa_nid,
+	r = ossh_rust_sshkey_from_private_plan(k->type, k->ecdsa_nid,
 	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
-	    keyimpl_nentries(), &new_type, &copy_cert) != 0)
-		return SSH_ERR_KEY_TYPE_UNKNOWN;
+	    keyimpl_nentries(), &new_type, &copy_cert);
+	if (r != 0)
+		return r;
 	if ((impl = sshkey_impl_from_key(k)) == NULL)
 		return SSH_ERR_KEY_TYPE_UNKNOWN;
 	if ((n = sshkey_new(new_type)) == NULL) {
