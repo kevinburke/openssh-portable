@@ -3207,8 +3207,6 @@ sshkey_private_serialize_opt(struct sshkey *key, struct sshbuf *buf,
 	    key->cert != NULL, key->cert == NULL ? 0 : sshbuf_len(key->cert->certblob),
 	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
 	    keyimpl_nentries(), &impl_index);
-	if (r == -1)
-		return SSH_ERR_INTERNAL_ERROR;
 	if (r != 0)
 		return r;
 	impl = keyimpls[impl_index];

@@ -477,7 +477,7 @@ pub(crate) fn sshkey_private_serialize_plan(
     }
     sshkey_impl_index_from_type_nid(type_, nid, entries, nentries)
         .map(|idx| idx as c_int)
-        .ok_or(-1)
+        .ok_or(SSH_ERR_KEY_TYPE_UNKNOWN)
 }
 
 pub(crate) fn sshkey_free_contents_plan(
@@ -1410,6 +1410,10 @@ mod tests {
                 entry_ptrs.len(),
             ),
             Err(SSH_ERR_INVALID_ARGUMENT)
+        );
+        assert_eq!(
+            sshkey_private_serialize_plan(4242, 0, false, 0, entry_ptrs.as_ptr(), entry_ptrs.len()),
+            Err(SSH_ERR_KEY_TYPE_UNKNOWN)
         );
     }
 
