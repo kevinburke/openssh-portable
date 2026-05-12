@@ -186,9 +186,10 @@ pub(crate) fn sshkey_from_private_plan(
     nid: c_int,
     entries: *const *const RustSshkeyImpl,
     nentries: usize,
-) -> Option<(c_int, bool)> {
-    sshkey_impl_index_from_type_nid(type_, nid, entries, nentries)?;
-    Some((type_, sshkey_type_is_cert(type_)))
+) -> Result<(c_int, bool), c_int> {
+    sshkey_impl_index_from_type_nid(type_, nid, entries, nentries)
+        .ok_or(SSH_ERR_KEY_TYPE_UNKNOWN)?;
+    Ok((type_, sshkey_type_is_cert(type_)))
 }
 
 pub(crate) fn sshkey_cert_copy_plan(
@@ -972,15 +973,15 @@ mod tests {
         let entry_ptrs = entry_ptrs();
         assert_eq!(
             sshkey_from_private_plan(KEY_ED25519, 0, entry_ptrs.as_ptr(), entry_ptrs.len()),
-            Some((KEY_ED25519, false))
+            Ok((KEY_ED25519, false))
         );
         assert_eq!(
             sshkey_from_private_plan(KEY_ECDSA_CERT, 415, entry_ptrs.as_ptr(), entry_ptrs.len()),
-            Some((KEY_ECDSA_CERT, true))
+            Ok((KEY_ECDSA_CERT, true))
         );
         assert_eq!(
             sshkey_from_private_plan(KEY_ECDSA_CERT, 999, entry_ptrs.as_ptr(), entry_ptrs.len()),
-            None
+            Err(SSH_ERR_KEY_TYPE_UNKNOWN)
         );
     }
 
