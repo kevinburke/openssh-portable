@@ -3172,14 +3172,14 @@ pub extern "C" fn ossh_rust_sshkey_from_private_plan(
         return -1;
     }
     match rust_sshkey_from_private_plan(type_, nid, entries, nentries) {
-        Some((out_type_value, copy_cert)) => {
+        Ok((out_type_value, copy_cert)) => {
             unsafe {
                 *out_type = out_type_value;
                 *out_copy_cert = c_int::from(copy_cert);
             }
             0
         }
-        None => -1,
+        Err(err) => err,
     }
 }
 
