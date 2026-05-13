@@ -522,6 +522,9 @@ int ossh_rust_keyword_name(int value,
 int ossh_rust_sshkey_type_from_name(const uint8_t *input, size_t input_len,
     const struct ossh_rust_sshkey_impl * const *entries, size_t nentries,
     int allow_short, int *out);
+int ossh_rust_sshkey_type_nid_from_name(const uint8_t *input,
+    size_t input_len, const struct ossh_rust_sshkey_impl * const *entries,
+    size_t nentries, int *type_out, int *nid_out);
 int ossh_rust_sshkey_impl_name_from_type_nid(int type, int nid,
     int want_short, const struct ossh_rust_sshkey_impl * const *entries,
     size_t nentries, const char **out);
