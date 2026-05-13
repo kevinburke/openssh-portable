@@ -4306,7 +4306,11 @@ sshkey_parse_private2(struct sshbuf *blob, int type, const char *passphrase,
 	decrypted_start = sshbuf_ptr(decrypted);
 	decrypted_len = sshbuf_len(decrypted);
 	if (ossh_rust_private2_parse_plaintext(decrypted_start, decrypted_len,
-	    &parsed) == 0) {
+	    &parsed) != 0) {
+		r = SSH_ERR_INVALID_FORMAT;
+		goto out;
+	}
+	if (parsed.key_kind != OSSH_RUST_PRIVATE2_KEY_UNSUPPORTED) {
 		r = sshkey_rust_private2_deserialize(decrypted_start, decrypted_len,
 		    &parsed, &k, &comment);
 		if (r != 0)

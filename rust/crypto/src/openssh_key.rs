@@ -10,6 +10,7 @@ const KDF_BCRYPT: &[u8] = b"bcrypt";
 
 pub(crate) const OSSH_RUST_PRIVATE2_KDF_NONE: u32 = 0;
 pub(crate) const OSSH_RUST_PRIVATE2_KDF_BCRYPT: u32 = 1;
+pub(crate) const OSSH_RUST_PRIVATE2_KEY_UNSUPPORTED: u32 = 0;
 pub(crate) const OSSH_RUST_PRIVATE2_KEY_ED25519: u32 = 1;
 pub(crate) const OSSH_RUST_PRIVATE2_KEY_ECDSA: u32 = 2;
 pub(crate) const OSSH_RUST_PRIVATE2_KEY_RSA: u32 = 3;
@@ -302,7 +303,29 @@ fn parse_private2_plaintext(decrypted: &[u8]) -> Option<OpenSshPrivate2Plaintext
             part2_offset = private_offset;
             part2_len = private_scalar.len();
         }
-        _ => return None,
+        _ => {
+            return Some(OpenSshPrivate2PlaintextParse {
+                key_kind: OSSH_RUST_PRIVATE2_KEY_UNSUPPORTED,
+                curve_nid: 0,
+                is_cert: u32::from(is_cert),
+                cert_offset,
+                cert_len,
+                comment_offset: 0,
+                comment_len: 0,
+                part1_offset: 0,
+                part1_len: 0,
+                part2_offset: 0,
+                part2_len: 0,
+                part3_offset: 0,
+                part3_len: 0,
+                part4_offset: 0,
+                part4_len: 0,
+                part5_offset: 0,
+                part5_len: 0,
+                part6_offset: 0,
+                part6_len: 0,
+            });
+        }
     }
 
     let (comment_data_offset, comment) = reader.get_cstring_with_offset()?;
@@ -525,6 +548,19 @@ mod tests {
             .collect::<Vec<_>>();
         let parsed = openssh_private2_parse_plaintext(decrypted.as_ptr(), decrypted.len()).unwrap();
         assert_eq!(parsed.comment_len, b"rsa-comment".len());
+    }
+
+    #[test]
+    fn plaintext_unknown_key_type_reports_unsupported() {
+        let decrypted = ssh_string(b"sk-ssh-ed25519@openssh.com");
+        let parsed = openssh_private2_parse_plaintext(decrypted.as_ptr(), decrypted.len()).unwrap();
+        assert_eq!(parsed.key_kind, super::OSSH_RUST_PRIVATE2_KEY_UNSUPPORTED);
+    }
+
+    #[test]
+    fn plaintext_supported_key_type_rejects_malformed_body() {
+        let decrypted = ssh_string(b"ssh-ed25519");
+        assert!(openssh_private2_parse_plaintext(decrypted.as_ptr(), decrypted.len()).is_none());
     }
 
     fn ssh_string(bytes: &[u8]) -> Vec<u8> {

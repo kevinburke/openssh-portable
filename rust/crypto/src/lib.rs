@@ -655,6 +655,10 @@ main(void)
             crate::openssh_key::OSSH_RUST_PRIVATE2_KDF_BCRYPT as u64,
         );
         assert_define(
+            "OSSH_RUST_PRIVATE2_KEY_UNSUPPORTED",
+            crate::openssh_key::OSSH_RUST_PRIVATE2_KEY_UNSUPPORTED as u64,
+        );
+        assert_define(
             "OSSH_RUST_PRIVATE2_KEY_ED25519",
             crate::openssh_key::OSSH_RUST_PRIVATE2_KEY_ED25519 as u64,
         );
