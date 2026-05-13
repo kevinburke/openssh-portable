@@ -85,6 +85,7 @@ use sshkey_meta::{
     sshkey_type_from_name as rust_sshkey_type_from_name,
     sshkey_type_is_cert as rust_sshkey_type_is_cert, sshkey_type_is_sk as rust_sshkey_type_is_sk,
     sshkey_type_is_valid_ca as rust_sshkey_type_is_valid_ca,
+    sshkey_type_nid_from_name as rust_sshkey_type_nid_from_name,
     sshkey_type_plain as rust_sshkey_type_plain, RustSshkeyImpl,
 };
 use util::{
@@ -2868,6 +2869,30 @@ pub extern "C" fn ossh_rust_sshkey_type_from_name(
         Some(parsed) => {
             unsafe {
                 *out = parsed;
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_sshkey_type_nid_from_name(
+    input: *const u8,
+    input_len: usize,
+    entries: *const *const RustSshkeyImplEntry,
+    nentries: usize,
+    type_out: *mut c_int,
+    nid_out: *mut c_int,
+) -> c_int {
+    if type_out.is_null() || nid_out.is_null() {
+        return -1;
+    }
+    match rust_sshkey_type_nid_from_name(input, input_len, entries, nentries) {
+        Some((type_, nid)) => {
+            unsafe {
+                *type_out = type_;
+                *nid_out = nid;
             }
             0
         }
