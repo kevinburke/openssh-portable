@@ -1691,6 +1691,7 @@ sshkey_fingerprint(const struct sshkey *k, int dgst_alg,
 	return retval;
 }
 
+#ifndef WITH_RUST_CRYPTO
 static int
 peek_type_nid(const char *s, size_t l, int *nid)
 {
@@ -1713,6 +1714,7 @@ peek_type_nid(const char *s, size_t l, int *nid)
 	}
 	return KEY_UNSPEC;
 }
+#endif
 
 /* XXX this can now be made const char * */
 int
@@ -1723,8 +1725,8 @@ sshkey_read(struct sshkey *ret, char **cpp)
 	char *blob_ktype = NULL;
 #ifndef WITH_RUST_CRYPTO
 	char *blobcopy;
-#endif
 	size_t space;
+#endif
 	int r, type, curve_nid = -1;
 	struct sshbuf *blob;
 	struct sshbuf *blob_copy = NULL;
@@ -1745,14 +1747,18 @@ sshkey_read(struct sshkey *ret, char **cpp)
 	cp_len = strlen(cp);
 	if (ossh_rust_public_line_parse((const u_char *)cp, cp_len, &parsed) != 0)
 		return SSH_ERR_INVALID_FORMAT;
-	space = parsed.key_type_len;
+	if (ossh_rust_sshkey_type_nid_from_name((const u_char *)cp +
+	    parsed.key_type_offset, parsed.key_type_len,
+	    (const struct ossh_rust_sshkey_impl * const *)keyimpls,
+	    keyimpl_nentries(), &type, &curve_nid) != 0)
+		return SSH_ERR_INVALID_FORMAT;
 #else
 	space = strcspn(cp, " \t");
 	if (space == strlen(cp))
 		return SSH_ERR_INVALID_FORMAT;
-#endif
 	if ((type = peek_type_nid(cp, space, &curve_nid)) == KEY_UNSPEC)
 		return SSH_ERR_INVALID_FORMAT;
+#endif
 #if !defined(OPENSSL_HAS_ECC) && !defined(WITH_RUST_CRYPTO)
 	if (key_type_is_ecdsa_variant(type))
 		return SSH_ERR_INVALID_FORMAT;

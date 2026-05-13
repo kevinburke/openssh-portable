@@ -12,6 +12,9 @@ const KEY_ECDSA_SK_CERT: c_int = 7;
 const KEY_ED25519_SK: c_int = 8;
 const KEY_ED25519_SK_CERT: c_int = 9;
 const KEY_UNSPEC: c_int = 10;
+const NID_X9_62_PRIME256V1: c_int = 415;
+const NID_SECP384R1: c_int = 715;
+const NID_SECP521R1: c_int = 716;
 const NO_IMPL_INDEX: c_int = -1;
 const SSHKEY_CERT_MAX_PRINCIPALS: usize = 256;
 const SSH_ERR_KEY_CERT_INVALID_SIGN_KEY: c_int = -19;
@@ -81,16 +84,27 @@ fn is_ecdsa_variant(type_: c_int) -> bool {
 }
 
 fn parse_ecdsa_type_name(input: &[u8]) -> Option<c_int> {
+    if let Some((type_, _nid)) = parse_ecdsa_type_name_nid(input) {
+        return Some(type_);
+    }
     match input {
-        b"ecdsa-sha2-nistp256" | b"ecdsa-sha2-nistp384" | b"ecdsa-sha2-nistp521" => Some(KEY_ECDSA),
-        b"ecdsa-sha2-nistp256-cert-v01@openssh.com"
-        | b"ecdsa-sha2-nistp384-cert-v01@openssh.com"
-        | b"ecdsa-sha2-nistp521-cert-v01@openssh.com" => Some(KEY_ECDSA_CERT),
         b"sk-ecdsa-sha2-nistp256@openssh.com" | b"webauthn-sk-ecdsa-sha2-nistp256@openssh.com" => {
             Some(KEY_ECDSA_SK)
         }
         b"sk-ecdsa-sha2-nistp256-cert-v01@openssh.com"
         | b"webauthn-sk-ecdsa-sha2-nistp256-cert-v01@openssh.com" => Some(KEY_ECDSA_SK_CERT),
+        _ => None,
+    }
+}
+
+fn parse_ecdsa_type_name_nid(input: &[u8]) -> Option<(c_int, c_int)> {
+    match input {
+        b"ecdsa-sha2-nistp256" => Some((KEY_ECDSA, NID_X9_62_PRIME256V1)),
+        b"ecdsa-sha2-nistp384" => Some((KEY_ECDSA, NID_SECP384R1)),
+        b"ecdsa-sha2-nistp521" => Some((KEY_ECDSA, NID_SECP521R1)),
+        b"ecdsa-sha2-nistp256-cert-v01@openssh.com" => Some((KEY_ECDSA_CERT, NID_X9_62_PRIME256V1)),
+        b"ecdsa-sha2-nistp384-cert-v01@openssh.com" => Some((KEY_ECDSA_CERT, NID_SECP384R1)),
+        b"ecdsa-sha2-nistp521-cert-v01@openssh.com" => Some((KEY_ECDSA_CERT, NID_SECP521R1)),
         _ => None,
     }
 }
@@ -522,6 +536,34 @@ pub(crate) fn sshkey_type_from_name(
     None
 }
 
+pub(crate) fn sshkey_type_nid_from_name(
+    input: *const u8,
+    input_len: usize,
+    entries: *const *const RustSshkeyImpl,
+    nentries: usize,
+) -> Option<(c_int, c_int)> {
+    let input = read_input(input, input_len)?;
+    if let Some(parsed) = parse_ecdsa_type_name_nid(input) {
+        return Some(parsed);
+    }
+    let entries = keyimpls(entries, nentries)?;
+
+    for entry_ptr in entries {
+        let entry = entry_ref(*entry_ptr)?;
+        if let Some(name) = entry_bytes(entry.name) {
+            if name == input {
+                let nid = if is_ecdsa_variant(entry.type_) {
+                    entry.nid
+                } else {
+                    -1
+                };
+                return Some((entry.type_, nid));
+            }
+        }
+    }
+    None
+}
+
 pub(crate) fn sshkey_impl_name_from_type_nid(
     type_: c_int,
     nid: c_int,
@@ -841,6 +883,29 @@ mod tests {
                 entry_ptrs.len(),
             ),
             Some(715)
+        );
+    }
+
+    #[test]
+    fn type_nid_lookup_reports_ecdsa_curve_nid() {
+        let entry_ptrs = entry_ptrs();
+        assert_eq!(
+            sshkey_type_nid_from_name(
+                b"ecdsa-sha2-nistp521".as_ptr(),
+                b"ecdsa-sha2-nistp521".len(),
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Some((KEY_ECDSA, NID_SECP521R1))
+        );
+        assert_eq!(
+            sshkey_type_nid_from_name(
+                b"ssh-ed25519".as_ptr(),
+                b"ssh-ed25519".len(),
+                entry_ptrs.as_ptr(),
+                entry_ptrs.len(),
+            ),
+            Some((KEY_ED25519, -1))
         );
     }
 
