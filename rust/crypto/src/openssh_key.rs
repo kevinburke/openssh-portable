@@ -1,6 +1,6 @@
 use base64ct::{Base64, Base64Unpadded, Encoding};
 
-use crate::util::{read_slice, write_prefix, SshWireReader};
+use crate::util::{read_slice, read_slice_mut, write_prefix, SshWireReader};
 
 const MARK_BEGIN: &[u8] = b"-----BEGIN OPENSSH PRIVATE KEY-----\n";
 const MARK_END: &[u8] = b"-----END OPENSSH PRIVATE KEY-----\n";
@@ -80,11 +80,12 @@ pub(crate) fn openssh_public_line_parse(
     parse_public_key_line(input)
 }
 
-pub(crate) fn openssh_public_blob_decode_len(input: *const u8, input_len: usize) -> usize {
-    let Some(input) = read_slice(input, input_len) else {
-        return 0;
-    };
-    decode_public_blob(input).map_or(0, |decoded| decoded.len())
+pub(crate) fn openssh_public_blob_decode_max_len(input_len: usize) -> usize {
+    input_len
+        .checked_add(3)
+        .and_then(|len| len.checked_div(4))
+        .and_then(|len| len.checked_mul(3))
+        .unwrap_or(0)
 }
 
 pub(crate) fn openssh_public_blob_decode_write(
@@ -92,15 +93,25 @@ pub(crate) fn openssh_public_blob_decode_write(
     input_len: usize,
     out: *mut u8,
     out_len: usize,
+    decoded_len: *mut usize,
 ) -> i32 {
+    if decoded_len.is_null() {
+        return -1;
+    }
     let Some(input) = read_slice(input, input_len) else {
         return -1;
     };
-    let decoded = match decode_public_blob(input) {
-        Some(decoded) => decoded,
+    let Some(out) = read_slice_mut(out, out_len) else {
+        return -1;
+    };
+    let written = match decode_public_blob_into(input, out) {
+        Some(written) => written,
         None => return -1,
     };
-    write_prefix(out, out_len, &decoded)
+    unsafe {
+        *decoded_len = written;
+    }
+    0
 }
 
 pub(crate) fn openssh_private2_decode_write(
@@ -397,11 +408,11 @@ fn parse_public_key_line(input: &[u8]) -> Option<OpenSshPublicLineParse> {
     })
 }
 
-fn decode_public_blob(input: &[u8]) -> Option<Vec<u8>> {
-    let token = core::str::from_utf8(input).ok()?;
-    Base64Unpadded::decode_vec(token)
-        .ok()
-        .or_else(|| Base64::decode_vec(token).ok())
+fn decode_public_blob_into(input: &[u8], out: &mut [u8]) -> Option<usize> {
+    if let Ok(decoded) = Base64Unpadded::decode(input, out) {
+        return Some(decoded.len());
+    }
+    Base64::decode(input, out).ok().map(|decoded| decoded.len())
 }
 
 fn is_cert_key_type(key_type: &[u8]) -> bool {
@@ -429,9 +440,9 @@ fn curve_nid_for_key_type(key_type: &[u8]) -> Option<i32> {
 #[cfg(test)]
 mod tests {
     use super::{
-        openssh_private2_parse, openssh_private2_parse_plaintext, openssh_public_blob_decode_len,
-        openssh_public_blob_decode_write, openssh_public_line_parse, OSSH_RUST_PRIVATE2_KDF_BCRYPT,
-        OSSH_RUST_PRIVATE2_KDF_NONE,
+        openssh_private2_parse, openssh_private2_parse_plaintext,
+        openssh_public_blob_decode_max_len, openssh_public_blob_decode_write,
+        openssh_public_line_parse, OSSH_RUST_PRIVATE2_KDF_BCRYPT, OSSH_RUST_PRIVATE2_KDF_NONE,
     };
 
     const ED25519_1: &[u8] = include_bytes!("../../../regress/unittests/sshkey/testdata/ed25519_1");
@@ -624,9 +635,10 @@ mod tests {
     #[test]
     fn decodes_unpadded_public_blob() {
         let blob = b"AAAAC3NzaC1lZDI1NTE5AAAAIFOG6kY7Rf4UtCFvPwKgo/BztXck2xC4a2WyA34XtIwZ";
-        let decoded_len = openssh_public_blob_decode_len(blob.as_ptr(), blob.len());
-        assert!(decoded_len > 0);
-        let mut decoded = vec![0u8; decoded_len];
+        let decoded_max_len = openssh_public_blob_decode_max_len(blob.len());
+        assert!(decoded_max_len > 0);
+        let mut decoded = vec![0u8; decoded_max_len];
+        let mut decoded_len = 0usize;
         assert_eq!(
             0,
             openssh_public_blob_decode_write(
@@ -634,8 +646,10 @@ mod tests {
                 blob.len(),
                 decoded.as_mut_ptr(),
                 decoded.len(),
+                &mut decoded_len,
             )
         );
+        decoded.truncate(decoded_len);
         assert!(!decoded.is_empty());
     }
 }

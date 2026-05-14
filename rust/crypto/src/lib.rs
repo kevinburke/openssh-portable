@@ -44,7 +44,7 @@ use kex::{
 use mac::PacketMacState;
 use openssh_key::{
     openssh_private2_decode_len, openssh_private2_decode_write, openssh_private2_parse,
-    openssh_private2_parse_plaintext, openssh_public_blob_decode_len,
+    openssh_private2_parse_plaintext, openssh_public_blob_decode_max_len,
     openssh_public_blob_decode_write, openssh_public_line_parse,
 };
 use private_pem::PrivatePemError;
@@ -1601,8 +1601,8 @@ pub extern "C" fn ossh_rust_public_line_parse(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ossh_rust_public_blob_decode_len(input: *const u8, input_len: usize) -> usize {
-    openssh_public_blob_decode_len(input, input_len)
+pub extern "C" fn ossh_rust_public_blob_decode_max_len(input_len: usize) -> usize {
+    openssh_public_blob_decode_max_len(input_len)
 }
 
 #[unsafe(no_mangle)]
@@ -1611,8 +1611,9 @@ pub extern "C" fn ossh_rust_public_blob_decode_write(
     input_len: usize,
     out: *mut u8,
     out_len: usize,
+    decoded_len: *mut usize,
 ) -> c_int {
-    openssh_public_blob_decode_write(input, input_len, out, out_len)
+    openssh_public_blob_decode_write(input, input_len, out, out_len, decoded_len)
 }
 
 #[unsafe(no_mangle)]

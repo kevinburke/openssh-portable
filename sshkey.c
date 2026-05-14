@@ -1732,7 +1732,7 @@ sshkey_read(struct sshkey *ret, char **cpp)
 	struct sshbuf *blob_copy = NULL;
 #ifdef WITH_RUST_CRYPTO
 	struct ossh_rust_public_line_parse parsed;
-	size_t cp_len, blob_len;
+	size_t cp_len, blob_len, decoded_len = 0;
 	u_char *blobp;
 #endif
 
@@ -1781,8 +1781,7 @@ sshkey_read(struct sshkey *ret, char **cpp)
 
 	/* find end of keyblob and decode */
 #ifdef WITH_RUST_CRYPTO
-	if ((blob_len = ossh_rust_public_blob_decode_len(
-	    (const u_char *)cp + parsed.key_blob_offset,
+	if ((blob_len = ossh_rust_public_blob_decode_max_len(
 	    parsed.key_blob_len)) == 0) {
 		sshbuf_free(blob);
 		return SSH_ERR_INVALID_FORMAT;
@@ -1792,9 +1791,15 @@ sshkey_read(struct sshkey *ret, char **cpp)
 		return r;
 	}
 	if (ossh_rust_public_blob_decode_write((const u_char *)cp +
-	    parsed.key_blob_offset, parsed.key_blob_len, blobp, blob_len) != 0) {
+	    parsed.key_blob_offset, parsed.key_blob_len, blobp, blob_len,
+	    &decoded_len) != 0 || decoded_len == 0 || decoded_len > blob_len) {
 		sshbuf_free(blob);
 		return SSH_ERR_INVALID_FORMAT;
+	}
+	if (decoded_len < blob_len &&
+	    (r = sshbuf_consume_end(blob, blob_len - decoded_len)) != 0) {
+		sshbuf_free(blob);
+		return r;
 	}
 #else
 	space = strcspn(cp, " \t");
