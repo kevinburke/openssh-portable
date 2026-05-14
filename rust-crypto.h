@@ -383,9 +383,9 @@ int ossh_rust_private2_parse_plaintext(const uint8_t *decrypted,
     size_t decrypted_len, struct ossh_rust_private2_plaintext_parse *out);
 int ossh_rust_public_line_parse(const uint8_t *input, size_t input_len,
     struct ossh_rust_public_line_parse *out);
-size_t ossh_rust_public_blob_decode_len(const uint8_t *input, size_t input_len);
+size_t ossh_rust_public_blob_decode_max_len(size_t input_len);
 int ossh_rust_public_blob_decode_write(const uint8_t *input, size_t input_len,
-    uint8_t *out, size_t out_len);
+    uint8_t *out, size_t out_len, size_t *decoded_len);
 int ossh_rust_argv_split_parse(const uint8_t *input, size_t input_len,
     int terminate_on_comment, struct ossh_rust_argv_split_parse *out);
 int ossh_rust_argv_split_write(const uint8_t *input, size_t input_len,
