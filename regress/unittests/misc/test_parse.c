@@ -19,6 +19,7 @@
 #include "misc.h"
 #include "ssh.h"
 #include "readconf.h"
+#include "xmalloc.h"
 
 void test_parse(void);
 
@@ -194,6 +195,27 @@ test_parse(void)
 		ASSERT_INT_EQ(parse_forward(&fwd,
 		    "[host]x:8080:dest.example:80", 0, 0), 0);
 		free_forward(&fwd);
+	}
+	TEST_DONE();
+
+	TEST_START("readconf_process_localforward_keeps_long_target");
+	{
+		Options o;
+		char target[301], *line = NULL;
+		int active = 1;
+
+		memset(target, 'a', sizeof(target) - 1);
+		target[sizeof(target) - 1] = '\0';
+		initialize_options(&o);
+		xasprintf(&line, "LocalForward 8080 %s:80", target);
+		ASSERT_INT_EQ(process_config_line(&o, NULL, "host", "host",
+		    "", line, "test", 1, &active, 0), 0);
+		ASSERT_INT_EQ(o.num_local_forwards, 1);
+		ASSERT_INT_EQ(o.local_forwards[0].listen_port, 8080);
+		ASSERT_STRING_EQ(o.local_forwards[0].connect_host, target);
+		ASSERT_INT_EQ(o.local_forwards[0].connect_port, 80);
+		free(line);
+		free_options(&o);
 	}
 	TEST_DONE();
 

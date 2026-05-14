@@ -1156,7 +1156,7 @@ process_config_line_depth(Options *options, struct passwd *pw, const char *host,
     int *want_final_pass, int depth)
 {
 	char *str, **charptr, *endofnumber, *keyword, *arg, *arg2, *p;
-	char **cpptr, ***cppptr, fwdarg[256];
+	char **cpptr, ***cppptr, *fwdarg = NULL;
 	u_int i, *uintptr, max_entries = 0;
 	int r, oactive, negated, opcode, *intptr, value, value2, cmdline = 0;
 	int remotefwd, dynamicfwd, ca_only = 0, found = 0;
@@ -1762,18 +1762,19 @@ parse_pubkey_algos:
 				}
 			} else {
 				/* construct a string for parse_forward */
-				snprintf(fwdarg, sizeof(fwdarg), "%s:%s", arg,
-				    arg2);
+				xasprintf(&fwdarg, "%s:%s", arg, arg2);
 			}
 		}
 		if (dynamicfwd)
-			strlcpy(fwdarg, arg, sizeof(fwdarg));
+			fwdarg = xstrdup(arg);
 
 		if (parse_forward(&fwd, fwdarg, dynamicfwd, remotefwd) == 0) {
 			error("%.200s line %d: Bad forwarding specification.",
 			    filename, linenum);
 			goto out;
 		}
+		free(fwdarg);
+		fwdarg = NULL;
 
 		if (*activep) {
 			if (remotefwd) {
@@ -2599,6 +2600,7 @@ parse_pubkey_algos:
 	/* success */
 	ret = 0;
  out:
+	free(fwdarg);
 	free_canon_cnames(cnames, ncnames);
 	opt_array_free2(strs, NULL, nstrs);
 	argv_free(oav, oac);
