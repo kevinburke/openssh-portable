@@ -7,7 +7,7 @@ use libfuzzer_sys::fuzz_target;
 use rust_crypto::{
     ossh_rust_private2_decode_len, ossh_rust_private2_decode_write,
     ossh_rust_private2_parse_header, ossh_rust_private2_parse_plaintext,
-    ossh_rust_public_blob_decode_len, ossh_rust_public_blob_decode_write,
+    ossh_rust_public_blob_decode_max_len, ossh_rust_public_blob_decode_write,
     ossh_rust_public_line_parse,
     ossh_rust_sshkey_equal_plan, ossh_rust_sshkey_equal_public_plan,
     ossh_rust_sshkey_free_contents_plan, ossh_rust_sshkey_from_blob_plan,
@@ -287,15 +287,16 @@ fuzz_target!(|input: Input| {
         input.public_line.len(),
         &mut public_line,
     );
-    let public_blob_len =
-        ossh_rust_public_blob_decode_len(input.public_line.as_ptr(), input.public_line.len());
+    let public_blob_len = ossh_rust_public_blob_decode_max_len(input.public_line.len());
     if public_blob_len > 0 && public_blob_len <= 1 << 20 {
         let mut decoded = vec![0u8; public_blob_len];
+        let mut decoded_len = 0usize;
         let _ = ossh_rust_public_blob_decode_write(
             input.public_line.as_ptr(),
             input.public_line.len(),
             decoded.as_mut_ptr(),
             decoded.len(),
+            &mut decoded_len,
         );
     }
     let private2_len =
