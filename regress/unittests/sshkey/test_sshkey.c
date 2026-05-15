@@ -438,8 +438,13 @@ sshkey_tests(void)
 	k1->type = 4242;
 	b = sshbuf_new();
 	ASSERT_PTR_NE(b, NULL);
+#ifdef WITH_RUST_CRYPTO
 	ASSERT_INT_EQ(sshkey_private_serialize(k1, b),
 	    SSH_ERR_KEY_TYPE_UNKNOWN);
+#else
+	ASSERT_INT_EQ(sshkey_private_serialize(k1, b),
+	    SSH_ERR_INTERNAL_ERROR);
+#endif
 	sshbuf_free(b);
 	b = NULL;
 	sshkey_free(k1);
