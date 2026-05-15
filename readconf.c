@@ -375,6 +375,15 @@ ssh_connection_hash(const char *thishost, const char *host, const char *portstr,
 	return tohex(conn_hash, ssh_digest_bytes(SSH_DIGEST_SHA1));
 }
 
+static void
+free_forward_contents(const struct Forward *fwd)
+{
+	free(fwd->listen_host);
+	free(fwd->listen_path);
+	free(fwd->connect_host);
+	free(fwd->connect_path);
+}
+
 /*
  * Adds a local TCP/IP port forward to options.  Never returns if there is an
  * error.
@@ -388,8 +397,10 @@ add_local_forward(Options *options, const struct Forward *newfwd)
 
 	/* Don't add duplicates */
 	for (i = 0; i < options->num_local_forwards; i++) {
-		if (forward_equals(newfwd, options->local_forwards + i))
+		if (forward_equals(newfwd, options->local_forwards + i)) {
+			free_forward_contents(newfwd);
 			return;
+		}
 	}
 	options->local_forwards = xreallocarray(options->local_forwards,
 	    options->num_local_forwards + 1,
@@ -417,8 +428,10 @@ add_remote_forward(Options *options, const struct Forward *newfwd)
 
 	/* Don't add duplicates */
 	for (i = 0; i < options->num_remote_forwards; i++) {
-		if (forward_equals(newfwd, options->remote_forwards + i))
+		if (forward_equals(newfwd, options->remote_forwards + i)) {
+			free_forward_contents(newfwd);
 			return;
+		}
 	}
 	options->remote_forwards = xreallocarray(options->remote_forwards,
 	    options->num_remote_forwards + 1,
@@ -441,10 +454,7 @@ clear_forwardings(Options *options)
 	int i;
 
 	for (i = 0; i < options->num_local_forwards; i++) {
-		free(options->local_forwards[i].listen_host);
-		free(options->local_forwards[i].listen_path);
-		free(options->local_forwards[i].connect_host);
-		free(options->local_forwards[i].connect_path);
+		free_forward_contents(options->local_forwards + i);
 	}
 	if (options->num_local_forwards > 0) {
 		free(options->local_forwards);
@@ -452,10 +462,7 @@ clear_forwardings(Options *options)
 	}
 	options->num_local_forwards = 0;
 	for (i = 0; i < options->num_remote_forwards; i++) {
-		free(options->remote_forwards[i].listen_host);
-		free(options->remote_forwards[i].listen_path);
-		free(options->remote_forwards[i].connect_host);
-		free(options->remote_forwards[i].connect_path);
+		free_forward_contents(options->remote_forwards + i);
 	}
 	if (options->num_remote_forwards > 0) {
 		free(options->remote_forwards);
@@ -3180,17 +3187,11 @@ free_options(Options *o)
 	}
 	free(o->identity_agent);
 	for (i = 0; i < o->num_local_forwards; i++) {
-		free(o->local_forwards[i].listen_host);
-		free(o->local_forwards[i].listen_path);
-		free(o->local_forwards[i].connect_host);
-		free(o->local_forwards[i].connect_path);
+		free_forward_contents(o->local_forwards + i);
 	}
 	free(o->local_forwards);
 	for (i = 0; i < o->num_remote_forwards; i++) {
-		free(o->remote_forwards[i].listen_host);
-		free(o->remote_forwards[i].listen_path);
-		free(o->remote_forwards[i].connect_host);
-		free(o->remote_forwards[i].connect_path);
+		free_forward_contents(o->remote_forwards + i);
 	}
 	free(o->remote_forwards);
 	free(o->stdio_forward_host);
