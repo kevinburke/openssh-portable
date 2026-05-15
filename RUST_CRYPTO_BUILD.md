@@ -401,6 +401,42 @@ Or run the same pair CI uses in the Rust job:
 make unit t-exec
 ```
 
+These OpenSSH tests exercise the Rust backend only after the tree has been
+configured for Rust crypto without OpenSSL. On macOS, a local configure command
+that matches that shape is:
+
+```sh
+env PATH=/opt/homebrew/opt/gnu-sed/libexec/gnubin:/opt/homebrew/bin:/Users/kevin/local/coreutils/bin:/usr/bin:/bin:/usr/sbin:/sbin \
+    SED=sed AWK=/usr/bin/awk \
+    ./configure --with-rust-crypto --without-openssl \
+      --disable-pkcs11 --disable-security-key \
+      --with-privsep-path=/var/empty
+```
+
+Before trusting the result, check `config.h`:
+
+```sh
+rg 'WITH_RUST_CRYPTO|HAVE_OPENSSL_VERSION' config.h
+```
+
+`WITH_RUST_CRYPTO` should be defined, and the OpenSSL version probes should not
+be defined. On macOS, put `/usr/bin` ahead of local helper shims while running
+the regress suite so the tests use the system `diff`:
+
+```sh
+env PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/Users/kevin/local/coreutils/bin \
+    make unit t-exec
+```
+
+Do not use a plain `make tests` result as the current Rust-mode integration
+signal. The full upstream target includes `file-tests`, and in a
+`--with-rust-crypto --without-openssl` build that target currently reaches
+legacy SSH2 RSA private-key conversion and fails with `key conversion disabled
+at compile time`. That is useful missing-feature information, but it is not a
+runtime failure in the Rust-backed transport/config paths. Until either the
+conversion support is implemented or the test is skipped for this build mode,
+use `make unit t-exec` for the broad Rust-backed OpenSSH regression check.
+
 If you want to rebuild only the Rust static library and the common test
 binaries first:
 
