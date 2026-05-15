@@ -236,6 +236,20 @@ test_parse(void)
 	}
 	TEST_DONE();
 
+	TEST_START("readconf_process_inactive_localforward_discards");
+	{
+		Options o;
+		char line[] = "LocalForward 8080 dest.example:80";
+		int active = 0;
+
+		initialize_options(&o);
+		ASSERT_INT_EQ(process_config_line(&o, NULL, "host", "host",
+		    "", line, "test", 1, &active, 0), 0);
+		ASSERT_INT_EQ(o.num_local_forwards, 0);
+		free_options(&o);
+	}
+	TEST_DONE();
+
 	TEST_START("readconf_parse_jump_chain");
 	{
 		Options o;

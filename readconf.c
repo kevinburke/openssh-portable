@@ -1789,6 +1789,8 @@ parse_pubkey_algos:
 			} else {
 				add_local_forward(options, &fwd);
 			}
+		} else {
+			free_forward_contents(&fwd);
 		}
 		break;
 
