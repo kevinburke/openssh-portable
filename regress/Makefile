@@ -167,7 +167,11 @@ TEST_SSH_SSHKEYGEN?=ssh-keygen
 CPPFLAGS=-I..
 
 t1:
-	set -xe ; if ${TEST_SSH_SSH} -Q key | grep -q "^ssh-rsa" ; then \
+	set -xe ; if ! ${TEST_SSH_SSH} -Q key | grep -q "^ssh-rsa" ; then \
+		echo "skipped ssh2 private import: ssh-rsa disabled" ; \
+	elif ! ${TEST_SSH_SSHKEYGEN} -? 2>&1 | grep -q "ssh-keygen -i" ; then \
+		echo "skipped ssh2 private import: key conversion disabled" ; \
+	else \
 		${TEST_SSH_SSHKEYGEN} -if ${.CURDIR}/rsa_ssh2.prv | diff - ${.CURDIR}/rsa_openssh.prv ; \
 		tr '\n' '\r' <${.CURDIR}/rsa_ssh2.prv > ${.OBJDIR}/rsa_ssh2_cr.prv ; \
 		${TEST_SSH_SSHKEYGEN} -if ${.OBJDIR}/rsa_ssh2_cr.prv | diff - ${.CURDIR}/rsa_openssh.prv ; \
@@ -183,7 +187,11 @@ t2:
 	fi
 
 t3:
-	set -xe ; if ${TEST_SSH_SSH} -Q key | grep -q "^ssh-rsa" ; then \
+	set -xe ; if ! ${TEST_SSH_SSH} -Q key | grep -q "^ssh-rsa" ; then \
+		echo "skipped ssh2 public import/export: ssh-rsa disabled" ; \
+	elif ! ${TEST_SSH_SSHKEYGEN} -? 2>&1 | grep -q "ssh-keygen -e" ; then \
+		echo "skipped ssh2 public import/export: key conversion disabled" ; \
+	else \
 		${TEST_SSH_SSHKEYGEN} -ef ${.CURDIR}/rsa_openssh.pub >$(OBJ)/t3.out ; \
 		${TEST_SSH_SSHKEYGEN} -if $(OBJ)/t3.out | diff - ${.CURDIR}/rsa_openssh.pub ; \
 	fi
