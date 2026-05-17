@@ -429,13 +429,19 @@ env PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/Users/kevin/local/core
 ```
 
 Do not use a plain `make tests` result as the current Rust-mode integration
-signal. The full upstream target includes `file-tests`, and in a
-`--with-rust-crypto --without-openssl` build that target currently reaches
-legacy SSH2 RSA private-key conversion and fails with `key conversion disabled
-at compile time`. That is useful missing-feature information, but it is not a
-runtime failure in the Rust-backed transport/config paths. Until either the
-conversion support is implemented or the test is skipped for this build mode,
-use `make unit t-exec` for the broad Rust-backed OpenSSH regression check.
+signal without the Rust/no-OpenSSL build above. For the broader upstream-style
+local pass, run:
+
+```sh
+env PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/Users/kevin/local/coreutils/bin \
+    make tests
+```
+
+In Rust/no-OpenSSL builds, `ssh-keygen` does not compile the legacy import/export
+conversion commands. The file-based regression target therefore skips the SSH2
+RSA private import and RFC4716 public import/export checks when `ssh-keygen -?`
+does not advertise `-i` / `-e`; the remaining file, integration, interop, extra,
+and unit targets still run.
 
 If you want to rebuild only the Rust static library and the common test
 binaries first:
