@@ -5907,7 +5907,8 @@ AC_SUBST([TEST_SSH_IPV6], [$TEST_SSH_IPV6])
 AC_SUBST([TEST_SSH_UTF8], [$TEST_SSH_UTF8])
 AC_SUBST([TEST_MALLOC_OPTIONS], [$TEST_MALLOC_OPTIONS])
 AC_SUBST([UNSUPPORTED_ALGORITHMS], [$unsupported_algorithms])
-AC_SUBST([DEPEND], [$(cat $srcdir/.depend)])
+DEPEND="$srcdir/.depend"
+AC_SUBST_FILE([DEPEND])
 
 # Binaries for interop tests.
 AC_PATH_PROG([PLINK], [plink])

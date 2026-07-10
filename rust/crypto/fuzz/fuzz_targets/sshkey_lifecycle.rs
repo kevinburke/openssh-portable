@@ -28,7 +28,9 @@ const KEY_ECDSA_SK: c_int = 6;
 const KEY_ECDSA_SK_CERT: c_int = 7;
 const KEY_ED25519_SK: c_int = 8;
 const KEY_ED25519_SK_CERT: c_int = 9;
-const KEY_UNSPEC: c_int = 10;
+const KEY_MLDSA44_ED25519: c_int = 10;
+const KEY_MLDSA44_ED25519_CERT: c_int = 11;
+const KEY_UNSPEC: c_int = 12;
 
 const SSH_ED25519: &[u8] = b"ssh-ed25519\0";
 const SSH_ED25519_CERT: &[u8] = b"ssh-ed25519-cert-v01@openssh.com\0";
@@ -136,7 +138,7 @@ const ENTRIES: [RustSshkeyImplEntry; 8] = [
     },
 ];
 
-const CANDIDATE_TYPES: [c_int; 11] = [
+const CANDIDATE_TYPES: [c_int; 14] = [
     KEY_RSA,
     KEY_ECDSA,
     KEY_ED25519,
@@ -147,6 +149,9 @@ const CANDIDATE_TYPES: [c_int; 11] = [
     KEY_ECDSA_SK_CERT,
     KEY_ED25519_SK,
     KEY_ED25519_SK_CERT,
+    KEY_MLDSA44_ED25519,
+    KEY_MLDSA44_ED25519_CERT,
+    KEY_UNSPEC,
     4242,
 ];
 
