@@ -30,12 +30,27 @@
 int
 crypto_sign_ed25519_keypair(unsigned char *pk, unsigned char *sk)
 {
-	arc4random_buf(sk, crypto_sign_ed25519_PUBLICKEYBYTES);
-	if (ossh_rust_ed25519_public_from_seed(sk,
-	    crypto_sign_ed25519_PUBLICKEYBYTES, pk,
-	    crypto_sign_ed25519_PUBLICKEYBYTES) != 0)
+	unsigned char seed[crypto_sign_ed25519_SEEDBYTES];
+	int r;
+
+	arc4random_buf(seed, sizeof(seed));
+	r = crypto_sign_ed25519_keypair_from_seed(pk, sk, seed);
+	explicit_bzero(seed, sizeof(seed));
+	return r;
+}
+
+int
+crypto_sign_ed25519_keypair_from_seed(unsigned char *pk, unsigned char *sk,
+    const unsigned char *seed)
+{
+	memcpy(sk, seed, crypto_sign_ed25519_SEEDBYTES);
+	if (ossh_rust_ed25519_public_from_seed(seed,
+	    crypto_sign_ed25519_SEEDBYTES, pk,
+	    crypto_sign_ed25519_PUBLICKEYBYTES) != 0) {
+		explicit_bzero(sk, crypto_sign_ed25519_SECRETKEYBYTES);
 		return -1;
-	memcpy(sk + crypto_sign_ed25519_PUBLICKEYBYTES, pk,
+	}
+	memcpy(sk + crypto_sign_ed25519_SEEDBYTES, pk,
 	    crypto_sign_ed25519_PUBLICKEYBYTES);
 	return 0;
 }

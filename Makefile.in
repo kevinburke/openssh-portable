@@ -774,10 +774,12 @@ UNITTESTS_TEST_CRYPTO_OBJS=\
 
 regress/unittests/crypto/test_crypto$(EXEEXT): \
     ${UNITTESTS_TEST_CRYPTO_OBJS} \
-    regress/unittests/test_helper/libtest_helper.a libssh.a
+    regress/unittests/test_helper/libtest_helper.a libssh.a $(LIBCOMPAT) \
+    $(RUST_CRYPTO_BUILD_DEPS)
 	$(LD) -o $@ $(LDFLAGS) $(UNITTESTS_TEST_CRYPTO_OBJS) \
 	    regress/unittests/test_helper/libtest_helper.a \
-	    -lssh -lopenbsd-compat -lssh -lopenbsd-compat $(TESTLIBS)
+	    -lssh -lopenbsd-compat -lssh -lopenbsd-compat \
+	    $(RUST_CRYPTO_LINK_LIB) $(TESTLIBS)
 
 UNITTESTS_TEST_MISC_OBJS=\
 	regress/unittests/misc/tests.o \
@@ -811,10 +813,12 @@ UNITTESTS_TEST_SERVCONF_OBJS=\
 
 regress/unittests/servconf/test_servconf$(EXEEXT): \
     ${UNITTESTS_TEST_SERVCONF_OBJS} \
-    regress/unittests/test_helper/libtest_helper.a libssh.a
+    regress/unittests/test_helper/libtest_helper.a libssh.a $(LIBCOMPAT) \
+    $(RUST_CRYPTO_BUILD_DEPS)
 	$(LD) -o $@ $(LDFLAGS) $(UNITTESTS_TEST_SERVCONF_OBJS) \
 	    regress/unittests/test_helper/libtest_helper.a \
-	    -lssh -lopenbsd-compat -lssh -lopenbsd-compat $(TESTLIBS)
+	    -lssh -lopenbsd-compat -lssh -lopenbsd-compat \
+	    $(RUST_CRYPTO_LINK_LIB) $(TESTLIBS)
 
 UNITTESTS_TEST_UTF8_OBJS=\
 	regress/unittests/utf8/tests.o
@@ -965,4 +969,4 @@ package: $(CONFIGFILES) $(MANPAGES) $(TARGETS)
 		sh buildpkg.sh; \
 	fi
 
-# @DEPEND@
+@DEPEND@
