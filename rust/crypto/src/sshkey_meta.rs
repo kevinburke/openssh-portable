@@ -11,7 +11,9 @@ const KEY_ECDSA_SK: c_int = 6;
 const KEY_ECDSA_SK_CERT: c_int = 7;
 const KEY_ED25519_SK: c_int = 8;
 const KEY_ED25519_SK_CERT: c_int = 9;
-const KEY_UNSPEC: c_int = 10;
+const KEY_MLDSA44_ED25519: c_int = 10;
+const KEY_MLDSA44_ED25519_CERT: c_int = 11;
+const KEY_UNSPEC: c_int = 12;
 const NID_X9_62_PRIME256V1: c_int = 415;
 const NID_SECP384R1: c_int = 715;
 const NID_SECP521R1: c_int = 716;
@@ -112,7 +114,12 @@ fn parse_ecdsa_type_name_nid(input: &[u8]) -> Option<(c_int, c_int)> {
 pub(crate) fn sshkey_type_is_cert(type_: c_int) -> bool {
     matches!(
         type_,
-        KEY_RSA_CERT | KEY_ECDSA_CERT | KEY_ECDSA_SK_CERT | KEY_ED25519_CERT | KEY_ED25519_SK_CERT
+        KEY_RSA_CERT
+            | KEY_ECDSA_CERT
+            | KEY_ECDSA_SK_CERT
+            | KEY_ED25519_CERT
+            | KEY_ED25519_SK_CERT
+            | KEY_MLDSA44_ED25519_CERT
     )
 }
 
@@ -123,6 +130,7 @@ pub(crate) fn sshkey_type_plain(type_: c_int) -> c_int {
         KEY_ECDSA_SK_CERT => KEY_ECDSA_SK,
         KEY_ED25519_CERT => KEY_ED25519,
         KEY_ED25519_SK_CERT => KEY_ED25519_SK,
+        KEY_MLDSA44_ED25519_CERT => KEY_MLDSA44_ED25519,
         _ => type_,
     }
 }
@@ -134,6 +142,7 @@ pub(crate) fn sshkey_type_certified(type_: c_int) -> Option<c_int> {
         KEY_ECDSA_SK => Some(KEY_ECDSA_SK_CERT),
         KEY_ED25519 => Some(KEY_ED25519_CERT),
         KEY_ED25519_SK => Some(KEY_ED25519_SK_CERT),
+        KEY_MLDSA44_ED25519 => Some(KEY_MLDSA44_ED25519_CERT),
         _ => None,
     }
 }
@@ -947,9 +956,18 @@ mod tests {
     fn type_relation_helpers_match_c_semantics() {
         assert!(sshkey_type_is_cert(KEY_RSA_CERT));
         assert!(!sshkey_type_is_cert(KEY_RSA));
+        assert!(sshkey_type_is_cert(KEY_MLDSA44_ED25519_CERT));
         assert_eq!(sshkey_type_plain(KEY_ECDSA_SK_CERT), KEY_ECDSA_SK);
         assert_eq!(sshkey_type_plain(KEY_ED25519_CERT), KEY_ED25519);
+        assert_eq!(
+            sshkey_type_plain(KEY_MLDSA44_ED25519_CERT),
+            KEY_MLDSA44_ED25519
+        );
         assert_eq!(sshkey_type_certified(KEY_ED25519), Some(KEY_ED25519_CERT));
+        assert_eq!(
+            sshkey_type_certified(KEY_MLDSA44_ED25519),
+            Some(KEY_MLDSA44_ED25519_CERT)
+        );
         assert_eq!(sshkey_type_certified(KEY_ECDSA_SK), Some(KEY_ECDSA_SK_CERT));
         assert_eq!(sshkey_type_certified(KEY_RSA_CERT), None);
         assert!(sshkey_type_is_sk(KEY_ED25519_SK_CERT));
