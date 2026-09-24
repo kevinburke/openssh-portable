@@ -3,13 +3,22 @@
 These commands are for reproducing problematic GitHub Actions jobs inside a
 Linux container instead of trying to mirror them directly on macOS.
 
-The two most useful cases for this branch are:
+The supported configurations are:
 
 - `default`
-- `openssl-noec`
 - `without-openssl`
 - `rust-crypto`
 - `gcc-12-Werror` on Ubuntu 22.04
+
+OpenSSL builds now require elliptic-curve support, so the old `openssl-noec`
+configuration has been removed. The `without-openssl` lane still tests the
+bundled C implementation, including Ed25519 verification edge cases.
+
+`make prepush-rust` runs formatting, panic-boundary and Rust unit checks,
+then C unit tests in the Rust, OpenSSL, bundled C, and GCC 12 Werror lanes.
+It also runs the selected Rust integration tests. It supports linked worktrees
+by mounting both the checkout and its common Git directory at their host paths.
+Docker must be running. Rebuild existing images after Dockerfile changes.
 
 All examples assume you start from the `openssh-portable/` repo root.
 
@@ -21,7 +30,7 @@ docker build -t openssh-ci-repro -f docker/ci-repro.Dockerfile .
 docker build --build-arg UBUNTU_VERSION=22.04 \
   -t openssh-ci-repro-ubuntu22 -f docker/ci-repro.Dockerfile .
 docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro \
-  ./contrib/ci-repro.sh openssl-noec
+  ./contrib/ci-repro.sh rust-crypto
 ```
 
 or:
@@ -83,6 +92,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
   git \
   libfido2-dev \
   libpam0g-dev \
+  libssl-dev \
   libtool \
   mandoc \
   pkg-config \
@@ -113,42 +123,6 @@ To keep it fast and match the pre-push gate:
 ```sh
 docker run --rm -it -v "$PWD:/src" -w /src openssh-ci-repro \
   env MAKE_TARGETS=unit ./contrib/ci-repro.sh default
-```
-
-## Reproducing `openssl-noec`
-
-This CI job builds OpenSSL `OpenSSL_1_1_1k` with `no-ec`, installs it under
-`/opt/openssl`, then runs the normal OpenSSH build against that libcrypto.
-
-If you are using the helper script, this is just:
-
-```sh
-./contrib/ci-repro.sh openssl-noec
-```
-
-Inside the container:
-
-```sh
-cd /tmp/openssh-ci
-.github/install_libcrypto.sh OpenSSL_1_1_1k /opt/openssl no-ec
-./configure \
-  --prefix="$PWD/local" \
-  --with-ssl-dir=/opt/openssl \
-  --with-rpath=-Wl,-rpath, \
-  --disable-security-key
-```
-
-To reproduce the sshkey unit that has been failing on this branch:
-
-```sh
-make -j1 regress/unittests/sshkey/test_sshkey
-./regress/unittests/sshkey/test_sshkey -d regress/unittests/sshkey/testdata
-```
-
-To reproduce the full unit target instead:
-
-```sh
-make -j1 unit
 ```
 
 ## Reproducing `rust-crypto`
@@ -243,7 +217,7 @@ make -j1 t-exec
 
 ## Notes
 
-- If you switch between `openssl-noec` and `rust-crypto`, use a fresh
+- If you switch between `default` and `rust-crypto`, use a fresh
   worktree or run `make distclean` before reconfiguring.
 - Parser and fallback regressions on this branch are often cheapest to debug
   first with:

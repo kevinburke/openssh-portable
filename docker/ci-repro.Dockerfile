@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     git \
     libfido2-dev \
     libpam0g-dev \
+    libssl-dev \
     libtool \
     mandoc \
     pkg-config \

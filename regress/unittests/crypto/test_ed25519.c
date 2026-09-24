@@ -63,6 +63,57 @@ static const struct ed25519_kat ed25519_kats[] = {
 
 void ed25519_tests(void);
 
+/* Record each backend's policy; strict Rust verification is intentional. */
+static void
+ed25519_verification_tests(void)
+{
+	FILE *f;
+	char line[1024], pkhex[65], sighex[129], msghex[129], name[80];
+	u_char pk[32], sig[64], msg[64];
+	int id, rust_ok, bundled_ok, openssl_ok, expected, count = 0;
+	size_t msglen;
+
+	TEST_START("Ed25519 verification corpus");
+	ASSERT_PTR_NE(f = fopen(test_data_file("ed25519-verification.txt"),
+	    "r"), NULL);
+	TEST_DONE();
+	while (fgets(line, sizeof(line), f) != NULL) {
+		if (line[0] == '#')
+			continue;
+		TEST_START("Ed25519 verification vector decoding");
+		ASSERT_PTR_NE(strchr(line, '\n'), NULL);
+		ASSERT_INT_EQ(sscanf(line, "%d %d %d %d %64s %128s %128s",
+		    &id, &rust_ok, &bundled_ok, &openssl_ok,
+		    pkhex, sighex, msghex), 7);
+		ASSERT_SIZE_T_EQ(strlen(pkhex), sizeof(pk) * 2);
+		ASSERT_SIZE_T_EQ(strlen(sighex), sizeof(sig) * 2);
+		ASSERT_SIZE_T_EQ(strlen(msghex) % 2, 0);
+		msglen = strlen(msghex) / 2;
+		hex2bin(pk, pkhex, sizeof(pk));
+		hex2bin(sig, sighex, sizeof(sig));
+		hex2bin(msg, msghex, msglen);
+		TEST_DONE();
+#ifdef WITH_RUST_CRYPTO
+		expected = rust_ok;
+#elif defined(OPENSSL_HAS_ED25519)
+		expected = openssl_ok;
+#else
+		expected = bundled_ok;
+#endif
+		snprintf(name, sizeof(name), "Ed25519 CCTV vector %d", id);
+		TEST_START(name);
+		ASSERT_INT_EQ(crypto_sign_ed25519_verify_detached(sig,
+		    msg, msglen, pk) == 0, expected);
+		TEST_DONE();
+		count++;
+	}
+	TEST_START("Ed25519 verification corpus complete");
+	ASSERT_INT_EQ(ferror(f), 0);
+	ASSERT_INT_EQ(count, 69);
+	ASSERT_INT_EQ(fclose(f), 0);
+	TEST_DONE();
+}
+
 void
 ed25519_tests(void)
 {
@@ -71,6 +122,14 @@ ed25519_tests(void)
 	uint8_t *msg;
 	size_t i, msglen;
 	unsigned long long smlen;
+	/* Little-endian order of the prime-order subgroup. */
+	const u_char order[32] = {
+		0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58,
+		0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde, 0x14,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x10
+	};
+	size_t j;
+	u_int carry;
 
 	for (i = 0; i < sizeof(ed25519_kats)/sizeof(ed25519_kats[0]); i++) {
 		TEST_START("Ed25519 keypair from seed");
@@ -93,7 +152,27 @@ ed25519_tests(void)
 
 		ASSERT_INT_EQ(crypto_sign_ed25519_verify_detached(sig,
 		    msg, msglen, pk), 0);
+		/* The detached API permits a NULL signature-length pointer. */
+		ASSERT_INT_EQ(crypto_sign_ed25519_detached(sig, NULL,
+		    msg, msglen, sk), 0);
+		ASSERT_MEM_EQ(sig, expected_sig, sizeof(sig));
+		TEST_DONE();
+
+		TEST_START("Ed25519 rejects scalar malleability");
+		/* S + L has the same group value but is not a canonical scalar. */
+		for (carry = 0, j = 0; j < sizeof(order); j++) {
+			carry += sig[32 + j] + order[j];
+			sig[32 + j] = carry & 0xff;
+			carry >>= 8;
+		}
+		ASSERT_INT_NE(crypto_sign_ed25519_verify_detached(sig,
+		    msg, msglen, pk), 0);
+		memcpy(sig, expected_sig, sizeof(sig));
+		sig[63] |= 0x80;
+		ASSERT_INT_NE(crypto_sign_ed25519_verify_detached(sig,
+		    msg, msglen, pk), 0);
 		free(msg);
 		TEST_DONE();
 	}
+	ed25519_verification_tests();
 }

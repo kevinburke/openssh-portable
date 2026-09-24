@@ -9,7 +9,6 @@ usage: contrib/ci-repro.sh <config>
 Supported configs:
   default
   gcc-12-Werror
-  openssl-noec
   without-openssl
   rust-crypto
 
@@ -65,7 +64,7 @@ fi
 config="$1"
 
 case "$config" in
-default|gcc-12-Werror|openssl-noec|without-openssl|rust-crypto)
+default|gcc-12-Werror|without-openssl|rust-crypto)
 	;;
 *)
 	echo "unsupported config: $config" >&2
@@ -82,8 +81,8 @@ fi
 JOBS="${JOBS:-$default_jobs}"
 TEST_SSH_UNSAFE_PERMISSIONS="${TEST_SSH_UNSAFE_PERMISSIONS:-1}"
 
-script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
+script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+repo_root="$(CDPATH='' cd -- "$script_dir/.." && pwd)"
 workdir="${WORKDIR:-/tmp/openssh-ci-$config}"
 privsep_dir="$workdir/empty"
 
@@ -139,15 +138,6 @@ gcc-12-Werror)
 	  --with-Werror \
 	  --with-privsep-user=root \
 	  --with-privsep-path="$privsep_dir"
-	make_targets="${MAKE_TARGETS:-unit}"
-	;;
-openssl-noec)
-	.github/install_libcrypto.sh OpenSSL_1_1_1k /opt/openssl no-ec
-	./configure \
-	  --prefix="$PWD/local" \
-	  --with-ssl-dir=/opt/openssl \
-	  --with-rpath=-Wl,-rpath, \
-	  --disable-security-key
 	make_targets="${MAKE_TARGETS:-unit}"
 	;;
 without-openssl)

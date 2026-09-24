@@ -331,11 +331,18 @@ two minutes. Broader OpenSSH integration coverage (`unit`, `t-exec`, Docker
 CI repros, and VM jobs) is now run deliberately before tags/merge points rather
 than on every branch push.
 
-For reproducing `rust-crypto`, `openssl-noec`, and similar CI jobs locally in
+For reproducing `rust-crypto`, `default`, `without-openssl`, and similar CI jobs locally in
 Docker, see [CI_REPRO.md](CI_REPRO.md).
 
 The Docker repro image installs current stable Rust via `rustup`, so local
 repros do not depend on the distro `cargo` version inside the base image.
+
+## Ed25519 verification policy
+
+Rust keeps ed25519-dalek's strict verification. Upstream's bundled C and
+OpenSSL backends accept some additional edge cases. The release gate tests
+each backend against a shared fixture and checks scalar malleability and the
+detached signing API. See the [comparison results and vector provenance](regress/unittests/crypto/testdata/ed25519-verification.md).
 
 ## macOS local build and install
 

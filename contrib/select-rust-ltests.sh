@@ -2,8 +2,8 @@
 
 set -eu
 
-script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
+script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+repo_root="$(CDPATH='' cd -- "$script_dir/.." && pwd)"
 
 cd "$repo_root"
 
@@ -37,6 +37,10 @@ add_test rekey
 while IFS= read -r path; do
 	[ -n "$path" ] || continue
 	case "$path" in
+	ed25519*.c|rust/crypto/src/kex.rs|regress/unittests/crypto/test_ed25519.c|regress/unittests/crypto/testdata/ed25519-verification.*)
+		add_test keytype
+		add_test sshsig
+		;;
 	regress/dhgex.sh|dh.c|kexdh.c|kexdh-rust.c|kexgex.c|kexgexc.c|kexgexs.c|kexgex-rust.c|moduli.c|rust/crypto/src/dh.rs)
 		add_test dhgex
 		add_test rekey

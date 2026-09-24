@@ -233,6 +233,9 @@ pub(crate) fn ed25519_verify(
         Err(_) => return -1,
     };
     let signature = Signature::from_bytes(&sig);
+    // Keep strict verification: upstream's bundled C verifier also accepts
+    // some signatures whose verification equation has a low-order residue.
+    // Shared CCTV regression vectors document these backend differences.
     if verifying_key.verify_strict(msg, &signature).is_err() {
         return -1;
     }
@@ -750,6 +753,77 @@ mod tests {
             signature.as_slice()
         );
         assert!(verifying_key.verify_strict(&[], &sig).is_ok());
+    }
+
+    #[test]
+    fn ed25519_verification_policy() {
+        let corpus =
+            include_str!("../../../regress/unittests/crypto/testdata/ed25519-verification.txt");
+        let mut count = 0;
+        for line in corpus.lines().filter(|line| !line.starts_with('#')) {
+            let fields: Vec<_> = line.split_whitespace().collect();
+            assert_eq!(fields.len(), 7);
+            let public = decode_hex(fields[4]);
+            let signature = decode_hex(fields[5]);
+            let msg = decode_hex(fields[6]);
+            assert_eq!(public.len(), 32);
+            assert_eq!(signature.len(), 64);
+            let expected = match fields[1] {
+                "0" => -1,
+                "1" => 0,
+                other => panic!("invalid acceptance value: {other}"),
+            };
+            assert_eq!(
+                ed25519_verify(
+                    signature.as_ptr(),
+                    signature.len(),
+                    msg.as_ptr(),
+                    msg.len(),
+                    public.as_ptr(),
+                    public.len(),
+                ),
+                expected,
+                "CCTV vector {}",
+                fields[0],
+            );
+            count += 1;
+        }
+        assert_eq!(count, 69);
+    }
+
+    #[test]
+    fn ed25519_verify_rejects_malformed_inputs() {
+        let signing_key = SigningKey::from_bytes(&[42; 32]);
+        let public = signing_key.verifying_key().to_bytes();
+        let signature = signing_key.sign(b"message").to_bytes();
+        let verify = |sig: &[u8], msg: &[u8], pk: &[u8]| {
+            ed25519_verify(
+                sig.as_ptr(),
+                sig.len(),
+                msg.as_ptr(),
+                msg.len(),
+                pk.as_ptr(),
+                pk.len(),
+            )
+        };
+        assert_eq!(verify(&signature, b"message", &public), 0);
+        assert_eq!(verify(&signature, b"changed", &public), -1);
+        assert_eq!(verify(&signature[..63], b"message", &public), -1);
+        assert_eq!(verify(&[0; 65], b"message", &public), -1);
+        assert_eq!(verify(&signature, b"message", &public[..31]), -1);
+        assert_eq!(verify(&signature, b"message", &[0; 33]), -1);
+        assert_eq!(verify(&signature, b"message", &[0xff; 32]), -1);
+        assert_eq!(
+            ed25519_verify(
+                signature.as_ptr(),
+                64,
+                std::ptr::null(),
+                1,
+                public.as_ptr(),
+                32,
+            ),
+            -1,
+        );
     }
 
     #[test]
