@@ -5,6 +5,7 @@ use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use fips203::ml_kem_768;
 use fips203::traits::{Decaps, Encaps, KeyGen, SerDes};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
+use p256::elliptic_curve::zeroize::Zeroizing;
 use p256::{PublicKey as P256PublicKey, SecretKey as P256SecretKey};
 use p384::{PublicKey as P384PublicKey, SecretKey as P384SecretKey};
 use p521::{PublicKey as P521PublicKey, SecretKey as P521SecretKey};
@@ -42,6 +43,10 @@ const SNTRUP761X25519_SERVER_BLOB_LENGTH: usize =
     SNTRUP761_CIPHERTEXT_LENGTH + CURVE25519_KEY_LENGTH;
 const ECDH_NISTP256_SECRET_LENGTH: usize = 32;
 const ECDH_NISTP256_PUBLIC_LENGTH: usize = 65;
+pub(crate) const MLKEM768NISTP256_CLIENT_BLOB_LENGTH: usize =
+    MLKEM768_PUBLIC_KEY_LENGTH + ECDH_NISTP256_PUBLIC_LENGTH;
+pub(crate) const MLKEM768NISTP256_SERVER_BLOB_LENGTH: usize =
+    MLKEM768_CIPHERTEXT_LENGTH + ECDH_NISTP256_PUBLIC_LENGTH;
 const ECDH_NISTP384_SECRET_LENGTH: usize = 48;
 const ECDH_NISTP384_PUBLIC_LENGTH: usize = 97;
 const ECDH_NISTP521_SECRET_LENGTH: usize = 66;
@@ -318,20 +323,21 @@ fn checked_x25519_shared_secret(secret_key: &[u8], public_key: &[u8]) -> Result<
     Ok(shared)
 }
 
-fn hash_mlkem768x25519_shared(
+// Hash the two raw 32-byte secrets; do not SSH-string or mpint encode them.
+fn hash_mlkem768_hybrid_shared(
     mlkem_shared: &[u8],
-    x25519_shared: &[u8],
+    ecdh_shared: &[u8],
     out: &mut [u8],
 ) -> Result<(), ()> {
     if mlkem_shared.len() != MLKEM768_SHARED_SECRET_LENGTH
-        || x25519_shared.len() != CURVE25519_KEY_LENGTH
+        || ecdh_shared.len() != 32
         || out.len() != 32
     {
         return Err(());
     }
     let mut digest = Sha256::new();
     digest.update(mlkem_shared);
-    digest.update(x25519_shared);
+    digest.update(ecdh_shared);
     out.copy_from_slice(&digest.finalize());
     Ok(())
 }
@@ -446,7 +452,7 @@ pub(crate) fn mlkem768x25519_enc(
         Ok(shared) => shared,
         Err(_) => return -1,
     };
-    if hash_mlkem768x25519_shared(&mlkem_shared.into_bytes(), &x25519_shared, shared_hash).is_err()
+    if hash_mlkem768_hybrid_shared(&mlkem_shared.into_bytes(), &x25519_shared, shared_hash).is_err()
     {
         return -1;
     }
@@ -507,7 +513,176 @@ pub(crate) fn mlkem768x25519_dec(
         Ok(shared) => shared,
         Err(_) => return -1,
     };
-    if hash_mlkem768x25519_shared(&mlkem_shared.into_bytes(), &x25519_shared, shared_hash).is_err()
+    if hash_mlkem768_hybrid_shared(&mlkem_shared.into_bytes(), &x25519_shared, shared_hash).is_err()
+    {
+        return -1;
+    }
+    0
+}
+
+pub(crate) fn mlkem768nistp256_keypair(
+    client_blob: *mut u8,
+    client_blob_len: usize,
+    mlkem_secret: *mut u8,
+    mlkem_secret_len: usize,
+    p256_secret: *mut u8,
+    p256_secret_len: usize,
+) -> c_int {
+    if client_blob.is_null() || mlkem_secret.is_null() || p256_secret.is_null() {
+        return -1;
+    }
+    if client_blob_len != MLKEM768NISTP256_CLIENT_BLOB_LENGTH
+        || mlkem_secret_len != MLKEM768_SECRET_KEY_LENGTH
+        || p256_secret_len != ECDH_NISTP256_SECRET_LENGTH
+    {
+        return -1;
+    }
+    let client_blob = unsafe { slice::from_raw_parts_mut(client_blob, client_blob_len) };
+    let mlkem_secret = unsafe { slice::from_raw_parts_mut(mlkem_secret, mlkem_secret_len) };
+    let p256_secret = unsafe { slice::from_raw_parts_mut(p256_secret, p256_secret_len) };
+
+    let (encaps_key, decaps_key): (ml_kem_768::EncapsKey, ml_kem_768::DecapsKey) =
+        match ml_kem_768::KG::try_keygen_with_rng(&mut OsRng) {
+            Ok(pair) => pair,
+            Err(_) => return -1,
+        };
+    let public_bytes = encaps_key.into_bytes();
+    let secret_bytes = Zeroizing::new(decaps_key.into_bytes());
+    client_blob[..MLKEM768_PUBLIC_KEY_LENGTH].copy_from_slice(&public_bytes);
+    mlkem_secret.copy_from_slice(secret_bytes.as_ref());
+
+    if EcdhCurve::NistP256
+        .generate_keypair(p256_secret, &mut client_blob[MLKEM768_PUBLIC_KEY_LENGTH..])
+        .is_err()
+    {
+        return -1;
+    }
+    0
+}
+
+pub(crate) fn mlkem768nistp256_enc(
+    client_blob: *const u8,
+    client_blob_len: usize,
+    server_blob: *mut u8,
+    server_blob_len: usize,
+    shared_hash: *mut u8,
+    shared_hash_len: usize,
+) -> c_int {
+    if client_blob.is_null() || server_blob.is_null() || shared_hash.is_null() {
+        return -1;
+    }
+    if client_blob_len != MLKEM768NISTP256_CLIENT_BLOB_LENGTH
+        || server_blob_len != MLKEM768NISTP256_SERVER_BLOB_LENGTH
+        || shared_hash_len != 32
+    {
+        return -1;
+    }
+    let client_blob = unsafe { slice::from_raw_parts(client_blob, client_blob_len) };
+    let server_blob = unsafe { slice::from_raw_parts_mut(server_blob, server_blob_len) };
+    let shared_hash = unsafe { slice::from_raw_parts_mut(shared_hash, shared_hash_len) };
+    let (mlkem_public, p256_public) = client_blob.split_at(MLKEM768_PUBLIC_KEY_LENGTH);
+    let Ok(mlkem_public) = slice_array::<MLKEM768_PUBLIC_KEY_LENGTH>(mlkem_public) else {
+        return -1;
+    };
+
+    let encaps_key: ml_kem_768::EncapsKey =
+        match ml_kem_768::EncapsKey::try_from_bytes(mlkem_public) {
+            Ok(key) => key,
+            Err(_) => return -1,
+        };
+    let (mlkem_shared, ciphertext): (fips203::SharedSecretKey, ml_kem_768::CipherText) =
+        match encaps_key.try_encaps_with_rng(&mut OsRng) {
+            Ok(result) => result,
+            Err(_) => return -1,
+        };
+    let ciphertext_bytes = ciphertext.into_bytes();
+    server_blob[..MLKEM768_CIPHERTEXT_LENGTH].copy_from_slice(&ciphertext_bytes);
+
+    let mut server_secret = Zeroizing::new([0u8; ECDH_NISTP256_SECRET_LENGTH]);
+    if EcdhCurve::NistP256
+        .generate_keypair(
+            server_secret.as_mut(),
+            &mut server_blob[MLKEM768_CIPHERTEXT_LENGTH..],
+        )
+        .is_err()
+    {
+        return -1;
+    }
+    let mut p256_shared = Zeroizing::new([0u8; ECDH_NISTP256_SECRET_LENGTH]);
+    if EcdhCurve::NistP256
+        .shared_secret(server_secret.as_ref(), p256_public, p256_shared.as_mut())
+        .is_err()
+    {
+        return -1;
+    }
+    let mlkem_shared = Zeroizing::new(mlkem_shared.into_bytes());
+    if hash_mlkem768_hybrid_shared(mlkem_shared.as_ref(), p256_shared.as_ref(), shared_hash)
+        .is_err()
+    {
+        return -1;
+    }
+    0
+}
+
+pub(crate) fn mlkem768nistp256_dec(
+    server_blob: *const u8,
+    server_blob_len: usize,
+    mlkem_secret: *const u8,
+    mlkem_secret_len: usize,
+    p256_secret: *const u8,
+    p256_secret_len: usize,
+    shared_hash: *mut u8,
+    shared_hash_len: usize,
+) -> c_int {
+    if server_blob.is_null()
+        || mlkem_secret.is_null()
+        || p256_secret.is_null()
+        || shared_hash.is_null()
+    {
+        return -1;
+    }
+    if server_blob_len != MLKEM768NISTP256_SERVER_BLOB_LENGTH
+        || mlkem_secret_len != MLKEM768_SECRET_KEY_LENGTH
+        || p256_secret_len != ECDH_NISTP256_SECRET_LENGTH
+        || shared_hash_len != 32
+    {
+        return -1;
+    }
+    let server_blob = unsafe { slice::from_raw_parts(server_blob, server_blob_len) };
+    let mlkem_secret = unsafe { slice::from_raw_parts(mlkem_secret, mlkem_secret_len) };
+    let p256_secret = unsafe { slice::from_raw_parts(p256_secret, p256_secret_len) };
+    let shared_hash = unsafe { slice::from_raw_parts_mut(shared_hash, shared_hash_len) };
+    let (ciphertext, server_curve_public) = server_blob.split_at(MLKEM768_CIPHERTEXT_LENGTH);
+    let Ok(mlkem_secret) = slice_array::<MLKEM768_SECRET_KEY_LENGTH>(mlkem_secret) else {
+        return -1;
+    };
+    let Ok(ciphertext) = slice_array::<MLKEM768_CIPHERTEXT_LENGTH>(ciphertext) else {
+        return -1;
+    };
+
+    let decaps_key: ml_kem_768::DecapsKey =
+        match ml_kem_768::DecapsKey::try_from_bytes(mlkem_secret) {
+            Ok(key) => key,
+            Err(_) => return -1,
+        };
+    let ciphertext = match ml_kem_768::CipherText::try_from_bytes(ciphertext) {
+        Ok(ct) => ct,
+        Err(_) => return -1,
+    };
+    let mlkem_shared: fips203::SharedSecretKey = match decaps_key.try_decaps(&ciphertext) {
+        Ok(shared) => shared,
+        Err(_) => return -1,
+    };
+    let mut p256_shared = Zeroizing::new([0u8; ECDH_NISTP256_SECRET_LENGTH]);
+    if EcdhCurve::NistP256
+        .shared_secret(p256_secret, server_curve_public, p256_shared.as_mut())
+        .is_err()
+    {
+        return -1;
+    }
+    let mlkem_shared = Zeroizing::new(mlkem_shared.into_bytes());
+    if hash_mlkem768_hybrid_shared(mlkem_shared.as_ref(), p256_shared.as_ref(), shared_hash)
+        .is_err()
     {
         return -1;
     }
@@ -662,7 +837,7 @@ mod tests {
         SNTRUP761X25519_SERVER_BLOB_LENGTH, SNTRUP761_SECRET_KEY_LENGTH, X25519_BASEPOINT_BYTES,
     };
 
-    fn decode_hex(input: &str) -> Vec<u8> {
+    pub(super) fn decode_hex(input: &str) -> Vec<u8> {
         let input: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
         let mut out = Vec::with_capacity(input.len() / 2);
         let bytes = input.as_bytes();
@@ -1145,5 +1320,232 @@ mod tests {
             0
         );
         assert_eq!(client_shared, server_shared);
+    }
+}
+
+#[cfg(test)]
+mod mlkem768nistp256_tests {
+    use super::*;
+
+    struct Exchange {
+        client: [u8; MLKEM768NISTP256_CLIENT_BLOB_LENGTH],
+        secret: [u8; MLKEM768_SECRET_KEY_LENGTH],
+        scalar: [u8; 32],
+        server: [u8; MLKEM768NISTP256_SERVER_BLOB_LENGTH],
+        shared: [u8; 32],
+    }
+
+    impl Exchange {
+        fn new() -> Self {
+            let mut e = Self {
+                client: [0; MLKEM768NISTP256_CLIENT_BLOB_LENGTH],
+                secret: [0; MLKEM768_SECRET_KEY_LENGTH],
+                scalar: [0; 32],
+                server: [0; MLKEM768NISTP256_SERVER_BLOB_LENGTH],
+                shared: [0; 32],
+            };
+            assert_eq!(
+                mlkem768nistp256_keypair(
+                    e.client.as_mut_ptr(),
+                    e.client.len(),
+                    e.secret.as_mut_ptr(),
+                    e.secret.len(),
+                    e.scalar.as_mut_ptr(),
+                    e.scalar.len(),
+                ),
+                0
+            );
+            assert_eq!(
+                mlkem768nistp256_enc(
+                    e.client.as_ptr(),
+                    e.client.len(),
+                    e.server.as_mut_ptr(),
+                    e.server.len(),
+                    e.shared.as_mut_ptr(),
+                    e.shared.len(),
+                ),
+                0
+            );
+            e
+        }
+
+        fn dec(&self, server: &[u8], out: &mut [u8]) -> c_int {
+            mlkem768nistp256_dec(
+                server.as_ptr(),
+                server.len(),
+                self.secret.as_ptr(),
+                self.secret.len(),
+                self.scalar.as_ptr(),
+                self.scalar.len(),
+                out.as_mut_ptr(),
+                out.len(),
+            )
+        }
+    }
+
+    #[test]
+    fn roundtrip_and_ciphertext_implicit_rejection() {
+        for _ in 0..8 {
+            let e = Exchange::new();
+            assert_eq!(e.client.len(), 1249);
+            assert_eq!(e.server.len(), 1153);
+            assert_eq!(e.client[1184], 4);
+            assert_eq!(e.server[1088], 4);
+            let mut shared = [0; 32];
+            assert_eq!(e.dec(&e.server, &mut shared), 0);
+            assert_eq!(shared, e.shared);
+            let mut tampered = e.server;
+            tampered[0] ^= 1;
+            // ML-KEM rejects implicitly: decapsulation returns a different
+            // secret, and SSH's exchange-hash signature then fails.
+            assert_eq!(e.dec(&tampered, &mut shared), 0);
+            assert_ne!(shared, e.shared);
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_points_and_noncanonical_kem_keys() {
+        let e = Exchange::new();
+        for tag in [0, 2, 3, 4, 6, 7, 255] {
+            let mut client = e.client;
+            client[1184..].fill(0);
+            client[1184] = tag;
+            let mut server = e.server;
+            server[1088..].fill(0);
+            server[1088] = tag;
+            let mut output = [0; MLKEM768NISTP256_SERVER_BLOB_LENGTH];
+            let mut shared = [0xa5; 32];
+            assert_eq!(
+                mlkem768nistp256_enc(
+                    client.as_ptr(),
+                    client.len(),
+                    output.as_mut_ptr(),
+                    output.len(),
+                    shared.as_mut_ptr(),
+                    shared.len()
+                ),
+                -1
+            );
+            assert_eq!(e.dec(&server, &mut shared), -1);
+            assert_eq!(shared, [0xa5; 32]);
+        }
+        let mut client = e.client;
+        // First encoded coefficient exceeds q=3329.
+        client[..3].fill(255);
+        let mut server = e.server;
+        let mut shared = [0xa5; 32];
+        assert_eq!(
+            mlkem768nistp256_enc(
+                client.as_ptr(),
+                client.len(),
+                server.as_mut_ptr(),
+                server.len(),
+                shared.as_mut_ptr(),
+                shared.len()
+            ),
+            -1
+        );
+        assert_eq!(shared, [0xa5; 32]);
+    }
+
+    #[test]
+    fn rejects_wrong_lengths_and_null_buffers() {
+        let mut e = Exchange::new();
+        let mut shared = [0xa5; 32];
+        for len in [0, 1088, 1152, 1154] {
+            assert_eq!(
+                mlkem768nistp256_dec(
+                    e.server.as_ptr(),
+                    len,
+                    e.secret.as_ptr(),
+                    e.secret.len(),
+                    e.scalar.as_ptr(),
+                    e.scalar.len(),
+                    shared.as_mut_ptr(),
+                    shared.len()
+                ),
+                -1
+            );
+        }
+        for len in [0, 1184, 1248, 1250] {
+            assert_eq!(
+                mlkem768nistp256_enc(
+                    e.client.as_ptr(),
+                    len,
+                    e.server.as_mut_ptr(),
+                    e.server.len(),
+                    shared.as_mut_ptr(),
+                    shared.len()
+                ),
+                -1
+            );
+        }
+        assert_eq!(
+            mlkem768nistp256_keypair(
+                std::ptr::null_mut(),
+                e.client.len(),
+                e.secret.as_mut_ptr(),
+                e.secret.len(),
+                e.scalar.as_mut_ptr(),
+                32
+            ),
+            -1
+        );
+        assert_eq!(
+            mlkem768nistp256_enc(
+                std::ptr::null(),
+                e.client.len(),
+                e.server.as_mut_ptr(),
+                e.server.len(),
+                shared.as_mut_ptr(),
+                32
+            ),
+            -1
+        );
+        assert_eq!(
+            mlkem768nistp256_dec(
+                e.server.as_ptr(),
+                e.server.len(),
+                std::ptr::null(),
+                e.secret.len(),
+                e.scalar.as_ptr(),
+                32,
+                shared.as_mut_ptr(),
+                32
+            ),
+            -1
+        );
+        assert_eq!(e.dec(&e.server, &mut shared[..31]), -1);
+        assert_eq!(shared, [0xa5; 32]);
+    }
+
+    #[test]
+    fn libcrux_openssl_known_answers_preserve_leading_zero() {
+        // Independent oracle: upstream libcrux seeded keygen/encapsulation,
+        // OpenSSL ECDH_compute_key and SHA256. Client P-256 scalar is 1;
+        // server scalars are 2 and 379. The latter shared x starts with 00,
+        // which must remain in the hash input (unlike an SSH mpint).
+        let d = core::array::from_fn(|i| i as u8);
+        let z = core::array::from_fn(|i| (32 + i) as u8);
+        let coins = core::array::from_fn(|i| (64 + i) as u8);
+        let (ek, dk) = ml_kem_768::KG::keygen_from_seed(d, z);
+        let (_, ct) = ek.encaps_from_seed(&coins);
+        let secret = dk.into_bytes();
+        let mut scalar = [0; 32];
+        scalar[31] = 1;
+        for (point, expected) in [
+            ("047cf27b188d034f7e8a52380304b51ac3c08969e277f21b35a60b48fc4766997807775510db8ed040293d9ac69f7430dbba7dade63ce982299e04b79d227873d1",
+             "640ed0963dab6f4b6a8070f699d13f594ca7638c37556569fae3f1ccaad2c41d"),
+            ("04005543894af3d00ed7d740abdbd75c96b06877b787db5f70eea78b90a8d7c00abb4c85a3d8ea29efaafa24406912dd84d5b14dc32bf656ef6c6bd58a5d943f92",
+             "a12283a077a6a97640b3fcd89a0787f0b8710a02afbd53de80edcfdaa45de2e4"),
+        ] {
+            let mut server = ct.clone().into_bytes().to_vec();
+            server.extend(super::tests::decode_hex(point));
+            let mut shared = [0; 32];
+            assert_eq!(mlkem768nistp256_dec(server.as_ptr(), server.len(),
+                secret.as_ptr(), secret.len(), scalar.as_ptr(), scalar.len(),
+                shared.as_mut_ptr(), shared.len()), 0);
+            assert_eq!(shared.as_slice(), super::tests::decode_hex(expected));
+        }
     }
 }

@@ -86,3 +86,10 @@ bench = false
 
 [workspace]
 members = ["."]
+
+[[bin]]
+name = "mlkem768nistp256_peer"
+path = "fuzz_targets/mlkem768nistp256_peer.rs"
+test = false
+doc = false
+bench = false

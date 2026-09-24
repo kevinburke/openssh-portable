@@ -36,6 +36,7 @@ LTESTS= 	connect \
 		transfer \
 		banner \
 		rekey \
+		mlkem768nistp256 \
 		dhgex \
 		stderr-data \
 		stderr-after-eof \

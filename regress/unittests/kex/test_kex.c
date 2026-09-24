@@ -183,6 +183,7 @@ do_kex_with_key(char *kex, char *cipher, char *mac,
 	server2->kex->kex[KEX_C25519_SHA256] = kex_gen_server;
 	server2->kex->kex[KEX_KEM_SNTRUP761X25519_SHA512] = kex_gen_server;
 	server2->kex->kex[KEX_KEM_MLKEM768X25519_SHA256] = kex_gen_server;
+	server2->kex->kex[KEX_KEM_MLKEM768ECDH_SHA256] = kex_gen_server;
 	server2->kex->load_host_public_key = server->kex->load_host_public_key;
 	server2->kex->load_host_private_key = server->kex->load_host_private_key;
 	server2->kex->sign = server->kex->sign;
@@ -371,10 +372,63 @@ rust_dh_substep_benchmarks(void)
 }
 #endif
 
+#ifdef WITH_RUST_CRYPTO
+static void
+rust_mlkem768nistp256_cleanup(void)
+{
+	struct kex *kex;
+	struct sshbuf *reply, *server_shared, *client_shared;
+	u_char zero[crypto_kem_mlkem768_SECRETKEYBYTES] = { 0 };
+	int i, r;
+
+	for (i = 0; i < 4; i++) {
+		TEST_START("ML-KEM/P-256 validates reply and erases client keys");
+		ASSERT_PTR_NE(kex = kex_new(), NULL);
+		kex->ec_nid = OSSH_RUST_ECDH_NISTP256;
+		kex->hash_alg = SSH_DIGEST_SHA256;
+		ASSERT_INT_EQ(kex_kem_mlkem768ecdh_keypair(kex), 0);
+		ASSERT_SIZE_T_EQ(sshbuf_len(kex->client_pub), 1249);
+		ASSERT_INT_EQ(kex_kem_mlkem768ecdh_enc(kex, kex->client_pub,
+		    &reply, &server_shared), 0);
+		ASSERT_SIZE_T_EQ(sshbuf_len(reply), 1153);
+		if (i == 1)
+			ASSERT_INT_EQ(sshbuf_consume_end(reply, 1), 0);
+		else if (i == 2)
+			sshbuf_mutable_ptr(reply)[1088] = 0; /* invalid SEC1 tag */
+		else if (i == 3)
+			kex->hash_alg = SSH_DIGEST_SHA512;
+		r = kex_kem_mlkem768ecdh_dec(kex, reply, &client_shared);
+		if (i == 0) {
+			ASSERT_INT_EQ(r, 0);
+			ASSERT_SIZE_T_EQ(sshbuf_len(client_shared), 36);
+			ASSERT_MEM_EQ(sshbuf_ptr(client_shared),
+			    sshbuf_ptr(server_shared), 36);
+		} else {
+			ASSERT_INT_NE(r, 0);
+			ASSERT_PTR_EQ(client_shared, NULL);
+		}
+		ASSERT_PTR_EQ(kex->ec_client_key, NULL);
+		ASSERT_MEM_EQ(kex->mlkem768_client_key, zero, sizeof(zero));
+		sshbuf_free(reply);
+		sshbuf_free(server_shared);
+		sshbuf_free(client_shared);
+		kex_free(kex);
+		TEST_DONE();
+	}
+}
+#endif
+
 void
 kex_tests(void)
 {
 	do_kex("curve25519-sha256");
+#ifdef WITH_RUST_CRYPTO
+	if (!test_is_benchmark())
+		rust_mlkem768nistp256_cleanup();
+#endif
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
+	do_kex("mlkem768nistp256-sha256");
+#endif
 #ifdef WITH_OPENSSL
 	do_kex("ecdh-sha2-nistp256");
 	do_kex("ecdh-sha2-nistp384");

@@ -37,7 +37,8 @@ use ecdsa::{
 use hmac::HmacState;
 use kex::{
     curve25519_public_from_secret, curve25519_shared_secret, ed25519_parse_public_blob,
-    ed25519_public_from_seed, ed25519_sign, ed25519_verify, mlkem768x25519_dec, mlkem768x25519_enc,
+    ed25519_public_from_seed, ed25519_sign, ed25519_verify, mlkem768nistp256_dec,
+    mlkem768nistp256_enc, mlkem768nistp256_keypair, mlkem768x25519_dec, mlkem768x25519_enc,
     mlkem768x25519_keypair, sntrup761x25519_dec, sntrup761x25519_enc, sntrup761x25519_keypair,
     EcdhCurve,
 };
@@ -4291,6 +4292,67 @@ pub extern "C" fn ossh_rust_mlkem768x25519_dec(
         mlkem_secret_len,
         curve25519_secret,
         curve25519_secret_len,
+        shared_hash,
+        shared_hash_len,
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_mlkem768nistp256_keypair(
+    client_blob: *mut u8,
+    client_blob_len: usize,
+    mlkem_secret: *mut u8,
+    mlkem_secret_len: usize,
+    p256_secret: *mut u8,
+    p256_secret_len: usize,
+) -> c_int {
+    mlkem768nistp256_keypair(
+        client_blob,
+        client_blob_len,
+        mlkem_secret,
+        mlkem_secret_len,
+        p256_secret,
+        p256_secret_len,
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_mlkem768nistp256_enc(
+    client_blob: *const u8,
+    client_blob_len: usize,
+    server_blob: *mut u8,
+    server_blob_len: usize,
+    shared_hash: *mut u8,
+    shared_hash_len: usize,
+) -> c_int {
+    mlkem768nistp256_enc(
+        client_blob,
+        client_blob_len,
+        server_blob,
+        server_blob_len,
+        shared_hash,
+        shared_hash_len,
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ossh_rust_mlkem768nistp256_dec(
+    server_blob: *const u8,
+    server_blob_len: usize,
+    mlkem_secret: *const u8,
+    mlkem_secret_len: usize,
+    p256_secret: *const u8,
+    p256_secret_len: usize,
+    shared_hash: *mut u8,
+    shared_hash_len: usize,
+) -> c_int {
+    mlkem768nistp256_dec(
+        server_blob,
+        server_blob_len,
+        mlkem_secret,
+        mlkem_secret_len,
+        p256_secret,
+        p256_secret_len,
         shared_hash,
         shared_hash_len,
     )

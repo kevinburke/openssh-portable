@@ -254,7 +254,7 @@ Rust-backed today:
 - DH-GEX key exchange helpers in Rust mode
   (`diffie-hellman-group-exchange-sha1`,
   `diffie-hellman-group-exchange-sha256`)
-- full `mlkem768x25519-sha256` hybrid KEX path
+- full `mlkem768x25519-sha256` and `mlkem768nistp256-sha256` hybrid KEX paths
 - full `sntrup761x25519-sha512` hybrid KEX path
 - AES-CTR transport cipher (`aes128-ctr`, `aes192-ctr`, `aes256-ctr`)
 - ChaCha20-Poly1305 transport cipher (`chacha20-poly1305@openssh.com`)
@@ -294,7 +294,7 @@ around OpenSSL.
 | `poly1305` | Poly1305 authenticator used by the Rust `chacha20-poly1305@openssh.com` transport path | <https://github.com/RustCrypto/universal-hashes> | <https://crates.io/crates/poly1305> |
 | `rsa` | RSA key generation plus PKCS#1 v1.5 signing and verification for `ssh-rsa`, `rsa-sha2-256`, and `rsa-sha2-512` | <https://github.com/RustCrypto/RSA> | <https://crates.io/crates/rsa> |
 | `ed25519-dalek` | Ed25519 key generation, signing, and verification | <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek> | <https://crates.io/crates/ed25519-dalek> |
-| `fips203` | ML-KEM-768 encapsulation and decapsulation for the Rust `mlkem768x25519-sha256` hybrid KEX path | <https://github.com/integritychain/fips203> | <https://crates.io/crates/fips203> |
+| `fips203` | ML-KEM-768 encapsulation and decapsulation for the Rust X25519 and NIST P-256 hybrid KEX paths | <https://github.com/integritychain/fips203> | <https://crates.io/crates/fips203> |
 | `sntrup761` | SNTRUP761 encapsulation and decapsulation for the Rust `sntrup761x25519-sha512` hybrid KEX path | <https://github.com/mikelodder7/sntrup761> | <https://crates.io/crates/sntrup761> |
 | `x25519-dalek` | X25519 key exchange for `curve25519-sha256*` and the X25519 half of hybrid KEX | <https://github.com/dalek-cryptography/curve25519-dalek/tree/main/x25519-dalek> | <https://crates.io/crates/x25519-dalek> |
 | `p256` | NIST P-256 ECDH plus ECDSA support for `ecdh-sha2-nistp256` and `ecdsa-sha2-nistp256` | <https://github.com/RustCrypto/elliptic-curves/tree/master/p256> | <https://crates.io/crates/p256> |
@@ -317,6 +317,7 @@ Today it runs:
 - `cargo build --manifest-path rust/crypto/fuzz/Cargo.toml --locked`
 - `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin ed25519_verify -- -runs=1`
 - `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin ecdh_peer -- -runs=1`
+- `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin mlkem768nistp256_peer -- -runs=1`
 - `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin dh_peer -- -runs=1`
 - `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin ecdsa_parse -- -runs=1`
 - `cargo run --manifest-path rust/crypto/fuzz/Cargo.toml --locked --bin rsa_parse -- -runs=1`
@@ -1075,3 +1076,25 @@ Near-term roadmap:
   `regress/cert-userkey.sh`
 - continue reducing the `sshkey.c` ownership split once the FFI guardrails are
   stronger
+
+## ML-KEM-768 with NIST P-256
+
+The Rust backend supports `mlkem768nistp256-sha256` using fips203 and RustCrypto
+P-256. It uses the upstream wire format: 1184-byte KEM public key plus a
+65-byte uncompressed SEC1 point from the client, and 1088-byte KEM ciphertext
+plus a 65-byte point from the server. The shared secret is the SSH string
+encoding of SHA-256(KEM secret || raw 32-byte ECDH secret), retaining leading
+zeros. This adds an available algorithm without changing the default order.
+
+Tests cover malformed lengths, invalid points, noncanonical KEM public keys,
+ML-KEM's implicit ciphertext rejection, and deterministic vectors computed
+with upstream libcrux and OpenSSL. C key-exchange tests cover state restoration
+and both client- and server-initiated rekeying. `regress/mlkem768nistp256.sh`
+forces the algorithm for a login and transfer large enough to trigger rekeying;
+the pre-push gate selects it for hybrid KEX changes.
+
+For cross-backend testing, run that regression with `TEST_SSH_SSH` from one
+build and `TEST_SSH_SSHD`, `TEST_SSH_SSHD_AUTH`, and `TEST_SSH_SSHD_SESSION` from
+the other, then reverse the roles. Set these on the regression harness directly
+(`regress/test-exec.sh`); the top-level Makefile supplies its own binary paths.
+Use a fresh object directory containing the built `regress/timestamp` helper.

@@ -696,6 +696,17 @@ int ossh_rust_mlkem768x25519_dec(const uint8_t *server_blob,
     size_t mlkem_secret_len, const uint8_t *curve25519_secret,
     size_t curve25519_secret_len, uint8_t *shared_hash,
     size_t shared_hash_len);
+int ossh_rust_mlkem768nistp256_keypair(uint8_t *client_blob,
+    size_t client_blob_len, uint8_t *mlkem_secret, size_t mlkem_secret_len,
+    uint8_t *p256_secret, size_t p256_secret_len);
+int ossh_rust_mlkem768nistp256_enc(const uint8_t *client_blob,
+    size_t client_blob_len, uint8_t *server_blob, size_t server_blob_len,
+    uint8_t *shared_hash, size_t shared_hash_len);
+int ossh_rust_mlkem768nistp256_dec(const uint8_t *server_blob,
+    size_t server_blob_len, const uint8_t *mlkem_secret,
+    size_t mlkem_secret_len, const uint8_t *p256_secret,
+    size_t p256_secret_len, uint8_t *shared_hash,
+    size_t shared_hash_len);
 int ossh_rust_sntrup761x25519_keypair(uint8_t *client_blob,
     size_t client_blob_len, uint8_t *sntrup_secret, size_t sntrup_secret_len,
     uint8_t *curve25519_secret, size_t curve25519_secret_len);

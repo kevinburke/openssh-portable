@@ -37,7 +37,12 @@ add_test rekey
 while IFS= read -r path; do
 	[ -n "$path" ] || continue
 	case "$path" in
-	ed25519*.c|rust/crypto/src/kex.rs|regress/unittests/crypto/test_ed25519.c|regress/unittests/crypto/testdata/ed25519-verification.*)
+	rust/crypto/src/kex.rs|kexmlkem768ecdh*.c|kexgen.c|kex-names.c|regress/unittests/kex/test_kex.c)
+		add_test mlkem768nistp256
+		add_test keytype
+		add_test sshsig
+		;;
+	ed25519*.c|regress/unittests/crypto/test_ed25519.c|regress/unittests/crypto/testdata/ed25519-verification.*)
 		add_test keytype
 		add_test sshsig
 		;;

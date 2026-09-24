@@ -123,12 +123,10 @@ kex_gen_client(struct ssh *ssh)
 	case KEX_ECDH_SHA2:
 		r = kex_ecdh_keypair(kex);
 		break;
-#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
-#ifdef WITH_OPENSSL
 	case KEX_KEM_MLKEM768ECDH_SHA256:
 		r = kex_kem_mlkem768ecdh_keypair(kex);
 		break;
-#endif /* WITH_OPENSSL */
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 	case KEX_C25519_SHA256:
 		r = kex_c25519_keypair(kex);
 		break;
@@ -213,13 +211,11 @@ input_kex_gen_reply(int type, uint32_t seq, struct ssh *ssh)
 	case KEX_ECDH_SHA2:
 		r = kex_ecdh_dec(kex, server_blob, &shared_secret);
 		break;
-#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
-#ifdef WITH_OPENSSL
 	case KEX_KEM_MLKEM768ECDH_SHA256:
 		r = kex_kem_mlkem768ecdh_dec(kex, server_blob,
 		    &shared_secret);
 		break;
-#endif /* WITH_OPENSSL */
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 	case KEX_C25519_SHA256:
 		r = kex_c25519_dec(kex, server_blob, &shared_secret);
 		break;
@@ -353,13 +349,11 @@ input_kex_gen_init(int type, uint32_t seq, struct ssh *ssh)
 		r = kex_ecdh_enc(kex, client_pubkey, &server_pubkey,
 		    &shared_secret);
 		break;
-#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
-#ifdef WITH_OPENSSL
 	case KEX_KEM_MLKEM768ECDH_SHA256:
 		r = kex_kem_mlkem768ecdh_enc(kex, client_pubkey,
 		    &server_pubkey, &shared_secret);
 		break;
-#endif /* WITH_OPENSSL */
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 	case KEX_C25519_SHA256:
 		r = kex_c25519_enc(kex, client_pubkey, &server_pubkey,
 		    &shared_secret);
