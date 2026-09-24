@@ -49,7 +49,8 @@ void
 benchmarks(void)
 {
 	char *s, *user, *host, *type;
-	int i, port, secs;
+	int i, port;
+	double secs;
 	const char *errstr;
 
 	BENCH_START("a2port numeric x1024");

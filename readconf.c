@@ -3797,6 +3797,10 @@ fmt_intarg(OpCodes code, int val)
 		multistate = multistate_pubkey_auth;
 		mode = OSSH_RUST_FMT_INTARG_MULTISTATE;
 		break;
+	case oTCPKeepAlive:
+		multistate = multistate_keepalives;
+		mode = OSSH_RUST_FMT_INTARG_MULTISTATE;
+		break;
 	case oFingerprintHash:
 		mode = OSSH_RUST_FMT_INTARG_DIGEST;
 		break;

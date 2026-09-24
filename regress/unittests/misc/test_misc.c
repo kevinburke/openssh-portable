@@ -804,12 +804,19 @@ static void
 test_parse_pattern_interval(void)
 {
 	char *type = NULL;
-	int secs = -1;
+	double secs = -1;
 
 	TEST_START("parse_pattern_interval basic");
 	ASSERT_INT_EQ(parse_pattern_interval("session:command=1m", &type, &secs), 0);
 	ASSERT_STRING_EQ(type, "session:command");
-	ASSERT_INT_EQ(secs, 60);
+	ASSERT_DOUBLE_EQ(secs, 60);
+	free(type);
+	TEST_DONE();
+
+	TEST_START("parse_pattern_interval fractional seconds");
+	ASSERT_INT_EQ(parse_pattern_interval("session=0.25s", &type, &secs), 0);
+	ASSERT_STRING_EQ(type, "session");
+	ASSERT_DOUBLE_EQ(secs, 0.25);
 	free(type);
 	TEST_DONE();
 

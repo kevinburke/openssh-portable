@@ -99,8 +99,7 @@ extern const struct sshkey_impl sshkey_ed25519_sk_cert_impl;
 extern const struct sshkey_impl sshkey_mldsa44_ed25519_impl;
 extern const struct sshkey_impl sshkey_mldsa44_ed25519_cert_impl;
 #endif /* USE_MLDSA */
-#if (defined(WITH_OPENSSL) && defined(WITH_OPENSSL)) || \
-    defined(WITH_RUST_CRYPTO)
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 extern const struct sshkey_impl sshkey_ecdsa_nistp256_impl;
 extern const struct sshkey_impl sshkey_ecdsa_nistp256_cert_impl;
 extern const struct sshkey_impl sshkey_ecdsa_nistp384_impl;
@@ -109,13 +108,13 @@ extern const struct sshkey_impl sshkey_ecdsa_nistp384_cert_impl;
 extern const struct sshkey_impl sshkey_ecdsa_nistp521_impl;
 extern const struct sshkey_impl sshkey_ecdsa_nistp521_cert_impl;
 # endif /* WITH_RUST_CRYPTO || WITH_OPENSSL */
-# if defined(WITH_OPENSSL) && defined(WITH_OPENSSL) && defined(ENABLE_SK)
+# if defined(WITH_OPENSSL) && defined(ENABLE_SK)
 extern const struct sshkey_impl sshkey_ecdsa_sk_impl;
 extern const struct sshkey_impl sshkey_ecdsa_sk_cert_impl;
 extern const struct sshkey_impl sshkey_ecdsa_sk_webauthn_impl;
 extern const struct sshkey_impl sshkey_ecdsa_sk_webauthn_cert_impl;
-# endif /* WITH_OPENSSL && WITH_OPENSSL && ENABLE_SK */
-#endif /* WITH_OPENSSL && WITH_OPENSSL || WITH_RUST_CRYPTO */
+# endif /* WITH_OPENSSL && ENABLE_SK */
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 #if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 extern const struct sshkey_impl sshkey_rsa_impl;
 extern const struct sshkey_impl sshkey_rsa_cert_impl;
@@ -136,8 +135,7 @@ const struct sshkey_impl * const keyimpls[] = {
 	&sshkey_mldsa44_ed25519_impl,
 	&sshkey_mldsa44_ed25519_cert_impl,
 #endif /* USE_MLDSA */
-#if (defined(WITH_OPENSSL) && defined(WITH_OPENSSL)) || \
-    defined(WITH_RUST_CRYPTO)
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	&sshkey_ecdsa_nistp256_impl,
 	&sshkey_ecdsa_nistp256_cert_impl,
 	&sshkey_ecdsa_nistp384_impl,
@@ -146,12 +144,12 @@ const struct sshkey_impl * const keyimpls[] = {
 	&sshkey_ecdsa_nistp521_impl,
 	&sshkey_ecdsa_nistp521_cert_impl,
 # endif /* WITH_RUST_CRYPTO || WITH_OPENSSL */
-# if defined(WITH_OPENSSL) && defined(WITH_OPENSSL) && defined(ENABLE_SK)
+# if defined(WITH_OPENSSL) && defined(ENABLE_SK)
 	&sshkey_ecdsa_sk_impl,
 	&sshkey_ecdsa_sk_cert_impl,
 	&sshkey_ecdsa_sk_webauthn_impl,
 	&sshkey_ecdsa_sk_webauthn_cert_impl,
-# endif /* WITH_OPENSSL && WITH_OPENSSL && ENABLE_SK */
+# endif /* WITH_OPENSSL && ENABLE_SK */
 #endif
 #if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	&sshkey_rsa_impl,
@@ -275,6 +273,7 @@ sshkey_type_is_cert(int type)
 	case KEY_ECDSA_CERT:
 	case KEY_ECDSA_SK_CERT:
 	case KEY_ED25519_CERT:
+	case KEY_MLDSA44_ED25519_CERT:
 	case KEY_ED25519_SK_CERT:
 		return 1;
 	default:
@@ -364,7 +363,7 @@ peek_ecdsa_type_nid(const char *name, size_t len, int *nid)
 		*nid = NID_secp384r1;
 		return KEY_ECDSA;
 	}
-#if defined(OPENSSL_HAS_NISTP521) || defined(WITH_RUST_CRYPTO)
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	if (len == strlen("ecdsa-sha2-nistp521") &&
 	    memcmp(name, "ecdsa-sha2-nistp521", len) == 0) {
 		*nid = NID_secp521r1;
@@ -383,7 +382,7 @@ peek_ecdsa_type_nid(const char *name, size_t len, int *nid)
 		*nid = NID_secp384r1;
 		return KEY_ECDSA_CERT;
 	}
-#if defined(OPENSSL_HAS_NISTP521) || defined(WITH_RUST_CRYPTO)
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	if (len == strlen("ecdsa-sha2-nistp521-cert-v01@openssh.com") &&
 	    memcmp(name, "ecdsa-sha2-nistp521-cert-v01@openssh.com",
 	    len) == 0) {
@@ -1760,7 +1759,7 @@ sshkey_read(struct sshkey *ret, char **cpp)
 	if ((type = peek_type_nid(cp, space, &curve_nid)) == KEY_UNSPEC)
 		return SSH_ERR_INVALID_FORMAT;
 #endif
-#if !defined(OPENSSL_HAS_ECC) && !defined(WITH_RUST_CRYPTO)
+#if !defined(WITH_OPENSSL) && !defined(WITH_RUST_CRYPTO)
 	if (key_type_is_ecdsa_variant(type))
 		return SSH_ERR_INVALID_FORMAT;
 #endif
@@ -2651,6 +2650,12 @@ sshkey_from_blob_internal(struct sshbuf *b, struct sshkey **keyp,
 	sshbuf_free(namebuf);
 	namebuf = NULL;
 
+	if (alg_allowlist != NULL &&
+	    !sshkey_match_keyname_to_sigalgs(ktype, alg_allowlist)) {
+		ret = SSH_ERR_KEY_ALG_UNSUPPORTED;
+		goto out;
+	}
+
 #ifdef WITH_RUST_CRYPTO
 	ret = ossh_rust_sshkey_from_blob_plan((const u_char *)ktype,
 	    strlen(ktype), allow_cert,
@@ -2663,12 +2668,6 @@ sshkey_from_blob_internal(struct sshbuf *b, struct sshkey **keyp,
 	type = sshkey_type_from_name(ktype);
 	if (!allow_cert && sshkey_type_is_cert(type)) {
 		ret = SSH_ERR_KEY_CERT_INVALID_SIGN_KEY;
-		goto out;
-	}
-
-	if (alg_allowlist != NULL &&
-	    !sshkey_match_keyname_to_sigalgs(ktype, alg_allowlist)) {
-		ret = SSH_ERR_KEY_ALG_UNSUPPORTED;
 		goto out;
 	}
 

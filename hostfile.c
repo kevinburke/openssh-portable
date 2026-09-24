@@ -989,7 +989,7 @@ hostkeys_foreach_file(const char *path, FILE *f, hostkeys_foreach_fn *callback,
 			ktype[l] = '\0';
 			lineinfo.keytype = sshkey_type_from_name(ktype);
 #endif
-#if !defined(OPENSSL_HAS_ECC) && !defined(WITH_RUST_CRYPTO)
+#if !defined(WITH_OPENSSL) && !defined(WITH_RUST_CRYPTO)
 			if (lineinfo.keytype == KEY_ECDSA ||
 			    lineinfo.keytype == KEY_ECDSA_CERT)
 				lineinfo.keytype = KEY_UNSPEC;

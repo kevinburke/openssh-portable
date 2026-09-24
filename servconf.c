@@ -1103,6 +1103,7 @@ static const struct multistate multistate_keepalives[] = {
 	{ "no",				SSH_KEEPALIVES_OFF },
 	{ "transport",			SSH_KEEPALIVES_TRANSPORT },
 	{ "all",			SSH_KEEPALIVES_ALL },
+	{ NULL, -1 }
 };
 static const struct multistate multistate_warnweakcrypto[] = {
 	{ "true",			1 },
@@ -4196,6 +4197,14 @@ fmt_intarg(ServerOpCodes code, int val)
 		multistate = multistate_ignore_rhosts;
 		mode = OSSH_RUST_FMT_INTARG_MULTISTATE;
 		break;
+	case sTCPKeepAlive:
+		multistate = multistate_keepalives;
+		mode = OSSH_RUST_FMT_INTARG_MULTISTATE;
+		break;
+	case sWarnWeakCrypto:
+		multistate = multistate_warnweakcrypto;
+		mode = OSSH_RUST_FMT_INTARG_MULTISTATE;
+		break;
 	case sFingerprintHash:
 		mode = OSSH_RUST_FMT_INTARG_DIGEST;
 		break;
@@ -4256,6 +4265,20 @@ strarray_oneline_empty_mode(ServerOpCodes code)
 	default:
 		return OSSH_RUST_STRARRAY_EMPTY_SKIP;
 	}
+}
+#endif
+
+#ifdef WITH_RUST_CRYPTO
+/* Shared Rust formatters use client casing; sshd uses the keyword table. */
+static void
+server_cfg_line_name(ServerOpCodes code, char *line)
+{
+	const char *name = lookup_opcode_name(code);
+	size_t len = strlen(name);
+
+	if (strncasecmp(line, name, len) != 0 || line[len] != ' ')
+		fatal_f("unexpected Rust configuration line for %s", name);
+	memcpy(line, name, len);
 }
 #endif
 
@@ -4453,6 +4476,7 @@ format_listen_addrs(struct listenaddr *la)
 		    parsed.output_len) != 0)
 			fatal_f("rust listenaddr write failed");
 		line[parsed.output_len] = '\0';
+		server_cfg_line_name(sListenAddress, line);
 		xasprintf(&laddr1, "%s%s", line, laddr2);
 		free(line);
 #else
@@ -4651,6 +4675,7 @@ dump_config(ServerOptions *o)
 		    o->ip_qos_bulk, (u_char *)buf, parsed.output_len) != 0)
 			fatal_f("rust ipqos write failed");
 		buf[parsed.output_len] = '\0';
+		server_cfg_line_name(sIPQoS, buf);
 		printf("%s", buf);
 		free(buf);
 	}
@@ -4672,6 +4697,7 @@ dump_config(ServerOptions *o)
 		    o->rekey_interval, (u_char *)buf, parsed.output_len) != 0)
 			fatal_f("rust rekeylimit write failed");
 		buf[parsed.output_len] = '\0';
+		server_cfg_line_name(sRekeyLimit, buf);
 		printf("%s", buf);
 		free(buf);
 	}
@@ -4747,6 +4773,7 @@ dump_config(ServerOptions *o)
 		    (u_char *)buf, parsed.output_len) != 0)
 			fatal_f("rust permituserenvironment write failed");
 		buf[parsed.output_len] = '\0';
+		server_cfg_line_name(sPermitUserEnvironment, buf);
 		printf("%s", buf);
 		free(buf);
 #else
@@ -4767,6 +4794,7 @@ dump_config(ServerOptions *o)
 		    (u_char *)buf, parsed.output_len) != 0)
 			fatal_f("rust permituserenvironment write failed");
 		buf[parsed.output_len] = '\0';
+		server_cfg_line_name(sPermitUserEnvironment, buf);
 		printf("%s", buf);
 		free(buf);
 #else
@@ -4788,6 +4816,10 @@ dump_config(ServerOptions *o)
 		    (u_char *)buf, parsed.output_len) != 0)
 			fatal_f("rust pubkeyauthoptions write failed");
 		buf[parsed.output_len] = '\0';
+		server_cfg_line_name(sPubkeyAuthOptions, buf);
+		if (parsed.output_len == 0 || buf[parsed.output_len - 1] != '\n')
+			fatal_f("invalid Rust PubkeyAuthOptions line");
+		buf[parsed.output_len - 1] = '\0';
 		printf("%s", buf);
 		free(buf);
 	}
@@ -4799,10 +4831,10 @@ dump_config(ServerOptions *o)
 		printf(" touch-required");
 	if (o->pubkey_auth_options & PUBKEYAUTH_VERIFY_REQUIRED)
 		printf(" verify-required");
+#endif
 	if (o->max_pubkey_ok != -1)
 		printf(" max-pk-ok:%d", o->max_pubkey_ok);
 	printf("\n");
-#endif
 
 	if (o->per_source_penalty.enabled) {
 		printf("PerSourcePenalties crash:%f authfail:%f noauth:%f "

@@ -591,7 +591,7 @@ sshkey_tests(void)
 	ASSERT_INT_EQ(sshkey_names_valid2("ssh-*", 1, 0), 1);
 	ASSERT_INT_EQ(sshkey_names_valid2("bogus-*", 1, 0), 0);
 #endif
-#if defined(OPENSSL_HAS_ECC) || defined(WITH_RUST_CRYPTO)
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	ASSERT_INT_EQ(sshkey_ecdsa_nid_from_name("ecdsa-sha2-nistp384"),
 	    NID_secp384r1);
 	ASSERT_INT_EQ(sshkey_curve_name_to_nid("nistp384"), NID_secp384r1);
@@ -700,6 +700,26 @@ sshkey_tests(void)
 	}
 	TEST_DONE();
 
+	TEST_START("public key algorithm allowlist");
+	ASSERT_INT_EQ(sshkey_load_public(test_data_file("ed25519_1.pub"),
+	    &k1, NULL), 0);
+	b = sshbuf_new();
+	ASSERT_PTR_NE(b, NULL);
+	ASSERT_INT_EQ(sshkey_putb(k1, b), 0);
+	ASSERT_INT_EQ(sshkey_fromb_allowlist(b, &k2, "ssh-rsa", NULL),
+	    SSH_ERR_KEY_ALG_UNSUPPORTED);
+	ASSERT_PTR_EQ(k2, NULL);
+	sshbuf_reset(b);
+	ASSERT_INT_EQ(sshkey_putb(k1, b), 0);
+	ASSERT_INT_EQ(sshkey_fromb_allowlist(b, &k2, "ssh-ed25519", NULL), 0);
+	ASSERT_INT_EQ(sshkey_equal_public(k1, k2), 1);
+	sshbuf_free(b);
+	b = NULL;
+	sshkey_free(k1);
+	sshkey_free(k2);
+	k1 = k2 = NULL;
+	TEST_DONE();
+
 	TEST_START("read public line invalid");
 	{
 		char *line = strdup("ssh-ed25519 !!! not-base64");
@@ -742,7 +762,7 @@ sshkey_tests(void)
 	TEST_DONE();
 #endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 
-#if defined(OPENSSL_HAS_ECC) || defined(WITH_RUST_CRYPTO)
+#if defined(WITH_OPENSSL) || defined(WITH_RUST_CRYPTO)
 	TEST_START("read public line ECDSA curve mismatch");
 	{
 		char *line = load_public_text_line("ecdsa_1.pub");
@@ -773,7 +793,7 @@ sshkey_tests(void)
 		k1 = NULL;
 	}
 	TEST_DONE();
-#endif /* OPENSSL_HAS_ECC || WITH_RUST_CRYPTO */
+#endif /* WITH_OPENSSL || WITH_RUST_CRYPTO */
 
 	TEST_START("certify key");
 	ASSERT_INT_EQ(sshkey_load_public(test_data_file("ed25519_1.pub"),
@@ -813,6 +833,14 @@ sshkey_tests(void)
 	b = sshbuf_new();
 	ASSERT_PTR_NE(b, NULL);
 	ASSERT_INT_EQ(sshkey_putb(k1, b), 0);
+	ASSERT_INT_EQ(sshkey_fromb_allowlist(b, &k3, NULL, "ssh-rsa"),
+	    SSH_ERR_SIGN_ALG_UNSUPPORTED);
+	ASSERT_PTR_EQ(k3, NULL);
+	sshbuf_reset(b);
+	ASSERT_INT_EQ(sshkey_putb(k1, b), 0);
+	ASSERT_INT_EQ(sshkey_fromb_allowlist(b, &k3, NULL, "ssh-ed25519"), 0);
+	sshkey_free(k3);
+	k3 = NULL;
 	sshbuf_reset(b);
 	ASSERT_INT_EQ(sshkey_putb_plain(k1, b), 0);
 	ASSERT_INT_EQ(sshkey_from_blob(sshbuf_ptr(b), sshbuf_len(b), &k3), 0);

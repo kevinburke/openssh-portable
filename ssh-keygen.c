@@ -269,8 +269,6 @@ ask_filename(struct passwd *pw, const char *prompt)
 		case KEY_ECDSA:
 			name = _PATH_SSH_CLIENT_ID_ECDSA;
 			break;
-#endif
-#ifdef WITH_OPENSSL
 		case KEY_ECDSA_SK_CERT:
 		case KEY_ECDSA_SK:
 			name = _PATH_SSH_CLIENT_ID_ECDSA_SK;

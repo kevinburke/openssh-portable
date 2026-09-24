@@ -3191,7 +3191,7 @@ parse_pattern_interval(const char *s, char **typep, double *secsp)
 #ifdef WITH_RUST_CRYPTO
 	struct ossh_rust_pattern_interval_parse parsed;
 	char *type = NULL;
-	int secs;
+	double secs;
 
 	if (typep != NULL)
 		*typep = NULL;
@@ -3202,7 +3202,7 @@ parse_pattern_interval(const char *s, char **typep, double *secsp)
 	if (ossh_rust_parse_pattern_interval((const u_char *)s, strlen(s),
 	    &parsed) != 0)
 		return -1;
-	if ((secs = convtime(s + parsed.interval_offset)) < 0)
+	if ((secs = convtime_double(s + parsed.interval_offset)) < 0.0)
 		return -1;
 	if (typep != NULL) {
 		type = xmalloc(parsed.type_len + 1);

@@ -21,7 +21,7 @@
 
 #include <sys/types.h>
 
-#include <limits.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "crypto_api.h"
@@ -34,13 +34,13 @@ crypto_sign_ed25519_keypair(unsigned char *pk, unsigned char *sk)
 	int r;
 
 	arc4random_buf(seed, sizeof(seed));
-	r = crypto_sign_ed25519_keypair_from_seed(pk, sk, seed);
+	r = crypto_sign_ed25519_seed_keypair(pk, sk, seed);
 	explicit_bzero(seed, sizeof(seed));
 	return r;
 }
 
 int
-crypto_sign_ed25519_keypair_from_seed(unsigned char *pk, unsigned char *sk,
+crypto_sign_ed25519_seed_keypair(unsigned char *pk, unsigned char *sk,
     const unsigned char *seed)
 {
 	memcpy(sk, seed, crypto_sign_ed25519_SEEDBYTES);
@@ -56,46 +56,27 @@ crypto_sign_ed25519_keypair_from_seed(unsigned char *pk, unsigned char *sk,
 }
 
 int
-crypto_sign_ed25519(unsigned char *sm, unsigned long long *smlen,
+crypto_sign_ed25519_detached(unsigned char *sig, unsigned long long *siglenp,
     const unsigned char *m, unsigned long long mlen, const unsigned char *sk)
 {
-	if (mlen > ULLONG_MAX - crypto_sign_ed25519_BYTES)
+	if (mlen > SIZE_MAX)
 		return -1;
-	if (ossh_rust_ed25519_sign(sm, crypto_sign_ed25519_BYTES, m, mlen,
-	    sk, crypto_sign_ed25519_SECRETKEYBYTES) != 0)
+	if (ossh_rust_ed25519_sign(sig, crypto_sign_ed25519_BYTES, m,
+	    (size_t)mlen, sk, crypto_sign_ed25519_SECRETKEYBYTES) != 0)
 		return -1;
-	memmove(sm + crypto_sign_ed25519_BYTES, m, mlen);
-	*smlen = mlen + crypto_sign_ed25519_BYTES;
+	if (siglenp != NULL)
+		*siglenp = crypto_sign_ed25519_BYTES;
 	return 0;
 }
 
 int
-crypto_sign_ed25519_open(unsigned char *m, unsigned long long *mlen,
-    const unsigned char *sm, unsigned long long smlen, const unsigned char *pk)
+crypto_sign_ed25519_verify_detached(const unsigned char *sig,
+    const unsigned char *m, unsigned long long mlen, const unsigned char *pk)
 {
-	unsigned long long msglen;
-	unsigned long long outlen = 0;
-
-	if (smlen < crypto_sign_ed25519_BYTES)
-		goto badsig;
-	msglen = smlen - crypto_sign_ed25519_BYTES;
-	outlen = *mlen;
-	if (outlen < msglen)
-		goto badsig;
-	if (ossh_rust_ed25519_verify(sm, crypto_sign_ed25519_BYTES,
-	    sm + crypto_sign_ed25519_BYTES, msglen, pk,
-	    crypto_sign_ed25519_PUBLICKEYBYTES) != 0)
-		goto badsig;
-
-	memmove(m, sm + crypto_sign_ed25519_BYTES, msglen);
-	*mlen = msglen;
-	return 0;
-
-badsig:
-	*mlen = (unsigned long long)-1;
-	if (m != NULL)
-		memset(m, 0, outlen);
-	return -1;
+	if (mlen > SIZE_MAX)
+		return -1;
+	return ossh_rust_ed25519_verify(sig, crypto_sign_ed25519_BYTES,
+	    m, (size_t)mlen, pk, crypto_sign_ed25519_PUBLICKEYBYTES);
 }
 
 #endif /* WITH_RUST_CRYPTO */

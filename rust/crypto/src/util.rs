@@ -929,10 +929,10 @@ pub(crate) fn canonicalize_permitted_cnames_line_parse(
     nentries: usize,
 ) -> Option<CanonicalizePermittedCnamesLineParse> {
     let output_len = if nentries == 0 {
-        "canonicalizePermittedcnames none\n".len()
+        "canonicalizepermittedcnames none\n".len()
     } else {
         let entries = read_ptr_slice(entries, nentries)?;
-        let mut len = "canonicalizePermittedcnames".len();
+        let mut len = "canonicalizepermittedcnames".len();
         for entry in entries {
             len += 1;
             len += read_cstr_bytes(entry.source_list)?.len();
@@ -959,7 +959,7 @@ pub(crate) fn canonicalize_permitted_cnames_line_write(
         return None;
     }
     let mut formatted = Vec::with_capacity(parsed.output_len);
-    formatted.extend_from_slice(b"canonicalizePermittedcnames");
+    formatted.extend_from_slice(b"canonicalizepermittedcnames");
     if nentries == 0 {
         formatted.extend_from_slice(b" none\n");
         out.copy_from_slice(&formatted);
@@ -4682,14 +4682,14 @@ mod tests {
         assert_eq!(
             canonicalize_permitted_cnames_line_parse(entries.as_ptr(), entries.len()),
             Some(CanonicalizePermittedCnamesLineParse {
-                output_len: "canonicalizePermittedcnames *.example.com:*.corp.example\n".len(),
+                output_len: "canonicalizepermittedcnames *.example.com:*.corp.example\n".len(),
                 emit: true,
             })
         );
         assert_eq!(
             canonicalize_permitted_cnames_line_parse(core::ptr::null(), 0),
             Some(CanonicalizePermittedCnamesLineParse {
-                output_len: "canonicalizePermittedcnames none\n".len(),
+                output_len: "canonicalizepermittedcnames none\n".len(),
                 emit: true,
             })
         );
@@ -4703,7 +4703,7 @@ mod tests {
             source_list: src.as_ptr(),
             target_list: dst.as_ptr(),
         }];
-        let mut out = vec![0u8; "canonicalizePermittedcnames *.example.com:*.corp.example\n".len()];
+        let mut out = vec![0u8; "canonicalizepermittedcnames *.example.com:*.corp.example\n".len()];
         assert_eq!(
             canonicalize_permitted_cnames_line_write(
                 entries.as_ptr(),
@@ -4715,10 +4715,10 @@ mod tests {
         );
         assert_eq!(
             &out,
-            b"canonicalizePermittedcnames *.example.com:*.corp.example\n"
+            b"canonicalizepermittedcnames *.example.com:*.corp.example\n"
         );
 
-        let mut none_out = vec![0u8; "canonicalizePermittedcnames none\n".len()];
+        let mut none_out = vec![0u8; "canonicalizepermittedcnames none\n".len()];
         assert_eq!(
             canonicalize_permitted_cnames_line_write(
                 core::ptr::null(),
@@ -4728,7 +4728,7 @@ mod tests {
             ),
             Some(())
         );
-        assert_eq!(&none_out, b"canonicalizePermittedcnames none\n");
+        assert_eq!(&none_out, b"canonicalizepermittedcnames none\n");
     }
 
     #[test]

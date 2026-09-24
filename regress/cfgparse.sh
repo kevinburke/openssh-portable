@@ -84,5 +84,37 @@ EOD
  diff -i $OBJ/sshd_config.0 $OBJ/sshd_config.2) || \
  fail "maxstartups idempotence"
 
+# Shared Rust formatters must retain sshd's keyword casing and new fields.
+verbose "configuration output names and public key limit"
+$SUDO ${SSHD} -T -f $OBJ/sshd_config_minimal \
+    -oListenAddress=127.0.0.1:2222 -oIPQoS='af21 cs1' \
+    -oRekeyLimit='1M 1h' -oPermitUserEnvironment=FOO,BAR \
+    -oPubkeyAuthOptions='touch-required max-pk-ok:3' \
+    -oTCPKeepAlive=all -oWarnWeakCrypto=no-pq-kex \
+    >$OBJ/sshd_config.1 || fail "dump explicit configuration"
+for expected in \
+    'ListenAddress 127.0.0.1:2222' \
+    'IPQoS af21 cs1' \
+    'RekeyLimit 1048576 3600' \
+    'PermitUserEnvironment FOO,BAR' \
+    'PubkeyAuthOptions touch-required max-pk-ok:3' \
+    'TCPKeepAlive all' \
+    'WarnWeakCrypto false'; do
+	grep -qxF "$expected" $OBJ/sshd_config.1 || \
+	    fail "missing configuration output: $expected"
+done
+
+verbose "reject invalid TCPKeepAlive value"
+if $SUDO ${SSHD} -T -f $OBJ/sshd_config_minimal \
+    -oTCPKeepAlive=no-pq-kex >$OBJ/sshd_config.1 2>/dev/null; then
+	fail "TCPKeepAlive accepted a WarnWeakCrypto value"
+fi
+
+verbose "client TCPKeepAlive output"
+${SSH} -G -F /dev/null -oTCPKeepAlive=all localhost >$OBJ/sshd_config.1 || \
+    fail "dump client TCPKeepAlive"
+grep -qxF 'tcpkeepalive all' $OBJ/sshd_config.1 || \
+    fail "client TCPKeepAlive all output"
+
 # cleanup
 rm -f $OBJ/sshd_config.[012]
