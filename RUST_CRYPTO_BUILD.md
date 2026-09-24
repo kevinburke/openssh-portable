@@ -771,7 +771,7 @@ Check that the binary was built in Rust mode:
 Current expected output includes:
 
 ```text
-OpenSSH_10.5p1 rust-crypto-v0.1.8, Rust crypto backend
+OpenSSH_10.5p1 rust-crypto-v0.1.9, Rust crypto backend
 ```
 
 You can also inspect linkage:
@@ -905,7 +905,7 @@ To exercise the Rust-backed X25519 helper through the hybrid KEX paths:
 
 The important lines to look for are:
 
-- `OpenSSH_10.5p1 rust-crypto-v0.1.8, Rust crypto backend`
+- `OpenSSH_10.5p1 rust-crypto-v0.1.9, Rust crypto backend`
 - `kex: algorithm: ...`
 - `server->client cipher: ...`
 - `client->server cipher: ...`
